@@ -11,6 +11,8 @@ struct ReaderContent: UIViewRepresentable {
     let lineHeight: Double
     let fontFamily: String
     let horizontalPadding: Double
+    let backgroundColorHex: String
+    let textColorHex: String
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -34,6 +36,8 @@ struct ReaderContent: NSViewRepresentable {
     let lineHeight: Double
     let fontFamily: String
     let horizontalPadding: Double
+    let backgroundColorHex: String
+    let textColorHex: String
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -52,7 +56,16 @@ struct ReaderContent: NSViewRepresentable {
 
 extension ReaderContent {
     func readerHTML(content: String) -> String {
-        """
+        let resolvedBg = backgroundColorHex.isEmpty ? "transparent" : backgroundColorHex
+        let resolvedText = textColorHex.isEmpty ? "#2c2c2e" : textColorHex
+        
+        let darkMediaQuery = textColorHex.isEmpty ? """
+        @media (prefers-color-scheme: dark) {
+            body { color: #e5e5e7; }
+        }
+        """ : ""
+
+        return """
         <!DOCTYPE html>
         <html>
         <head>
@@ -67,15 +80,13 @@ extension ReaderContent {
             font-size: \(fontSize)px;
             line-height: \(lineHeight);
             padding: 20px \(horizontalPadding)px 60px;
-            color: #2c2c2e;
-            background: transparent;
+            color: \(resolvedText);
+            background: \(resolvedBg);
             -webkit-font-smoothing: antialiased;
             word-wrap: break-word;
             overflow-wrap: break-word;
         }
-        @media (prefers-color-scheme: dark) {
-            body { color: #e5e5e7; }
-        }
+        \(darkMediaQuery)
         p { margin-bottom: 1em; text-align: justify; }
         img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; }
         h1, h2, h3, h4, h5, h6 {

@@ -8,6 +8,8 @@ struct ReaderSettings: View {
     @Binding var lineHeight: Double
     @Binding var fontFamily: String
     @Binding var horizontalPadding: Double
+    @Binding var backgroundColorHex: String
+    @Binding var textColorHex: String
 
     private let fontFamilies = [
         "Georgia", "Palatino", "Times New Roman",
@@ -15,10 +17,27 @@ struct ReaderSettings: View {
         "Charter", "Iowan Old Style",
     ]
 
+    struct PresetTheme: Identifiable {
+        var id: String { name }
+        let name: String
+        let bg: String
+        let text: String
+    }
+
+    private let presets: [PresetTheme] = [
+        PresetTheme(name: "System", bg: "", text: ""),
+        PresetTheme(name: "Light", bg: "#F5F5FA", text: "#111111"),
+        PresetTheme(name: "Sepia", bg: "#F7DFC6", text: "#593100"),
+        PresetTheme(name: "Green", bg: "#DCE5E2", text: "#000000"),
+        PresetTheme(name: "Dark", bg: "#292832", text: "#CCCCCC"),
+        PresetTheme(name: "Black", bg: "#000000", text: "#FFFFFFB3")
+    ]
+
     var body: some View {
         NavigationStack {
             Form {
                 typographySection
+                colorsSection
                 layoutSection
                 previewSection
             }
@@ -55,6 +74,39 @@ struct ReaderSettings: View {
         }
     }
 
+    private var colorsSection: some View {
+        Section("Theme & Colors") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Preset Themes")
+                    .font(Typography.caption)
+                    .foregroundColor(.secondary)
+                
+                HStack(spacing: 12) {
+                    ForEach(presets) { preset in
+                        VStack(spacing: 6) {
+                            PresetThemeCircle(
+                                preset: preset,
+                                isSelected: isSelected(preset)
+                            ) {
+                                backgroundColorHex = preset.bg
+                                textColorHex = preset.text
+                            }
+                            
+                            Text(preset.name)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            
+            ColorPicker("Custom Background", selection: customBgColorBinding)
+            ColorPicker("Custom Text Color", selection: customTextColorBinding)
+        }
+    }
+
     private var layoutSection: some View {
         Section("Layout") {
             VStack(alignment: .leading) {
@@ -76,6 +128,106 @@ struct ReaderSettings: View {
             .lineSpacing((lineHeight - 1.0) * fontSize)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, 8)
+            .foregroundColor(resolvedTextColor)
+        }
+        .listRowBackground(resolvedBackgroundColor)
+    }
+
+    // MARK: - Helpers
+
+    private func isSelected(_ preset: PresetTheme) -> Bool {
+        return backgroundColorHex == preset.bg && textColorHex == preset.text
+    }
+
+    private var resolvedBackgroundColor: Color {
+        if backgroundColorHex.isEmpty {
+            return Color(light: Color(hue: 0.10, saturation: 0.08, brightness: 0.98),
+                         dark: Color(hue: 0.10, saturation: 0.05, brightness: 0.12))
+        }
+        return Color(hex: backgroundColorHex) ?? .white
+    }
+
+    private var resolvedTextColor: Color {
+        if textColorHex.isEmpty {
+            return Color(light: Color(hue: 0.0, saturation: 0.0, brightness: 0.12),
+                         dark: Color(hue: 0.0, saturation: 0.0, brightness: 0.90))
+        }
+        return Color(hex: textColorHex) ?? .black
+    }
+
+    private var customBgColorBinding: Binding<Color> {
+        Binding(
+            get: {
+                if let color = Color(hex: backgroundColorHex) {
+                    return color
+                }
+                return .white
+            },
+            set: { newColor in
+                if let hex = newColor.toHex() {
+                    backgroundColorHex = hex
+                }
+            }
+        )
+    }
+
+    private var customTextColorBinding: Binding<Color> {
+        Binding(
+            get: {
+                if let color = Color(hex: textColorHex) {
+                    return color
+                }
+                return .black
+            },
+            set: { newColor in
+                if let hex = newColor.toHex() {
+                    textColorHex = hex
+                }
+            }
+        )
+    }
+}
+
+// MARK: - PresetThemeCircle Component
+
+struct PresetThemeCircle: View {
+    let preset: ReaderSettings.PresetTheme
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if preset.bg.isEmpty {
+                    // System theme adaptive representation
+                    LinearGradient(
+                        colors: [Color.white, Color.black],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                } else if let color = Color(hex: preset.bg) {
+                    color
+                } else {
+                    Color.clear
+                }
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(
+                            preset.text.isEmpty
+                                ? .primary
+                                : (Color(hex: preset.text) ?? .primary)
+                        )
+                }
+            }
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+            )
+            .shadow(radius: 1)
         }
     }
 }

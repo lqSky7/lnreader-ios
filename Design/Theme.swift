@@ -49,7 +49,7 @@ enum AppTheme {
 
 // MARK: - Adaptive Color Helper
 
-private extension Color {
+extension Color {
     /// Creates a color that adapts between light and dark appearances.
     init(light: Color, dark: Color) {
         #if os(iOS)
@@ -95,4 +95,69 @@ enum Typography {
 
     /// Smallest text — 11pt regular.
     static let small: Font = .system(size: 11)
+}
+
+// MARK: - Hex Color Helper
+
+extension Color {
+    /// Initialize Color from a hex string (e.g. "#RRGGBB" or "#RRGGBBAA").
+    init?(hex: String) {
+        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
+
+        var rgb: UInt64 = 0
+
+        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else { return nil }
+
+        let r, g, b, a: Double
+        if hexSanitized.count == 6 {
+            r = Double((rgb & 0xFF0000) >> 16) / 255.0
+            g = Double((rgb & 0x00FF00) >> 8) / 255.0
+            b = Double(rgb & 0x0000FF) / 255.0
+            a = 1.0
+        } else if hexSanitized.count == 8 {
+            r = Double((rgb & 0xFF000000) >> 24) / 255.0
+            g = Double((rgb & 0x00FF0000) >> 16) / 255.0
+            b = Double((rgb & 0x0000FF00) >> 8) / 255.0
+            a = Double(rgb & 0x000000FF) / 255.0
+        } else {
+            return nil
+        }
+
+        self.init(.sRGB, red: r, green: g, blue: b, opacity: a)
+    }
+
+    /// Converts a Color to its hex string representation (e.g. "#RRGGBB").
+    func toHex() -> String? {
+        #if os(iOS)
+        let uiColor = UIColor(self)
+        #elseif os(macOS)
+        let uiColor = NSColor(self)
+        #endif
+        
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        
+        #if os(iOS)
+        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return nil }
+        #elseif os(macOS)
+        guard let rgbColor = uiColor.usingColorSpace(.deviceRGB) else { return nil }
+        rgbColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #endif
+        
+        if alpha < 1.0 {
+            return String(format: "#%02lX%02lX%02lX%02lX",
+                          Int(round(red * 255)),
+                          Int(round(green * 255)),
+                          Int(round(blue * 255)),
+                          Int(round(alpha * 255)))
+        } else {
+            return String(format: "#%02lX%02lX%02lX",
+                          Int(round(red * 255)),
+                          Int(round(green * 255)),
+                          Int(round(blue * 255)))
+        }
+    }
 }

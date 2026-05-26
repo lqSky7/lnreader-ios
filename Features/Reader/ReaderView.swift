@@ -23,11 +23,13 @@ struct ReaderView: View {
     @AppStorage("reader.lineHeight") private var lineHeight: Double = 1.6
     @AppStorage("reader.fontFamily") private var fontFamily = "Georgia"
     @AppStorage("reader.padding") private var horizontalPadding: Double = 16
+    @AppStorage("reader.backgroundColor") private var backgroundColorHex: String = ""
+    @AppStorage("reader.textColor") private var textColorHex: String = ""
 
     var body: some View {
         ZStack {
             // Background
-            AppTheme.readerBackground.ignoresSafeArea()
+            resolvedBackgroundColor.ignoresSafeArea()
 
             // Content
             if isLoading {
@@ -44,7 +46,9 @@ struct ReaderView: View {
                     fontSize: fontSize,
                     lineHeight: lineHeight,
                     fontFamily: fontFamily,
-                    horizontalPadding: horizontalPadding
+                    horizontalPadding: horizontalPadding,
+                    backgroundColorHex: backgroundColorHex,
+                    textColorHex: textColorHex
                 )
                 .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -74,11 +78,20 @@ struct ReaderView: View {
                 fontSize: $fontSize,
                 lineHeight: $lineHeight,
                 fontFamily: $fontFamily,
-                horizontalPadding: $horizontalPadding
+                horizontalPadding: $horizontalPadding,
+                backgroundColorHex: $backgroundColorHex,
+                textColorHex: $textColorHex
             )
             .presentationDetents([.medium, .large])
         }
         .task { await loadChapter() }
+    }
+
+    private var resolvedBackgroundColor: Color {
+        if backgroundColorHex.isEmpty {
+            return AppTheme.readerBackground
+        }
+        return Color(hex: backgroundColorHex) ?? AppTheme.readerBackground
     }
 
     // MARK: - Data Loading

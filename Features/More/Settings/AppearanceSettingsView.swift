@@ -5,8 +5,6 @@ import SwiftUI
 
 struct AppearanceSettingsView: View {
     @AppStorage("appearance.colorScheme") private var colorSchemeRaw = AppearanceScheme.system.rawValue
-    @AppStorage("appearance.useGlassEffects") private var useGlassEffects = true
-    @AppStorage("appearance.reduceTransparency") private var reduceTransparency = false
     @AppStorage("appearance.useLargeTitles") private var useLargeTitles = true
     @AppStorage("appearance.showCoverShadows") private var showCoverShadows = true
 
@@ -20,11 +18,6 @@ struct AppearanceSettingsView: View {
                 }
 
                 Toggle("Use large titles", isOn: $useLargeTitles)
-            }
-
-            Section("Glass") {
-                Toggle("Enable glass effects", isOn: $useGlassEffects)
-                Toggle("Reduce transparency", isOn: $reduceTransparency)
             }
 
             Section("Covers") {
