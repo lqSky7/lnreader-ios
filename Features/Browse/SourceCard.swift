@@ -16,7 +16,7 @@ struct SourceCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: URL(string: plugin.iconUrl)) { image in
+            CustomAsyncImage(url: URL(string: plugin.iconUrl)) { image in
                 image.resizable().aspectRatio(contentMode: .fit)
             } placeholder: {
                 RoundedRectangle(cornerRadius: 8)

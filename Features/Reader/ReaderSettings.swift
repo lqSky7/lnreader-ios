@@ -14,7 +14,7 @@ struct ReaderSettings: View {
     private let fontFamilies = [
         "Georgia", "Palatino", "Times New Roman",
         "System", "Helvetica Neue", "Avenir",
-        "Charter", "Iowan Old Style",
+        "Charter", "Iowan Old Style", "Open-Dyslexic",
     ]
 
     struct PresetTheme: Identifiable {
@@ -196,38 +196,40 @@ struct PresetThemeCircle: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            ZStack {
-                if preset.bg.isEmpty {
-                    // System theme adaptive representation
-                    LinearGradient(
-                        colors: [Color.white, Color.black],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                } else if let color = Color(hex: preset.bg) {
-                    color
-                } else {
-                    Color.clear
-                }
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(
-                            preset.text.isEmpty
-                                ? .primary
-                                : (Color(hex: preset.text) ?? .primary)
-                        )
-                }
+        ZStack {
+            if preset.bg.isEmpty {
+                // System theme adaptive representation
+                LinearGradient(
+                    colors: [Color.white, Color.black],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else if let color = Color(hex: preset.bg) {
+                color
+            } else {
+                Color.clear
             }
-            .frame(width: 40, height: 40)
-            .clipShape(Circle())
-            .overlay(
-                Circle()
-                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-            )
-            .shadow(radius: 1)
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(
+                        preset.text.isEmpty
+                            ? .primary
+                            : (Color(hex: preset.text) ?? .primary)
+                    )
+            }
+        }
+        .frame(width: 40, height: 40)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(radius: 1)
+        .contentShape(Circle())
+        .onTapGesture {
+            action()
         }
     }
 }

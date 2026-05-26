@@ -54,6 +54,9 @@ final class Novel: Hashable {
     /// When the novel was added to the library
     var dateAdded: Date = Date.now
 
+    /// Custom sort position for ordering in library drag and drop
+    var libraryPosition: Int = 0
+
     // MARK: - Relationships
 
     /// All chapters belonging to this novel

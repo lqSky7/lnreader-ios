@@ -12,7 +12,7 @@ struct NovelCoverView: View {
     var body: some View {
         GeometryReader { geo in
             if let urlString = url, let imageURL = URL(string: urlString) {
-                AsyncImage(url: imageURL) { phase in
+                CustomAsyncImage(url: imageURL) { phase in
                     switch phase {
                     case .success(let image):
                         image

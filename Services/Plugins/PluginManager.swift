@@ -144,6 +144,7 @@ final class PluginManager {
 
             installedPlugins[id] = plugin
             syncInstalledState()
+            saveInstalledMetadata()
         } catch {
             lastError = error
             throw PluginManagerError.installationFailed(error.localizedDescription)
@@ -155,6 +156,7 @@ final class PluginManager {
         installedPlugins.removeValue(forKey: id)
         deletePluginJS(id: id)
         syncInstalledState()
+        saveInstalledMetadata()
     }
 
     /// Get an installed plugin by ID.
@@ -171,6 +173,13 @@ final class PluginManager {
 
     /// Restore previously installed plugins from saved JS files on disk.
     func restoreInstalledPlugins() async {
+        // Load metadata from UserDefaults first
+        var savedItems: [PluginListItem] = []
+        if let data = UserDefaults.standard.data(forKey: Self.installedMetadataKey),
+           let items = try? JSONDecoder().decode([PluginListItem].self, from: data) {
+            savedItems = items
+        }
+
         let pluginsDir = Self.pluginsDirectory
         guard FileManager.default.fileExists(atPath: pluginsDir.path()) else { return }
 
@@ -186,8 +195,11 @@ final class PluginManager {
             // Skip if already installed
             guard installedPlugins[pluginID] == nil else { continue }
 
-            // Find registry item for metadata
-            guard let item = plugins.first(where: { $0.id == pluginID }) else { continue }
+            // Find registry item for metadata (fallback to savedItems if registry is empty)
+            guard let item = plugins.first(where: { $0.id == pluginID }) ?? savedItems.first(where: { $0.id == pluginID }) else {
+                print("⚠️ No metadata found for local plugin '\(pluginID)'")
+                continue
+            }
 
             guard let jsCode = try? String(contentsOf: file, encoding: .utf8) else { continue }
 
@@ -212,6 +224,15 @@ final class PluginManager {
     }
 
     // MARK: - Private Helpers
+
+    private static let installedMetadataKey = "plugin_manager_installed_metadata"
+
+    private func saveInstalledMetadata() {
+        let list = installedPluginsList
+        if let data = try? JSONEncoder().encode(list) {
+            UserDefaults.standard.set(data, forKey: Self.installedMetadataKey)
+        }
+    }
 
     /// Directory where plugin JS files are persisted.
     private static var pluginsDirectory: URL {

@@ -10,6 +10,7 @@ struct LibraryToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+
             Menu {
                 ForEach(DisplayMode.allCases) { mode in
                     Button {

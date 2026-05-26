@@ -60,8 +60,9 @@ struct MockSource: SourcePlugin {
 
     // MARK: - Protocol Methods
 
-    func popularNovels(page: Int) async throws -> [PartialNovel] {
-        // Simulate network delay
+    func popularNovels(page: Int, showLatest: Bool, filterValues: FilterValues?) async throws
+        -> [PartialNovel]
+    {
         try await Task.sleep(for: .milliseconds(500))
         return Self.sampleNovels
     }
@@ -106,26 +107,26 @@ struct MockSource: SourcePlugin {
         let chapterNum = path.split(separator: "/").last.flatMap { Int($0) } ?? 1
 
         return """
-        <h2>Chapter \(chapterNum): \(chapterTitle(chapterNum))</h2>
-        <p>The morning sun cast long shadows across the ancient courtyard as our protagonist \
-        stepped through the weathered gates. The air carried whispers of forgotten magic, and \
-        every stone seemed to pulse with stories untold.</p>
-        <p>\"You shouldn't have come here,\" a voice echoed from the darkness beyond the \
-        archway. The words hung in the air like mist, neither threatening nor welcoming—simply \
-        a statement of fact that resonated with the weight of centuries.</p>
-        <p>Despite the warning, there was no turning back. The path ahead wound through corridors \
-        of crystallized starlight, each step revealing new wonders that defied the laws of the \
-        mundane world left behind. <em>This was the beginning of something extraordinary.</em></p>
-        <p>The ancient texts had spoken of this place—a nexus where reality folded upon itself \
-        like the pages of an infinite book. Here, the boundaries between worlds grew thin, and \
-        those brave or foolish enough to walk these halls could glimpse the threads that wove \
-        the fabric of existence itself.</p>
-        <p><strong>\"Remember,\"</strong> the elder had said before the journey began, \
-        <strong>\"what you seek is not always what you find, but what finds you is always what \
-        you need.\"</strong></p>
-        <p>And so the chapter of discovery began, one careful step at a time, into the unknown \
-        depths of a world that had waited an eternity to be explored.</p>
-        """
+            <h2>Chapter \(chapterNum): \(chapterTitle(chapterNum))</h2>
+            <p>The morning sun cast long shadows across the ancient courtyard as our protagonist \
+            stepped through the weathered gates. The air carried whispers of forgotten magic, and \
+            every stone seemed to pulse with stories untold.</p>
+            <p>\"You shouldn't have come here,\" a voice echoed from the darkness beyond the \
+            archway. The words hung in the air like mist, neither threatening nor welcoming—simply \
+            a statement of fact that resonated with the weight of centuries.</p>
+            <p>Despite the warning, there was no turning back. The path ahead wound through corridors \
+            of crystallized starlight, each step revealing new wonders that defied the laws of the \
+            mundane world left behind. <em>This was the beginning of something extraordinary.</em></p>
+            <p>The ancient texts had spoken of this place—a nexus where reality folded upon itself \
+            like the pages of an infinite book. Here, the boundaries between worlds grew thin, and \
+            those brave or foolish enough to walk these halls could glimpse the threads that wove \
+            the fabric of existence itself.</p>
+            <p><strong>\"Remember,\"</strong> the elder had said before the journey began, \
+            <strong>\"what you seek is not always what you find, but what finds you is always what \
+            you need.\"</strong></p>
+            <p>And so the chapter of discovery began, one careful step at a time, into the unknown \
+            depths of a world that had waited an eternity to be explored.</p>
+            """
     }
 
     // MARK: - Private Helpers

@@ -6,6 +6,9 @@ import SwiftUI
 
 struct UpdatesView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(PluginManager.self) private var pluginManager
+    @Environment(LibraryManager.self) private var libraryManager
+
     @Query(
         filter: #Predicate<Chapter> { $0.updatedTime != nil },
         sort: \Chapter.updatedTime,
@@ -22,20 +25,51 @@ struct UpdatesView: View {
                         title: "No Updates",
                         subtitle: "New chapters from your library novels will appear here."
                     )
+                    .refreshable {
+                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                    }
                 } else {
                     List {
                         ForEach(groupedUpdates, id: \.key) { date, chapters in
                             Section(date) {
                                 ForEach(chapters) { chapter in
-                                    UpdateRow(chapter: chapter)
+                                    NavigationLink {
+                                        ReaderView(
+                                            chapterPath: chapter.path,
+                                            chapterName: chapter.name,
+                                            pluginId: chapter.novel?.pluginId ?? "",
+                                            novel: chapter.novel
+                                        )
+                                    } label: {
+                                        UpdateRow(chapter: chapter)
+                                    }
                                 }
                             }
                         }
                     }
                     .listStyle(.plain)
+                    .refreshable {
+                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                    }
                 }
             }
             .navigationTitle("Updates")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: {
+                        Task {
+                            await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                        }
+                    }) {
+                        if libraryManager.isUpdating {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(libraryManager.isUpdating)
+                }
+            }
         }
     }
 

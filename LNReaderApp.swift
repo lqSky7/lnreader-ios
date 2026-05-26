@@ -14,6 +14,7 @@ struct LNReaderApp: App {
             ContentView()
                 .environment(pluginManager)
                 .environment(libraryManager)
+                .preferredColorScheme(.dark)
         }
         .modelContainer(for: [
             Novel.self,
@@ -21,6 +22,7 @@ struct LNReaderApp: App {
             Category.self,
             Repository.self,
             ReadingHistory.self,
+            UserProfile.self,
         ])
         #if os(macOS)
         .defaultSize(width: 1000, height: 700)

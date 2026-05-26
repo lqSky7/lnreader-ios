@@ -4,6 +4,7 @@ import Foundation
 
 /// Sort orders for the library view
 enum SortOrder: String, Codable, CaseIterable, Identifiable {
+    case custom = "Custom"
     case alphabetical = "Alphabetical"
     case lastRead = "Last Read"
     case lastUpdated = "Last Updated"
@@ -16,6 +17,7 @@ enum SortOrder: String, Codable, CaseIterable, Identifiable {
 
     var iconName: String {
         switch self {
+        case .custom: "arrow.up.and.down.and.arrow.left.and.right"
         case .alphabetical: "textformat.abc"
         case .lastRead: "book"
         case .lastUpdated: "clock"

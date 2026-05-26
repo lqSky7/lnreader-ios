@@ -46,7 +46,7 @@ final class LibraryManager {
         context.insert(novel)
 
         // Insert chapters
-        for sourceChapter in sourceNovel.chapters {
+        for (index, sourceChapter) in sourceNovel.chapters.enumerated() {
             let chapter = Chapter(
                 path: sourceChapter.path,
                 name: sourceChapter.name
@@ -54,6 +54,7 @@ final class LibraryManager {
             chapter.chapterNumber = sourceChapter.chapterNumber
             chapter.releaseTime = sourceChapter.releaseTime
             chapter.page = sourceChapter.page ?? "1"
+            chapter.position = index
             chapter.novel = novel
             context.insert(chapter)
         }
@@ -73,13 +74,27 @@ final class LibraryManager {
         chapter: Chapter,
         context: ModelContext
     ) {
+        // Delete any existing history entries for this novel to only keep the latest
+        let targetPath = novel.path
+        let targetPlugin = novel.pluginId
+        let predicate = #Predicate<ReadingHistory> { $0.novelPath == targetPath && $0.pluginId == targetPlugin }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        if let existingEntries = try? context.fetch(descriptor) {
+            for entry in existingEntries {
+                context.delete(entry)
+            }
+        }
+
         let entry = ReadingHistory(
             novelId: novel.persistentModelID.hashValue,
             chapterID: chapter.persistentModelID.hashValue,
+            novelPath: novel.path,
+            chapterPath: chapter.path,
             novelName: novel.name,
             novelCover: novel.cover,
             chapterName: chapter.name,
-            pluginId: novel.pluginId
+            pluginId: novel.pluginId,
+            progress: chapter.progress
         )
         context.insert(entry)
 
@@ -99,6 +114,94 @@ final class LibraryManager {
     ) {
         chapter.progress = progress
         chapter.position = position
+        try? context.save()
+    }
+
+    /// Update all novels in the library by fetching the latest details and chapters from sources.
+    func updateLibrary(context: ModelContext, pluginManager: PluginManager) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+
+        let predicate = #Predicate<Novel> { $0.inLibrary }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        guard let novels = try? context.fetch(descriptor) else { return }
+
+        for novel in novels {
+            let pluginId = novel.pluginId
+            let path = novel.path
+            guard let source = pluginManager.plugin(for: pluginId) else { continue }
+
+            do {
+                var sourceNovel = try await source.parseNovel(path: path)
+                if source.hasParsePage, let totalPages = sourceNovel.totalPages, totalPages > 1 {
+                    print("🔌 [\(pluginId)] Paginated chapters detected during library update, fetching \(totalPages) pages...")
+                    let allChapters = try await source.fetchAllChapters(path: path, totalPages: totalPages)
+                    sourceNovel = SourceNovel(
+                        name: sourceNovel.name,
+                        path: sourceNovel.path,
+                        cover: sourceNovel.cover,
+                        genres: sourceNovel.genres,
+                        summary: sourceNovel.summary,
+                        author: sourceNovel.author,
+                        artist: sourceNovel.artist,
+                        status: sourceNovel.status,
+                        chapters: allChapters,
+                        totalPages: sourceNovel.totalPages
+                    )
+                }
+                updateNovel(novel, sourceNovel: sourceNovel, context: context)
+            } catch {
+                print("Failed to update novel \(novel.name): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Update a single novel's chapters and metadata from source.
+    func updateNovel(_ novel: Novel, sourceNovel: SourceNovel, context: ModelContext) {
+        novel.name = sourceNovel.name
+        if let cover = sourceNovel.cover {
+            novel.cover = cover
+        }
+        if let summary = sourceNovel.summary {
+            novel.summary = summary
+        }
+        if let author = sourceNovel.author {
+            novel.author = author
+        }
+        if let artist = sourceNovel.artist {
+            novel.artist = artist
+        }
+        novel.status = NovelStatus(rawValue: sourceNovel.status ?? "") ?? .unknown
+        novel.genres = sourceNovel.genres
+        novel.totalPages = sourceNovel.totalPages ?? 0
+        novel.lastUpdatedAt = .now
+
+        let existingChapters = novel.chapters
+        let existingPaths = Set(existingChapters.map { $0.path })
+
+        for (index, sourceChapter) in sourceNovel.chapters.enumerated() {
+            if existingPaths.contains(sourceChapter.path) {
+                if let existing = existingChapters.first(where: { $0.path == sourceChapter.path }) {
+                    existing.name = sourceChapter.name
+                    existing.releaseTime = sourceChapter.releaseTime
+                    existing.chapterNumber = sourceChapter.chapterNumber
+                    existing.position = index
+                }
+            } else {
+                let newChapter = Chapter(
+                    path: sourceChapter.path,
+                    name: sourceChapter.name
+                )
+                newChapter.chapterNumber = sourceChapter.chapterNumber
+                newChapter.releaseTime = sourceChapter.releaseTime
+                newChapter.page = sourceChapter.page ?? "1"
+                newChapter.position = index
+                newChapter.updatedTime = .now // Marks it as an update!
+                newChapter.novel = novel
+                context.insert(newChapter)
+            }
+        }
         try? context.save()
     }
 }

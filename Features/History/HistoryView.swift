@@ -8,6 +8,7 @@ struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ReadingHistory.lastReadAt, order: .reverse)
     private var history: [ReadingHistory]
+    @Query private var novels: [Novel]
 
     @State private var searchText = ""
 
@@ -25,7 +26,16 @@ struct HistoryView: View {
                         ForEach(groupedHistory, id: \.key) { date, entries in
                             Section(date) {
                                 ForEach(entries) { entry in
-                                    HistoryRow(entry: entry)
+                                    NavigationLink {
+                                        ReaderView(
+                                            chapterPath: entry.chapterPath,
+                                            chapterName: entry.chapterName,
+                                            pluginId: entry.pluginId,
+                                            novel: novel(for: entry)
+                                        )
+                                    } label: {
+                                        HistoryRow(entry: entry)
+                                    }
                                 }
                                 .onDelete { offsets in
                                     deleteEntries(offsets, from: entries)
@@ -48,6 +58,10 @@ struct HistoryView: View {
                 }
             }
         }
+    }
+
+    private func novel(for entry: ReadingHistory) -> Novel? {
+        novels.first { $0.path == entry.novelPath && $0.pluginId == entry.pluginId }
     }
 
     // MARK: - Filtering & Grouping

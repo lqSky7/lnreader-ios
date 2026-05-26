@@ -58,6 +58,8 @@ struct HistoryRow: View {
         entry: ReadingHistory(
             novelId: 1,
             chapterID: 12,
+            novelPath: "sample-novel",
+            chapterPath: "chapter-12",
             novelName: "Sample Novel",
             novelCover: "https://picsum.photos/300/420?random=3",
             chapterName: "Chapter 12: A Long Night",

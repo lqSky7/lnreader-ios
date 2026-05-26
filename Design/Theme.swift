@@ -10,8 +10,8 @@ enum AppTheme {
 
     // MARK: Accent Colors
 
-    /// Primary accent — warm amber/gold.
-    static let accent = Color(hue: 0.08, saturation: 0.80, brightness: 0.95)
+    /// Primary accent — grey.
+    static let accent = Color(hue: 0.0, saturation: 0.0, brightness: 0.60)
 
     /// Secondary accent — soft teal.
     static let secondaryAccent = Color(hue: 0.50, saturation: 0.45, brightness: 0.80)
@@ -131,19 +131,22 @@ extension Color {
     func toHex() -> String? {
         #if os(iOS)
         let uiColor = UIColor(self)
+        guard let cgColor = uiColor.cgColor.converted(to: CGColorSpaceCreateDeviceRGB(), intent: .defaultIntent, options: nil),
+              let components = cgColor.components,
+              components.count >= 3 else {
+            return nil
+        }
+        let red = components[0]
+        let green = components[1]
+        let blue = components[2]
+        let alpha = components.count > 3 ? components[3] : 1.0
         #elseif os(macOS)
-        let uiColor = NSColor(self)
-        #endif
-        
+        let nsColor = NSColor(self)
+        guard let rgbColor = nsColor.usingColorSpace(.deviceRGB) else { return nil }
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
-        
-        #if os(iOS)
-        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return nil }
-        #elseif os(macOS)
-        guard let rgbColor = uiColor.usingColorSpace(.deviceRGB) else { return nil }
         rgbColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         #endif
         

@@ -7,6 +7,7 @@ import SwiftUI
 /// The root view containing the main tab navigation.
 /// Tab bar automatically adopts Liquid Glass when compiled with Xcode 26.
 struct ContentView: View {
+    @Environment(PluginManager.self) private var pluginManager
     @State private var selectedTab: AppTab = .library
 
     var body: some View {
@@ -32,6 +33,9 @@ struct ContentView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .task {
+            await pluginManager.restoreInstalledPlugins()
+        }
     }
 }
 

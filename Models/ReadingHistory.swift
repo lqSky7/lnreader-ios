@@ -13,6 +13,12 @@ final class ReadingHistory: Hashable {
     /// Reference to the chapter's persistent ID
     var chapterID: Int = 0
 
+    /// Unique source path identifier for the novel
+    var novelPath: String = ""
+
+    /// Unique source path identifier for the chapter
+    var chapterPath: String = ""
+
     /// Cached novel title for display without fetching
     var novelName: String = ""
 
@@ -36,6 +42,8 @@ final class ReadingHistory: Hashable {
     init(
         novelId: Int,
         chapterID: Int,
+        novelPath: String,
+        chapterPath: String,
         novelName: String,
         novelCover: String? = nil,
         chapterName: String,
@@ -44,6 +52,8 @@ final class ReadingHistory: Hashable {
     ) {
         self.novelId = novelId
         self.chapterID = chapterID
+        self.novelPath = novelPath
+        self.chapterPath = chapterPath
         self.novelName = novelName
         self.novelCover = novelCover
         self.chapterName = chapterName

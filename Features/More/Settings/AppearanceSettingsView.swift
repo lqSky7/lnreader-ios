@@ -38,7 +38,6 @@ struct AppearanceSettingsView: View {
 
 private enum AppearanceScheme: String, CaseIterable, Identifiable {
     case system
-    case light
     case dark
 
     var id: String { rawValue }
@@ -46,7 +45,6 @@ private enum AppearanceScheme: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .system: "System"
-        case .light: "Light"
         case .dark: "Dark"
         }
     }

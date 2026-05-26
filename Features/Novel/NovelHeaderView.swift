@@ -29,7 +29,7 @@ struct NovelHeaderView: View {
             // Content overlay
             contentOverlay
         }
-        .frame(height: 400)
+        .frame(height: 540)
     }
 
     // MARK: - Hero Background
@@ -37,12 +37,14 @@ struct NovelHeaderView: View {
     @ViewBuilder
     private var heroBackground: some View {
         if let cover, let url = URL(string: cover) {
-            AsyncImage(url: url) { image in
+            CustomAsyncImage(url: url) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(minWidth: 0, maxWidth: .infinity,
-                           minHeight: 0, maxHeight: .infinity)
+                    .frame(
+                        minWidth: 0, maxWidth: .infinity,
+                        minHeight: 0, maxHeight: .infinity
+                    )
                     .clipped()
                     .backgroundExtensionEffect()
             } placeholder: {
@@ -87,24 +89,31 @@ struct NovelHeaderView: View {
 
             // Glass action buttons
             GlassEffectContainer(spacing: 12) {
-                Button(action: onContinueReading) {
-                    Label("Continue Reading", systemImage: "book.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .glassEffectID("continue", in: namespace)
+                HStack(spacing: 12) {
+                    Button(action: onContinueReading) {
+                        Label("Continue", systemImage: "book.fill")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .glassEffectID("continue", in: namespace)
 
-                Button(action: onToggleLibrary) {
-                    Label(
-                        inLibrary ? "In Library" : "Add to Library",
-                        systemImage: inLibrary ? "checkmark.circle.fill" : "plus.circle"
-                    )
+                    Button(action: onToggleLibrary) {
+                        Label(
+                            inLibrary ? "In Library" : "Add to Library",
+                            systemImage: inLibrary ? "checkmark.circle.fill" : "plus.circle"
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.glass)
+                    .glassEffectID("library", in: namespace)
+                    #if os(macOS)
+                        .tint(.clear)
+                    #endif
                 }
-                .buttonStyle(.glass)
-                .glassEffectID("library", in: namespace)
-                #if os(macOS)
-                .tint(.clear)
-                #endif
             }
             .contentShape(.rect)
         }
