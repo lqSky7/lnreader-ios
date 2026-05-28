@@ -7,12 +7,14 @@ import SwiftUI
 
 struct MoreView: View {
     @Environment(PluginManager.self) private var pluginManager
+    @Environment(SyncManager.self) private var syncManager
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<Novel> { $0.inLibrary }) private var libraryNovels: [Novel]
     @Query private var chapters: [Chapter]
     @Query private var profiles: [UserProfile]
 
     @State private var showingEditProfile = false
+    @State private var showingAuth = false
 
     // Haptic feedback generators
     private let lightFeedback = UIImpactFeedbackGenerator(style: .light)
@@ -28,6 +30,8 @@ struct MoreView: View {
                 VStack(spacing: 24) {
                     // Profile/Journey Card (Name and PFP on bottom-left, no stats, edit button top-right)
                     profileHeaderCard
+
+                    syncPanel
                     
                     // Bento grid layout for settings (systemGray6 background, monochrome icons)
                     bentoSettingsGrid
@@ -38,12 +42,95 @@ struct MoreView: View {
             .sheet(isPresented: $showingEditProfile) {
                 ProfileEditSheet(profile: userProfile)
             }
+            .sheet(isPresented: $showingAuth) {
+                AuthView()
+            }
             .onAppear {
                 ensureProfileExists()
                 lightFeedback.prepare()
                 mediumFeedback.prepare()
             }
         }
+    }
+
+    private var syncPanel: some View {
+        HStack(spacing: 12) {
+            Image(systemName: syncManager.currentUser == nil ? "cloud.fill" : "icloud.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(.blue)
+                .frame(width: 38, height: 38)
+                .background(Color(UIColor.systemGray5), in: .circle)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(syncManager.currentUser?.displayUsername ?? syncManager.currentUser?.username ?? "Sync")
+                    .font(.headline)
+                Text(syncSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let error = syncManager.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else if let message = syncManager.lastMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if syncManager.currentUser == nil {
+                Button("Login") {
+                    showingAuth = true
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            } else {
+                HStack(spacing: 8) {
+                    Button {
+                        Task {
+                            await syncManager.push(
+                                profile: userProfile,
+                                novels: libraryNovels,
+                                sources: pluginManager.installedPluginsList
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+
+                    Button {
+                        Task { await syncManager.signOut() }
+                    } label: {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .disabled(syncManager.isWorking)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(UIColor.systemGray6))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+        )
+        .padding(.horizontal)
+    }
+
+    private var syncSubtitle: String {
+        if let email = syncManager.currentUser?.email {
+            return email
+        }
+        return "Profile, sources, and cloud library"
     }
 
     private func ensureProfileExists() {
@@ -123,7 +210,7 @@ struct MoreView: View {
 
     private var bentoSettingsGrid: some View {
         VStack(spacing: 0) {
-            // Row 1: General | Appearance
+            // Row 1: General | Reader
             HStack(spacing: 0) {
                 NavigationLink {
                     GeneralSettingsView()
@@ -154,38 +241,6 @@ struct MoreView: View {
                     .frame(width: 0.5)
                 
                 NavigationLink {
-                    AppearanceSettingsView()
-                } label: {
-                    BentoCell(alignment: .bottomLeading) {
-                        Image(systemName: "paintbrush.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Appearance")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Text("Theme & cover style")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(BentoCellButtonStyle())
-                .simultaneousGesture(TapGesture().onEnded {
-                    lightFeedback.impactOccurred()
-                })
-            }
-            .frame(height: 140)
-            
-            Rectangle()
-                .fill(Color(UIColor.separator))
-                .frame(height: 0.5)
-            
-            // Row 2: Reader | Advanced
-            HStack(spacing: 0) {
-                NavigationLink {
                     ReaderSettingsView()
                 } label: {
                     BentoCell(alignment: .bottomLeading) {
@@ -208,36 +263,86 @@ struct MoreView: View {
                 .simultaneousGesture(TapGesture().onEnded {
                     lightFeedback.impactOccurred()
                 })
-                
-                Rectangle()
-                    .fill(Color(UIColor.separator))
-                    .frame(width: 0.5)
-                
-                NavigationLink {
-                    AdvancedSettingsView()
-                } label: {
-                    BentoCell(alignment: .bottomLeading) {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Advanced")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Text("Diagnostics & cache")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(BentoCellButtonStyle())
-                .simultaneousGesture(TapGesture().onEnded {
-                    lightFeedback.impactOccurred()
-                })
             }
             .frame(height: 140)
+            
+            Rectangle()
+                .fill(Color(UIColor.separator))
+                .frame(height: 0.5)
+            
+            // Row: TTS Settings
+            NavigationLink {
+                TTSSettingsView()
+            } label: {
+                HStack(spacing: 16) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                        .background(Color(UIColor.systemGray5), in: .circle)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("TTS")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                        Text("Voices, offline models & servers")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+            }
+            .buttonStyle(BentoCellButtonStyle())
+            .simultaneousGesture(TapGesture().onEnded {
+                lightFeedback.impactOccurred()
+            })
+            
+            Rectangle()
+                .fill(Color(UIColor.separator))
+                .frame(height: 0.5)
+            
+            // Row 2: Advanced (Full width)
+            NavigationLink {
+                AdvancedSettingsView()
+            } label: {
+                HStack(spacing: 16) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                        .background(Color(UIColor.systemGray5), in: .circle)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Advanced")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                        Text("Diagnostics & cache")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+            }
+            .buttonStyle(BentoCellButtonStyle())
+            .simultaneousGesture(TapGesture().onEnded {
+                lightFeedback.impactOccurred()
+            })
             
             Rectangle()
                 .fill(Color(UIColor.separator))

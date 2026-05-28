@@ -2,6 +2,7 @@
 // Manages library operations: adding/removing novels, updating chapters.
 
 import Foundation
+import Network
 import Observation
 import SwiftData
 
@@ -117,9 +118,34 @@ final class LibraryManager {
         try? context.save()
     }
 
+    /// Check if the current network connection is cellular.
+    private func isCellularConnection() -> Bool {
+        let monitor = NWPathMonitor()
+        let semaphore = DispatchSemaphore(value: 0)
+        var isCellular = false
+        monitor.pathUpdateHandler = { path in
+            isCellular = path.usesInterfaceType(.cellular)
+            semaphore.signal()
+        }
+        let queue = DispatchQueue(label: "NetworkMonitorTemp")
+        monitor.start(queue: queue)
+        _ = semaphore.wait(timeout: .now() + 0.1)
+        monitor.cancel()
+        return isCellular
+    }
+
     /// Update all novels in the library by fetching the latest details and chapters from sources.
     func updateLibrary(context: ModelContext, pluginManager: PluginManager) async {
         guard !isUpdating else { return }
+
+        // Wi-Fi only restriction check
+        if UserDefaults.standard.object(forKey: "general.updateOnWifiOnly") as? Bool ?? true {
+            if isCellularConnection() {
+                print("📶 Library update skipped: Wi-Fi only setting is enabled and current network is cellular.")
+                return
+            }
+        }
+
         isUpdating = true
         defer { isUpdating = false }
 
@@ -203,5 +229,17 @@ final class LibraryManager {
             }
         }
         try? context.save()
+    }
+
+    /// Clear all updates by setting updatedTime to nil for all chapters.
+    func clearUpdates(context: ModelContext) {
+        let predicate = #Predicate<Chapter> { $0.updatedTime != nil }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        if let chapters = try? context.fetch(descriptor) {
+            for chapter in chapters {
+                chapter.updatedTime = nil
+            }
+            try? context.save()
+        }
     }
 }

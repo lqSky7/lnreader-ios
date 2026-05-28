@@ -8,6 +8,10 @@ import SwiftUI
 /// Tab bar automatically adopts Liquid Glass when compiled with Xcode 26.
 struct ContentView: View {
     @Environment(PluginManager.self) private var pluginManager
+    @Environment(LibraryManager.self) private var libraryManager
+    @Environment(SyncManager.self) private var syncManager
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage("general.autoUpdateOnLaunch") private var autoUpdateOnLaunch = true
     @State private var selectedTab: AppTab = .library
 
     var body: some View {
@@ -34,7 +38,11 @@ struct ContentView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .task {
+            await syncManager.loadSession()
             await pluginManager.restoreInstalledPlugins()
+            if autoUpdateOnLaunch {
+                await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+            }
         }
     }
 }

@@ -159,6 +159,44 @@ final class PluginManager {
         saveInstalledMetadata()
     }
 
+    /// Install synced plugins by metadata, fetching registry first when needed.
+    func installSyncedSources(_ sources: [SyncSourcePayload]) async throws {
+        if plugins.isEmpty {
+            try? await fetchPluginList()
+        }
+
+        for source in sources where installedPlugins[source.id] == nil {
+            if plugins.contains(where: { $0.id == source.id }) {
+                try? await installPlugin(id: source.id)
+            } else {
+                let jsCode = try await NetworkClient.shared.fetchString(urlString: source.url)
+                try savePluginJS(id: source.id, code: jsCode)
+                let plugin = try JSSourcePlugin(
+                    id: source.id,
+                    name: source.name,
+                    iconURL: source.iconUrl,
+                    siteURL: source.site,
+                    language: source.lang,
+                    version: source.version,
+                    jsCode: jsCode
+                )
+                installedPlugins[source.id] = plugin
+            }
+        }
+
+        syncInstalledState()
+        saveInstalledMetadata()
+    }
+
+    /// Uninstall all plugins and clear disk cache.
+    func clearAllPlugins() {
+        installedPlugins.removeAll()
+        let pluginsDir = Self.pluginsDirectory
+        try? FileManager.default.removeItem(at: pluginsDir)
+        syncInstalledState()
+        saveInstalledMetadata()
+    }
+
     /// Get an installed plugin by ID.
     func plugin(for id: String) -> (any SourcePlugin)? {
         installedPlugins[id]

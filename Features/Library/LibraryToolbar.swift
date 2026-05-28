@@ -7,9 +7,13 @@ struct LibraryToolbar: ToolbarContent {
     @Binding var sortOrder: SortOrder
     @Binding var sortDirection: SortDirection
     @Binding var displayMode: DisplayMode
+    var onImport: () -> Void
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            Button(action: onImport) {
+                Label("Import EPUB", systemImage: "square.and.arrow.down")
+            }
 
             Menu {
                 ForEach(DisplayMode.allCases) { mode in

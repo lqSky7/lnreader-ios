@@ -4,24 +4,13 @@
 import SwiftUI
 
 struct AdvancedSettingsView: View {
-    @AppStorage("advanced.enableDebugLogging") private var enableDebugLogging = false
-    @AppStorage("advanced.useExperimentalParser") private var useExperimentalParser = false
-    @AppStorage("advanced.allowInsecureSources") private var allowInsecureSources = false
+    @Environment(PluginManager.self) private var pluginManager
 
     @State private var showClearPluginsDialog = false
     @State private var showResetReaderDialog = false
 
     var body: some View {
         Form {
-            Section("Diagnostics") {
-                Toggle("Enable debug logging", isOn: $enableDebugLogging)
-                Toggle("Use experimental parser", isOn: $useExperimentalParser)
-            }
-
-            Section("Sources") {
-                Toggle("Allow insecure sources", isOn: $allowInsecureSources)
-            }
-
             Section("Maintenance") {
                 Button("Clear plugin cache", role: .destructive) {
                     showClearPluginsDialog = true
@@ -59,9 +48,7 @@ struct AdvancedSettingsView: View {
     }
 
     private func clearPluginCache() {
-        let pluginsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Plugins", isDirectory: true)
-        try? FileManager.default.removeItem(at: pluginsDir)
+        pluginManager.clearAllPlugins()
     }
 
     private func resetReaderSettings() {
@@ -73,6 +60,8 @@ struct AdvancedSettingsView: View {
             "reader.padding",
             "reader.justifyText",
             "reader.keepScreenOn",
+            "reader.backgroundColor",
+            "reader.textColor",
         ]
         for key in keys {
             defaults.removeObject(forKey: key)

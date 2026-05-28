@@ -24,9 +24,11 @@ struct BrowseView: View {
                 }
 
                 if !pluginManager.availableLanguages.isEmpty {
-                    Section {
+                    Section("Language") {
                         languageFilterRow
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
 
                 Section("Available Sources") {
@@ -67,7 +69,7 @@ struct BrowseView: View {
 
     private var installedPlugins: [PluginListItem] {
         pluginManager.installedPluginsList.filtered(
-            searchText: searchText, language: selectedLanguage
+            searchText: searchText, language: nil
         )
     }
 
@@ -88,19 +90,22 @@ struct BrowseView: View {
 
     private var languageFilterRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                languageChip("All", isSelected: selectedLanguage == nil) {
-                    selectedLanguage = nil
-                }
-                ForEach(pluginManager.availableLanguages, id: \.self) { lang in
-                    languageChip(lang, isSelected: selectedLanguage == lang) {
-                        selectedLanguage = lang
+            GlassEffectContainer {
+                HStack(spacing: 8) {
+                    languageChip("All", isSelected: selectedLanguage == nil) {
+                        selectedLanguage = nil
+                    }
+                    ForEach(pluginManager.availableLanguages, id: \.self) { lang in
+                        languageChip(lang, isSelected: selectedLanguage == lang) {
+                            selectedLanguage = lang
+                        }
                     }
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.top, 2)
+            .padding(.bottom, 2)
         }
-        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: -8, trailing: 16))
     }
 
     @ViewBuilder
@@ -111,16 +116,16 @@ struct BrowseView: View {
     ) -> some View {
         Button(action: action) {
             Text(title)
-                .font(Typography.small)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    isSelected ? AppTheme.accent.opacity(0.2) : Color.secondary.opacity(0.1),
-                    in: .capsule
-                )
-                .foregroundStyle(isSelected ? AppTheme.accent : .secondary)
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .foregroundStyle(isSelected ? Color.blue : .secondary)
         }
         .buttonStyle(.plain)
+        .glassEffect(
+            isSelected ? .regular.tint(.blue).interactive() : .regular.interactive(),
+            in: .capsule
+        )
     }
 }
 

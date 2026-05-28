@@ -8,12 +8,14 @@ import SwiftUI
 struct LNReaderApp: App {
     @State private var pluginManager = PluginManager()
     @State private var libraryManager = LibraryManager()
+    @State private var syncManager = SyncManager()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(pluginManager)
                 .environment(libraryManager)
+                .environment(syncManager)
                 .preferredColorScheme(.dark)
         }
         .modelContainer(for: [

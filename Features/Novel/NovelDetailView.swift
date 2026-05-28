@@ -24,6 +24,7 @@ struct NovelDetailView: View {
     @State private var chapterPage = 0
     @State private var chapterSearch = ""
     @State private var navigateToChapter: ChapterDisplay? = nil
+    @State private var allChapters: [ChapterDisplay] = []
 
     @Namespace private var paginationNamespace
 
@@ -111,28 +112,57 @@ struct NovelDetailView: View {
         .onChange(of: selectedFilter) { chapterPage = 0 }
         .onChange(of: chapterSortAscending) { chapterPage = 0 }
         .onChange(of: chapterSearch) { chapterPage = 0 }
+        .onAppear { refreshChapters() }
+        .onChange(of: novel) { refreshChapters() }
         .task { await fetchNovelData() }
     }
 
     // MARK: - Chapter Computation
 
-    private var allChapters: [ChapterDisplay] {
-        if let novel, !novel.chapters.isEmpty {
-            return novel.chapters
-                .map { ChapterDisplay(chapter: $0) }
-                .sorted { ch1, ch2 in
-                    if ch1.position != ch2.position {
-                        return ch1.position < ch2.position
+    private func refreshChapters() {
+        if let novel {
+            let novelPath = novel.path
+            let pluginId = novel.pluginId
+            let container = modelContext.container
+            
+            Task.detached(priority: .userInitiated) {
+                let context = ModelContext(container)
+                let predicate = #Predicate<Chapter> { $0.novel?.path == novelPath && $0.novel?.pluginId == pluginId }
+                var descriptor = FetchDescriptor<Chapter>(
+                    predicate: predicate,
+                    sortBy: [SortDescriptor(\.position)]
+                )
+                descriptor.relationshipKeyPathsForPrefetching = []
+                
+                do {
+                    let fetchedChapters = try context.fetch(descriptor)
+                    let mapped = fetchedChapters.map { ChapterDisplay(chapter: $0) }
+                    
+                    await MainActor.run {
+                        self.allChapters = mapped
                     }
-                    if let num1 = ch1.chapterNumber, let num2 = ch2.chapterNumber {
-                        return num1 < num2
+                } catch {
+                    print("⚠️ Failed to fetch chapters on background context: \(error)")
+                    await MainActor.run {
+                        let mapped = novel.chapters.map { ChapterDisplay(chapter: $0) }
+                        let sorted = mapped.sorted { ch1, ch2 in
+                            if ch1.position != ch2.position {
+                                return ch1.position < ch2.position
+                            }
+                            if let num1 = ch1.chapterNumber, let num2 = ch2.chapterNumber {
+                                return num1 < num2
+                            }
+                            return ch1.name.localizedStandardCompare(ch2.name) == .orderedAscending
+                        }
+                        self.allChapters = sorted
                     }
-                    return ch1.name.localizedStandardCompare(ch2.name) == .orderedAscending
                 }
+            }
+        } else {
+            let sourceChapters = sourceNovel?.chapters ?? []
+            let mapped = sourceChapters.enumerated().map { ChapterDisplay(sourceChapter: $1, position: $0) }
+            self.allChapters = mapped
         }
-        return (sourceNovel?.chapters ?? [])
-            .enumerated()
-            .map { ChapterDisplay(sourceChapter: $1, position: $0) }
     }
 
     private var filteredChapters: [ChapterDisplay] {
@@ -237,6 +267,8 @@ struct NovelDetailView: View {
     // MARK: - Actions
 
     private func fetchNovelData() async {
+        refreshChapters()
+        
         guard sourceNovel == nil else { return }
         let path = novel?.path ?? partialNovel?.path ?? ""
         guard !path.isEmpty,
@@ -273,6 +305,7 @@ struct NovelDetailView: View {
                 libraryManager.updateNovel(novel, sourceNovel: parsed, context: modelContext)
             }
             isLoading = false
+            refreshChapters()
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
@@ -294,6 +327,7 @@ struct NovelDetailView: View {
                 context: modelContext
             )
         }
+        refreshChapters()
     }
 
     private func continueReading() {

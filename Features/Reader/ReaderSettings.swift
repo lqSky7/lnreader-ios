@@ -32,18 +32,68 @@ struct ReaderSettings: View {
         PresetTheme(name: "Dark", bg: "#292832", text: "#CCCCCC"),
         PresetTheme(name: "Black", bg: "#000000", text: "#FFFFFFB3")
     ]
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            Form {
-                typographySection
-                colorsSection
-                layoutSection
-                previewSection
+            VStack(spacing: 0) {
+                // Pinned Preview at the top
+                pinnedPreview
+                
+                // Form with configuration sections
+                Form {
+                    typographySection
+                    colorsSection
+                    layoutSection
+                }
             }
             .navigationTitle("Reader Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
         }
+    }
+
+    private var pinnedPreview: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Preview")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            
+            Text(
+                "The quick brown fox jumps over the lazy dog. "
+                + "This preview shows how text appears with your current settings."
+            )
+            .font(.custom(fontFamily, size: fontSize))
+            .lineSpacing((lineHeight - 1.0) * fontSize)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundColor(resolvedTextColor)
+            .background(resolvedBackgroundColor)
+            .cornerRadius(12)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+        }
+        .background(settingsBackground)
+    }
+
+    private var settingsBackground: Color {
+        #if os(iOS)
+        return Color(uiColor: .systemGroupedBackground)
+        #else
+        return Color(nsColor: .windowBackgroundColor)
+        #endif
     }
 
     // MARK: - Sections
@@ -118,20 +168,7 @@ struct ReaderSettings: View {
         }
     }
 
-    private var previewSection: some View {
-        Section("Preview") {
-            Text(
-                "The quick brown fox jumps over the lazy dog. "
-                + "This preview shows how text appears with your current settings."
-            )
-            .font(.custom(fontFamily, size: fontSize))
-            .lineSpacing((lineHeight - 1.0) * fontSize)
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, 8)
-            .foregroundColor(resolvedTextColor)
-        }
-        .listRowBackground(resolvedBackgroundColor)
-    }
+
 
     // MARK: - Helpers
 

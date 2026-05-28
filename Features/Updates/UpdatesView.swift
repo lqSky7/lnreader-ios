@@ -8,6 +8,7 @@ struct UpdatesView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(PluginManager.self) private var pluginManager
     @Environment(LibraryManager.self) private var libraryManager
+    @State private var showClearConfirmation = false
 
     @Query(
         filter: #Predicate<Chapter> { $0.updatedTime != nil },
@@ -55,7 +56,15 @@ struct UpdatesView: View {
             }
             .navigationTitle("Updates")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !recentChapters.isEmpty {
+                        Button(role: .destructive) {
+                            showClearConfirmation = true
+                        } label: {
+                            Label("Clear Updates", systemImage: "trash")
+                        }
+                    }
+
                     Button(action: {
                         Task {
                             await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
@@ -69,6 +78,16 @@ struct UpdatesView: View {
                     }
                     .disabled(libraryManager.isUpdating)
                 }
+            }
+            .confirmationDialog(
+                "Are you sure you want to clear all updates?",
+                isPresented: $showClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Clear All", role: .destructive) {
+                    libraryManager.clearUpdates(context: modelContext)
+                }
+                Button("Cancel", role: .cancel) {}
             }
         }
     }

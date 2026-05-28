@@ -122,6 +122,7 @@ struct InteractiveGridCell: View {
 // MARK: - Grid Cell
 
 struct NovelGridCell: View {
+    @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
     let novel: Novel
     let displayMode: DisplayMode
     var isEditing: Bool = false
@@ -144,7 +145,7 @@ struct NovelGridCell: View {
                     }
                 }
 
-                if novel.chaptersUnread > 0 && !isEditing {
+                if showUnreadBadges && novel.chaptersUnread > 0 && !isEditing {
                     BadgeView(count: novel.chaptersUnread)
                         .padding(6)
                 }

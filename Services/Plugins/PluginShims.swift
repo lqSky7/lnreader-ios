@@ -438,6 +438,79 @@ struct PluginShims {
                         }
                         return this;
                     },
+                    replaceWith: function(replacement) {
+                        for (var i = 0; i < nodes.length; i++) {
+                            var node = nodes[i];
+                            if (node.parent) {
+                                const idx = node.parent.children.indexOf(node);
+                                if (idx !== -1) {
+                                    if (typeof replacement === "string") {
+                                        node.parent.children[idx] = new TextNode(replacement, node.parent);
+                                    } else if (replacement && replacement.nodeType) {
+                                        node.parent.children[idx] = replacement;
+                                    } else if (replacement && replacement.isCheerioWrapper && replacement.length > 0) {
+                                        const replacementNodes = replacement.toArray();
+                                        const newChildren = node.parent.children.slice(0, idx).concat(replacementNodes).concat(node.parent.children.slice(idx + 1));
+                                        node.parent.children = newChildren;
+                                        for (var k = 0; k < replacementNodes.length; k++) {
+                                            replacementNodes[k].parent = node.parent;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return this;
+                    },
+                    before: function(replacement) {
+                        for (var i = 0; i < nodes.length; i++) {
+                            var node = nodes[i];
+                            if (node.parent) {
+                                const idx = node.parent.children.indexOf(node);
+                                if (idx !== -1) {
+                                    let insertNodes = [];
+                                    if (typeof replacement === "string") {
+                                        insertNodes = [new TextNode(replacement, node.parent)];
+                                    } else if (replacement && replacement.nodeType) {
+                                        insertNodes = [replacement];
+                                    } else if (replacement && replacement.isCheerioWrapper && replacement.length > 0) {
+                                        insertNodes = replacement.toArray();
+                                    }
+                                    if (insertNodes.length > 0) {
+                                        for (var k = 0; k < insertNodes.length; k++) {
+                                            insertNodes[k].parent = node.parent;
+                                        }
+                                        node.parent.children.splice.apply(node.parent.children, [idx, 0].concat(insertNodes));
+                                    }
+                                }
+                            }
+                        }
+                        return this;
+                    },
+                    after: function(replacement) {
+                        for (var i = 0; i < nodes.length; i++) {
+                            var node = nodes[i];
+                            if (node.parent) {
+                                const idx = node.parent.children.indexOf(node);
+                                if (idx !== -1) {
+                                    let insertNodes = [];
+                                    if (typeof replacement === "string") {
+                                        insertNodes = [new TextNode(replacement, node.parent)];
+                                    } else if (replacement && replacement.nodeType) {
+                                        insertNodes = [replacement];
+                                    } else if (replacement && replacement.isCheerioWrapper && replacement.length > 0) {
+                                        insertNodes = replacement.toArray();
+                                    }
+                                    if (insertNodes.length > 0) {
+                                        for (var k = 0; k < insertNodes.length; k++) {
+                                            insertNodes[k].parent = node.parent;
+                                        }
+                                        node.parent.children.splice.apply(node.parent.children, [idx + 1, 0].concat(insertNodes));
+                                    }
+                                }
+                            }
+                        }
+                        return this;
+                    },
                     find: function(selector) {
                         let matched = [];
                         for (var i = 0; i < nodes.length; i++) {
@@ -581,6 +654,9 @@ struct PluginShims {
                     }
                     select.html = function() {
                         return getWrapperHTML(root.children);
+                    };
+                    select.text = function() {
+                        return getNodeText(root);
                     };
                     return select;
                 }

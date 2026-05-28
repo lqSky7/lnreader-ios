@@ -13,10 +13,15 @@ import WebKit
         let horizontalPadding: Double
         let backgroundColorHex: String
         let textColorHex: String
+        let bridge: ReaderContentBridge
+        let baseURL: URL?
         var onTap: (() -> Void)? = nil
+        var onParagraphTap: ((Int) -> Void)? = nil
 
-        class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        class Coordinator: NSObject, UIGestureRecognizerDelegate, WKNavigationDelegate, WKScriptMessageHandler {
             var onTap: (() -> Void)?
+            var onParagraphTap: ((Int) -> Void)?
+            weak var bridge: ReaderContentBridge?
             
             var loadedHtmlContent: String?
             var loadedFontSize: Double?
@@ -26,8 +31,9 @@ import WebKit
             var loadedBackgroundColorHex: String?
             var loadedTextColorHex: String?
 
-            init(onTap: (() -> Void)?) {
+            init(onTap: (() -> Void)?, bridge: ReaderContentBridge?) {
                 self.onTap = onTap
+                self.bridge = bridge
             }
 
             @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -51,20 +57,41 @@ import WebKit
             ) -> Bool {
                 return true
             }
+
+            func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+                bridge?.contentDidFinishLoad()
+            }
+
+            func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+                if message.name == "tapParagraph",
+                   let body = message.body as? String,
+                   let index = Int(body) {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onParagraphTap?(index)
+                    }
+                }
+            }
         }
 
         func makeCoordinator() -> Coordinator {
-            Coordinator(onTap: onTap)
+            Coordinator(onTap: onTap, bridge: bridge)
         }
 
         func makeUIView(context: Context) -> WKWebView {
             let config = WKWebViewConfiguration()
+            let userContentController = WKUserContentController()
+            let helper = ScriptMessageHandlerHelper(delegate: context.coordinator)
+            userContentController.add(helper, name: "tapParagraph")
+            config.userContentController = userContentController
+
             let webView = WKWebView(frame: .zero, configuration: config)
             webView.isOpaque = false
             webView.backgroundColor = .clear
             webView.scrollView.backgroundColor = .clear
             webView.scrollView.showsHorizontalScrollIndicator = false
             webView.scrollView.contentInsetAdjustmentBehavior = .never
+            webView.navigationDelegate = context.coordinator
+            bridge.setWebView(webView)
 
             let tapGesture = UITapGestureRecognizer(
                 target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
@@ -76,6 +103,8 @@ import WebKit
 
         func updateUIView(_ webView: WKWebView, context: Context) {
             context.coordinator.onTap = onTap
+            context.coordinator.onParagraphTap = onParagraphTap
+            context.coordinator.bridge = bridge
             
             let contentChanged = context.coordinator.loadedHtmlContent != htmlContent
             let styleChanged = context.coordinator.loadedFontSize != fontSize ||
@@ -86,8 +115,9 @@ import WebKit
                                context.coordinator.loadedTextColorHex != textColorHex
             
             if contentChanged || context.coordinator.loadedHtmlContent == nil {
+                bridge.contentDidChange()
                 let html = readerHTML(content: htmlContent)
-                webView.loadHTMLString(html, baseURL: nil)
+                webView.loadHTMLString(html, baseURL: baseURL)
                 
                 context.coordinator.loadedHtmlContent = htmlContent
                 context.coordinator.loadedFontSize = fontSize
@@ -129,9 +159,12 @@ import WebKit
         let horizontalPadding: Double
         let backgroundColorHex: String
         let textColorHex: String
+        let bridge: ReaderContentBridge
+        let baseURL: URL?
         var onTap: (() -> Void)? = nil
+        var onParagraphTap: ((Int) -> Void)? = nil
 
-        class Coordinator: NSObject {
+        class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
             var loadedHtmlContent: String?
             var loadedFontSize: Double?
             var loadedLineHeight: Double?
@@ -139,19 +172,46 @@ import WebKit
             var loadedHorizontalPadding: Double?
             var loadedBackgroundColorHex: String?
             var loadedTextColorHex: String?
+            weak var bridge: ReaderContentBridge?
+            var onParagraphTap: ((Int) -> Void)?
+
+            func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+                bridge?.contentDidFinishLoad()
+            }
+
+            func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+                if message.name == "tapParagraph",
+                   let body = message.body as? String,
+                   let index = Int(body) {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onParagraphTap?(index)
+                    }
+                }
+            }
         }
 
         func makeCoordinator() -> Coordinator {
-            Coordinator()
+            let coordinator = Coordinator()
+            coordinator.bridge = bridge
+            return coordinator
         }
 
         func makeNSView(context: Context) -> WKWebView {
             let config = WKWebViewConfiguration()
+            let userContentController = WKUserContentController()
+            let helper = ScriptMessageHandlerHelper(delegate: context.coordinator)
+            userContentController.add(helper, name: "tapParagraph")
+            config.userContentController = userContentController
+
             let webView = WKWebView(frame: .zero, configuration: config)
+            webView.navigationDelegate = context.coordinator
+            bridge.setWebView(webView)
             return webView
         }
 
         func updateNSView(_ webView: WKWebView, context: Context) {
+            context.coordinator.bridge = bridge
+            context.coordinator.onParagraphTap = onParagraphTap
             let contentChanged = context.coordinator.loadedHtmlContent != htmlContent
             let styleChanged = context.coordinator.loadedFontSize != fontSize ||
                                context.coordinator.loadedLineHeight != lineHeight ||
@@ -161,8 +221,9 @@ import WebKit
                                context.coordinator.loadedTextColorHex != textColorHex
             
             if contentChanged || context.coordinator.loadedHtmlContent == nil {
+                bridge.contentDidChange()
                 let html = readerHTML(content: htmlContent)
-                webView.loadHTMLString(html, baseURL: nil)
+                webView.loadHTMLString(html, baseURL: baseURL)
                 
                 context.coordinator.loadedHtmlContent = htmlContent
                 context.coordinator.loadedFontSize = fontSize
@@ -227,12 +288,13 @@ extension ReaderContent {
                 font-family: '\(fontFamily)', 'Georgia', serif;
                 font-size: \(fontSize)px;
                 line-height: \(lineHeight);
-                padding: 20px \(horizontalPadding)px 60px;
+                padding: 70px \(horizontalPadding)px 90px;
                 color: \(resolvedText);
                 background: \(resolvedBg);
                 -webkit-font-smoothing: antialiased;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
+                position: relative;
             }
             \(darkMediaQuery)
             p { margin-bottom: 1em; text-align: justify; }
@@ -255,10 +317,126 @@ extension ReaderContent {
             hr { border: none; border-top: 1px solid #3a3a3c; margin: 2em 0; }
             em { font-style: italic; }
             strong { font-weight: bold; }
+            .tts-active {
+                background: rgba(212, 165, 116, 0.18);
+                border-radius: 8px;
+                box-shadow: inset 0 0 0 1px rgba(212, 165, 116, 0.28);
+                padding: 0.05em 0.1em;
+            }
+            #tts-dot {
+                position: absolute;
+                width: 6px;
+                height: 6px;
+                border-radius: 999px;
+                background: #d4a574;
+                box-shadow: 0 0 8px rgba(212, 165, 116, 0.8);
+                opacity: 0;
+                pointer-events: none;
+                transition: transform 0.2s ease, opacity 0.2s ease;
+            }
             </style>
             </head>
-            <body>\(content)</body>
+            <body>\(content)
+            <div id="tts-dot"></div>
+            <script>
+            (function() {
+                function collectBlocks() {
+                    var nodes = Array.from(document.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li"));
+                    var texts = [];
+                    nodes.forEach(function(node) {
+                        var text = node.innerText.replace(/\\s+/g, " ").trim();
+                        if (text.length === 0) {
+                            node.setAttribute("data-tts-index", "-1");
+                            return;
+                        }
+                        var index = texts.length;
+                        node.setAttribute("data-tts-index", String(index));
+                        
+                        // Paragraph click handler
+                        node.onclick = function() {
+                            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tapParagraph) {
+                                window.webkit.messageHandlers.tapParagraph.postMessage(String(index));
+                            }
+                        };
+                        
+                        texts.push(text);
+                    });
+                    window.__ttsBlocks = texts;
+                }
+
+                function ensureDot() {
+                    var dot = document.getElementById("tts-dot");
+                    if (!dot) {
+                        dot = document.createElement("div");
+                        dot.id = "tts-dot";
+                        document.body.appendChild(dot);
+                    }
+                    return dot;
+                }
+
+                window.prepareTTS = function() {
+                    collectBlocks();
+                    ensureDot();
+                };
+
+                window.getTTSBlocks = function() {
+                    collectBlocks();
+                    return window.__ttsBlocks || [];
+                };
+
+                window.setTTSActiveIndex = function(index) {
+                    collectBlocks();
+                    var active = document.querySelector(".tts-active");
+                    if (active) {
+                        active.classList.remove("tts-active");
+                    }
+                    var target = document.querySelector('[data-tts-index="' + index + '"]');
+                    var dot = ensureDot();
+                    if (!target) {
+                        if (dot) { dot.style.opacity = 0; }
+                        return;
+                    }
+                    target.classList.add("tts-active");
+                    if (dot) {
+                        var rect = target.getBoundingClientRect();
+                        var x = rect.left + window.scrollX - 10;
+                        var y = rect.top + window.scrollY + 8;
+                        if (x < 6) { x = 6; }
+                        dot.style.transform = "translate(" + x + "px, " + y + "px)";
+                        dot.style.opacity = 1;
+                    }
+                };
+
+                window.clearTTSActive = function() {
+                    var active = document.querySelector(".tts-active");
+                    if (active) {
+                        active.classList.remove("tts-active");
+                    }
+                    var dot = document.getElementById("tts-dot");
+                    if (dot) {
+                        dot.style.opacity = 0;
+                    }
+                };
+
+                document.addEventListener("DOMContentLoaded", function() {
+                    window.prepareTTS();
+                });
+            })();
+            </script>
+            </body>
             </html>
             """
+    }
+}
+
+class ScriptMessageHandlerHelper: NSObject, WKScriptMessageHandler {
+    weak var delegate: WKScriptMessageHandler?
+    
+    init(delegate: WKScriptMessageHandler) {
+        self.delegate = delegate
+    }
+    
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        delegate?.userContentController(userContentController, didReceive: message)
     }
 }

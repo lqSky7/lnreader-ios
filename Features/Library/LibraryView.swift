@@ -3,6 +3,7 @@
 
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -18,15 +19,19 @@ struct LibraryView: View {
 
     @State private var searchText = ""
     @State private var selectedCategory: Category?
-    @AppStorage("librarySortOrder") private var sortOrder: SortOrder = .lastRead
-    @AppStorage("librarySortDirection") private var sortDirection: SortDirection = .descending
-    @AppStorage("libraryDisplayMode") private var displayMode: DisplayMode = .comfortable
+    @AppStorage("general.defaultSortOrder") private var sortOrder: SortOrder = .lastRead
+    @AppStorage("general.defaultSortDirection") private var sortDirection: SortDirection = .descending
+    @AppStorage("general.defaultDisplayMode") private var displayMode: DisplayMode = .comfortable
+    @AppStorage("general.confirmRemove") private var confirmRemove = true
 
     @State private var isEditingLibrary = false
     @State private var draggedItem: Novel? = nil
     @State private var novelToDelete: Novel? = nil
     @State private var showDeleteConfirmation = false
     @State private var navigationPath = NavigationPath()
+    @State private var showFileImporter = false
+    @State private var importError: String?
+    @State private var showImportError = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -35,7 +40,9 @@ struct LibraryView: View {
                     EmptyStateView(
                         icon: "books.vertical",
                         title: "Your Library is Empty",
-                        subtitle: "Browse sources to find novels and add them to your library."
+                        subtitle: "Browse sources to find novels, or import an EPUB file.",
+                        actionTitle: "Import EPUB",
+                        action: { showFileImporter = true }
                     )
                 } else {
                     ScrollView {
@@ -55,8 +62,12 @@ struct LibraryView: View {
                                 draggedItem: $draggedItem,
                                 onReorder: { reorderNovels(dragged: $0, target: $1) },
                                 onDelete: { novel in
-                                    novelToDelete = novel
-                                    showDeleteConfirmation = true
+                                    if confirmRemove {
+                                        novelToDelete = novel
+                                        showDeleteConfirmation = true
+                                    } else {
+                                        libraryManager.removeFromLibrary(novel: novel, context: modelContext)
+                                    }
                                 },
                                 onStartEditing: { startEditing() },
                                 onSelect: { novel in
@@ -71,8 +82,12 @@ struct LibraryView: View {
                                 draggedItem: $draggedItem,
                                 onReorder: { reorderNovels(dragged: $0, target: $1) },
                                 onDelete: { novel in
-                                    novelToDelete = novel
-                                    showDeleteConfirmation = true
+                                    if confirmRemove {
+                                        novelToDelete = novel
+                                        showDeleteConfirmation = true
+                                    } else {
+                                        libraryManager.removeFromLibrary(novel: novel, context: modelContext)
+                                    }
                                 },
                                 onStartEditing: { startEditing() },
                                 onSelect: { novel in
@@ -103,7 +118,8 @@ struct LibraryView: View {
                     LibraryToolbar(
                         sortOrder: $sortOrder,
                         sortDirection: $sortDirection,
-                        displayMode: $displayMode
+                        displayMode: $displayMode,
+                        onImport: { showFileImporter = true }
                     )
                 }
             }
@@ -126,6 +142,38 @@ struct LibraryView: View {
             }
             .navigationDestination(for: Novel.self) { novel in
                 NovelDetailView(novel: novel)
+            }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [UTType(filenameExtension: "epub")].compactMap { $0 },
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    Task {
+                        let accessing = url.startAccessingSecurityScopedResource()
+                        defer {
+                            if accessing {
+                                url.stopAccessingSecurityScopedResource()
+                            }
+                        }
+                        do {
+                            try LocalBookManager.importEPUB(at: url, context: modelContext)
+                        } catch {
+                            importError = error.localizedDescription
+                            showImportError = true
+                        }
+                    }
+                case .failure(let error):
+                    importError = error.localizedDescription
+                    showImportError = true
+                }
+            }
+            .alert("Import Error", isPresented: $showImportError, presenting: importError) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { error in
+                Text(error)
             }
         }
     }

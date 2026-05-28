@@ -81,6 +81,31 @@ struct CustomAsyncImage: View {
 
         phase = .empty
 
+        if url.scheme == "local" || url.isFileURL {
+            do {
+                let fileURL: URL
+                if url.scheme == "local" {
+                    let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    let pathComponent = (url.host ?? "").appending(url.path)
+                    fileURL = docDir.appendingPathComponent(pathComponent)
+                } else {
+                    fileURL = url
+                }
+                
+                let data = try Data(contentsOf: fileURL)
+                guard let image = PlatformImage(data: data) else {
+                    phase = .failure(URLError(.cannotDecodeContentData))
+                    return
+                }
+                ImageCache.shared.setObject(image, forKey: url as NSURL)
+                phase = .success(Image(platformImage: image))
+            } catch {
+                print("❌ [CustomAsyncImage] Failed to load local cover: \(error.localizedDescription) for URL \(url)")
+                phase = .failure(error)
+            }
+            return
+        }
+
         do {
             var request = URLRequest(url: url)
             request.setValue(

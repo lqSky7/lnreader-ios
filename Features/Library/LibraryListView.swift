@@ -114,6 +114,7 @@ struct InteractiveListRow: View {
 // MARK: - List Row
 
 struct LibraryListRow: View {
+    @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
     let novel: Novel
     var isEditing: Bool = false
     var onDelete: () -> Void = {}
@@ -153,7 +154,7 @@ struct LibraryListRow: View {
 
                 HStack(spacing: 12) {
                     Label("\(novel.totalChapters)", systemImage: "list.number")
-                    if novel.chaptersUnread > 0 {
+                    if showUnreadBadges && novel.chaptersUnread > 0 {
                         Label("\(novel.chaptersUnread)", systemImage: "eye.slash")
                     }
                 }
