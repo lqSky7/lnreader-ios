@@ -13,7 +13,7 @@ struct ChapterListView: View {
     /// Filtered chapter count — used for the header when a search/filter is active.
     let filteredCount: Int
     let pluginId: String
-    @Binding var sortAscending: Bool
+    @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
 
@@ -50,10 +50,24 @@ struct ChapterListView: View {
                         .font(Typography.caption)
                 }
 
-                Button {
-                    withAnimation { sortAscending.toggle() }
+                Menu {
+                    Button {
+                        selectedRange = .progress
+                    } label: {
+                        Label("Current Progress", systemImage: "bookmark.fill")
+                    }
+                    Button {
+                        selectedRange = .first
+                    } label: {
+                        Label("First Chapters", systemImage: "arrow.up.circle.fill")
+                    }
+                    Button {
+                        selectedRange = .last
+                    } label: {
+                        Label("Last Chapters", systemImage: "arrow.down.circle.fill")
+                    }
                 } label: {
-                    Label("Sort", systemImage: sortAscending ? "arrow.up" : "arrow.down")
+                    Label(rangeLabel(selectedRange), systemImage: rangeIcon(selectedRange))
                         .font(Typography.caption)
                 }
             }
@@ -117,6 +131,22 @@ struct ChapterListView: View {
         case .bookmarked: "bookmark"
         }
     }
+
+    private func rangeLabel(_ range: ChapterRange) -> String {
+        switch range {
+        case .progress: return "Current"
+        case .first:    return "First 10"
+        case .last:     return "Last 10"
+        }
+    }
+
+    private func rangeIcon(_ range: ChapterRange) -> String {
+        switch range {
+        case .progress: return "bookmark"
+        case .first:    return "arrow.up.circle"
+        case .last:     return "arrow.down.circle"
+        }
+    }
 }
 
 // MARK: - Unified Chapter Display
@@ -133,6 +163,8 @@ struct ChapterDisplay: Identifiable, Hashable {
     let progress: Int?
     let position: Int
     let chapterNumber: Double?
+    let pluginId: String
+    let novelPath: String?
 
     init(chapter: Chapter) {
         self.id = chapter.path
@@ -145,9 +177,11 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.progress = chapter.progress
         self.position = chapter.position
         self.chapterNumber = chapter.chapterNumber
+        self.pluginId = chapter.novel?.pluginId ?? ""
+        self.novelPath = chapter.novel?.path
     }
 
-    init(sourceChapter: SourceChapter, position: Int) {
+    init(sourceChapter: SourceChapter, position: Int, pluginId: String = "", novelPath: String? = nil) {
         self.id = sourceChapter.path
         self.name = sourceChapter.name
         self.path = sourceChapter.path
@@ -158,5 +192,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.progress = nil
         self.position = position
         self.chapterNumber = sourceChapter.chapterNumber
+        self.pluginId = pluginId
+        self.novelPath = novelPath
     }
 }

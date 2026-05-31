@@ -36,7 +36,8 @@ struct ReaderToolbar: View {
                 HStack {
                     Button(action: onDismiss) {
                         Image(systemName: "chevron.left")
-                            .font(.title.weight(.bold))
+                            .font(.title3.weight(.medium))
+                            .frame(width: 32, height: 32)
                     }
                     .buttonStyle(.glass)
                     .glassEffectID("back", in: topNamespace)

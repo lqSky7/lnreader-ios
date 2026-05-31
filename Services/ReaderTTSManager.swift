@@ -115,11 +115,8 @@ final class TTSModelManager: ObservableObject {
             state = .ready
             return model
         } catch {
-            // If offline mode fails, try online (might need to re-download)
-            let model = try await KokoroTTSModel.fromPretrained()
-            self.ttsModel = model
-            state = .ready
-            return model
+            state = .notDownloaded
+            throw error
         }
     }
 
@@ -168,50 +165,84 @@ struct TTSBatchedBlock {
 
 @MainActor
 final class ReaderTTSManager: ObservableObject {
+    static private(set) var shared: ReaderTTSManager?
+
     @Published var isSpeaking = false
     @Published var isPaused = false
     @Published var currentBlockIndex: Int? = nil
     @Published var errorMessage: String? = nil
 
     private let audioPlayer = TTSAudioPlayer()
-    private let liveActivity = ReaderTTSLiveActivity()
     let modelManager: TTSModelManager
     private var readingTask: Task<Void, Never>?
     private var currentChapterName = ""
-    private var totalBlocks: Int = 0
+    private(set) var totalBlocks: Int = 0
     private var activePrefetches: [Int: Task<[Float], Error>] = [:]
     private var highlightTask: Task<Void, Never>?
     private var activeDataTasks: [Int: URLSessionDataTask] = [:]
 
+    #if os(iOS)
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    #endif
+
     init(modelManager: TTSModelManager) {
         self.modelManager = modelManager
+        Self.shared = self
     }
 
-    private var useRemote: Bool {
+    private func startBackgroundTask() {
+        #if os(iOS)
+        guard backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "ReaderTTSPlayback") { [weak self] in
+            Task { @MainActor in
+                print("⚠️ [ReaderTTSManager] Background task expired!")
+                self?.stopBackgroundTask()
+                self?.stop()
+            }
+        }
+        print("🔊 [ReaderTTSManager] Background task started: \(backgroundTaskID)")
+        #endif
+    }
+
+    private func stopBackgroundTask() {
+        #if os(iOS)
+        guard backgroundTaskID != .invalid else { return }
+        let id = backgroundTaskID
+        UIApplication.shared.endBackgroundTask(id)
+        backgroundTaskID = .invalid
+        print("🔊 [ReaderTTSManager] Background task ended: \(id)")
+        #endif
+    }
+
+    nonisolated private var useRemote: Bool {
         UserDefaults.standard.bool(forKey: "tts.useRemote")
     }
 
-    private var remoteURL: String {
+    nonisolated private var remoteURL: String {
         UserDefaults.standard.string(forKey: "tts.remoteURL") ?? "https://sky788-tts.hf.space"
     }
 
     func startReading(
         blocks: [String],
         chapterName: String,
-        novelName: String?,
         voice: String,
         speed: Float,
         startBlockIndex: Int = 0
     ) {
+        print("🔊 [ReaderTTSManager] startReading called. Blocks: \(blocks.count), chapter: \(chapterName), startBlockIndex: \(startBlockIndex)")
         stop()
+        startBackgroundTask()
 
         guard !blocks.isEmpty else {
+            print("⚠️ [ReaderTTSManager] blocks is empty, returning")
             errorMessage = ReaderTTSError.emptyContent.localizedDescription
             return
         }
 
         let remote = useRemote
+        print("🔊 [ReaderTTSManager] useRemote: \(remote)")
         guard remote || modelManager.state.isDownloaded || modelManager.state.isReady else {
+            print("⚠️ [ReaderTTSManager] Model is not downloaded/ready. State: \(modelManager.state)")
             errorMessage = "TTS model not downloaded. Open the TTS menu to download it."
             return
         }
@@ -265,12 +296,14 @@ final class ReaderTTSManager: ObservableObject {
         }
 
         guard !batchedBlocks.isEmpty else {
+            print("⚠️ [ReaderTTSManager] batchedBlocks is empty, returning")
             errorMessage = ReaderTTSError.emptyContent.localizedDescription
             isSpeaking = false
             return
         }
 
         totalBlocks = blocks.count
+        print("🔊 [ReaderTTSManager] Batched blocks count: \(batchedBlocks.count)")
 
         // Find which batch contains startBlockIndex
         var startBatchIndex = 0
@@ -279,33 +312,92 @@ final class ReaderTTSManager: ObservableObject {
                 startBatchIndex = index
             }
         }
+        print("🔊 [ReaderTTSManager] Starting from batch index: \(startBatchIndex)")
 
-        readingTask = Task { [weak self] in
+        let voiceId = normalizedVoice(voice)
+        let language = languageCode(for: voiceId)
+        let player = audioPlayer
+        let modelManager = self.modelManager
+
+        readingTask = Task.detached { [weak self] in
             guard let self else { return }
 
+            print("🔊 [ReaderTTSManager] readingTask detached block started. Cleaning cache…")
             // Clean old cache in the background
             await TTSAudioCache.shared.cleanOldCacheFiles()
 
             do {
-                let voiceId = self.normalizedVoice(voice)
-                let language = self.languageCode(for: voiceId)
-
+                print("🔊 [ReaderTTSManager] Activating audio session…")
                 // Activate audio session only when TTS actually starts playing
-                self.audioPlayer.activateAudioSession()
-
-                await self.liveActivity.start(chapterName: chapterName, novelName: novelName)
+                await player.activateAudioSession()
+                print("🔊 [ReaderTTSManager] Audio session activated.")
                 
                 var optModel: KokoroTTSModel? = nil
                 if !remote {
-                    optModel = try await self.modelManager.loadModel()
+                    print("🔊 [ReaderTTSManager] Local mode. Loading model…")
+                    optModel = try await modelManager.loadModel()
+                    print("🔊 [ReaderTTSManager] Local model loaded successfully.")
                 }
 
                 for batchIndex in startBatchIndex..<batchedBlocks.count {
                     let batch = batchedBlocks[batchIndex]
+                    print("🔊 [ReaderTTSManager] Loop: Playing batch \(batchIndex)/\(batchedBlocks.count). Text preview: \(String(batch.text.prefix(30)))…")
                     try Task.checkCancellation()
 
-                    // Trigger prefetching for subsequent blocks in parallel
-                    self.triggerPrefetches(
+                    // Resolve the audio samples: await prefetch if running, or synthesize on the spot if not started
+                    let samples: [Float]
+                    
+                    let prefetchTask = await MainActor.run {
+                        self.activePrefetches[batchIndex]
+                    }
+                    
+                    if let task = prefetchTask {
+                        print("🔊 [ReaderTTSManager] Batch \(batchIndex): Prefetch task found. Awaiting it…")
+                        do {
+                            samples = try await task.value
+                            print("🔊 [ReaderTTSManager] Batch \(batchIndex): Prefetch task finished successfully. Samples count: \(samples.count)")
+                        } catch {
+                            print("❌ [ReaderTTSManager] Batch \(batchIndex): Prefetch task failed: \(error)")
+                            await MainActor.run {
+                                self.activePrefetches.removeValue(forKey: batchIndex)
+                            }
+                            throw error
+                        }
+                        await MainActor.run {
+                            self.activePrefetches.removeValue(forKey: batchIndex)
+                        }
+                    } else {
+                        print("🔊 [ReaderTTSManager] Batch \(batchIndex): No prefetch task. Resolving samples manually…")
+                        // Check cache first
+                        if let cached = await TTSAudioCache.shared.get(text: batch.text, voice: voiceId, speed: speed) {
+                            print("🔊 [ReaderTTSManager] Batch \(batchIndex): Cache hit.")
+                            samples = cached
+                        } else {
+                            print("🔊 [ReaderTTSManager] Batch \(batchIndex): Cache miss. Synthesizing…")
+                            if remote {
+                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Remote synthesizing via remote URL: \(self.remoteURL)...")
+                                samples = try await self.synthesizeRemote(index: batchIndex, text: batch.text, voice: voiceId, speed: speed)
+                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Remote synthesis success. Samples: \(samples.count)")
+                            } else if let model = optModel {
+                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Local synthesizing…")
+                                samples = try model.synthesize(
+                                    text: batch.text,
+                                    voice: voiceId,
+                                    language: language,
+                                    speed: speed
+                                )
+                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Local synthesis success. Samples: \(samples.count)")
+                            } else {
+                                print("❌ [ReaderTTSManager] Batch \(batchIndex): Model not found and remote is false.")
+                                throw ReaderTTSError.audioBufferFailed
+                            }
+                            // Save to cache
+                            await TTSAudioCache.shared.set(text: batch.text, voice: voiceId, speed: speed, samples: samples)
+                        }
+                    }
+
+                    // Trigger prefetching for subsequent blocks sequentially now that current block is resolved
+                    await self.triggerPrefetches(
                         from: batchIndex,
                         batches: batchedBlocks,
                         voice: voice,
@@ -313,38 +405,6 @@ final class ReaderTTSManager: ObservableObject {
                         remote: remote,
                         optModel: optModel
                     )
-
-                    // Resolve the audio samples: await prefetch if running, or synthesize on the spot if not started
-                    let samples: [Float]
-                    if let task = self.activePrefetches[batchIndex] {
-                        do {
-                            samples = try await task.value
-                        } catch {
-                            self.activePrefetches.removeValue(forKey: batchIndex)
-                            throw error
-                        }
-                        self.activePrefetches.removeValue(forKey: batchIndex)
-                    } else {
-                        // Check cache first
-                        if let cached = await TTSAudioCache.shared.get(text: batch.text, voice: voiceId, speed: speed) {
-                            samples = cached
-                        } else {
-                            if remote {
-                                samples = try await self.synthesizeRemote(index: batchIndex, text: batch.text, voice: voiceId, speed: speed)
-                            } else if let model = optModel {
-                                samples = try model.synthesize(
-                                    text: batch.text,
-                                    voice: voiceId,
-                                    language: language,
-                                    speed: speed
-                                )
-                            } else {
-                                throw ReaderTTSError.audioBufferFailed
-                            }
-                            // Save to cache
-                            await TTSAudioCache.shared.set(text: batch.text, voice: voiceId, speed: speed, samples: samples)
-                        }
-                    }
 
                     try Task.checkCancellation()
                     
@@ -354,69 +414,79 @@ final class ReaderTTSManager: ObservableObject {
                     // Highlight updating task based on text length weights in the batch
                     let startIndexInBatch = batch.originalIndices.contains(startBlockIndex) ? startBlockIndex : batch.originalIndices.first ?? 0
                     
-                    self.startHighlightTask(
+                    print("🔊 [ReaderTTSManager] Batch \(batchIndex): Starting highlight task and play.")
+                    await self.startHighlightTask(
                         originalIndices: batch.originalIndices,
                         originalTexts: batch.originalIndices.map { blocks[$0] },
                         duration: duration,
-                        chapterName: chapterName,
                         startIndex: startIndexInBatch
                     )
 
-                    try await self.audioPlayer.play(
+                    try await player.play(
                         samples: samples,
                         sampleRate: sampleRate
                     )
+                    print("🔊 [ReaderTTSManager] Batch \(batchIndex): Finished playing.")
                     
-                    self.highlightTask?.cancel()
-                    self.highlightTask = nil
+                    await MainActor.run {
+                        self.highlightTask?.cancel()
+                        self.highlightTask = nil
+                    }
                 }
             } catch {
                 if !(error is CancellationError) {
-                    self.errorMessage = error.localizedDescription
+                    print("❌ [ReaderTTSManager] Error in reading loop: \(error)")
+                    await MainActor.run {
+                        self.errorMessage = error.localizedDescription
+                    }
+                } else {
+                    print("🔊 [ReaderTTSManager] Reading loop cancelled.")
                 }
             }
 
-            self.highlightTask?.cancel()
-            self.highlightTask = nil
-            await self.liveActivity.stop()
-            self.audioPlayer.deactivateAudioSession()
-            withAnimation(.easeInOut(duration: 0.3)) {
-                self.isSpeaking = false
-                self.isPaused = false
-                self.currentBlockIndex = nil
+            await MainActor.run {
+                self.highlightTask?.cancel()
+                self.highlightTask = nil
+                self.stopBackgroundTask()
+            }
+            await player.deactivateAudioSession()
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.isSpeaking = false
+                    self.isPaused = false
+                    self.currentBlockIndex = nil
+                }
             }
         }
     }
 
-    private func fetchRemoteData(for index: Int, url: URL) async throws -> (Data, URLResponse) {
+    nonisolated private func fetchRemoteData(for index: Int, url: URL) async throws -> (Data, URLResponse) {
         var dataTask: URLSessionDataTask?
         
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let task = URLSession.shared.dataTask(with: url) { data, response, error in
+                    if let error = error {
+                        if (error as NSError).code == NSURLErrorCancelled {
+                            continuation.resume(throwing: CancellationError())
+                        } else {
+                            continuation.resume(throwing: error)
+                        }
+                    } else if let data = data, let response = response {
+                        continuation.resume(returning: (data, response))
+                    } else {
+                        continuation.resume(throwing: ReaderTTSError.audioBufferFailed)
+                    }
+                    
                     Task { @MainActor in
                         self.activeDataTasks.removeValue(forKey: index)
-                        
-                        if let error = error {
-                            if (error as NSError).code == NSURLErrorCancelled {
-                                continuation.resume(throwing: CancellationError())
-                            } else {
-                                continuation.resume(throwing: error)
-                            }
-                            return
-                        }
-                        
-                        guard let data = data, let response = response else {
-                            continuation.resume(throwing: ReaderTTSError.audioBufferFailed)
-                            return
-                        }
-                        
-                        continuation.resume(returning: (data, response))
                     }
                 }
                 
                 dataTask = task
-                self.activeDataTasks[index] = task
+                Task { @MainActor in
+                    self.activeDataTasks[index] = task
+                }
                 task.resume()
             }
         } onCancel: {
@@ -424,7 +494,9 @@ final class ReaderTTSManager: ObservableObject {
         }
     }
 
-    private func synthesizeRemote(index: Int, text: String, voice: String, speed: Float) async throws -> [Float] {
+
+
+    nonisolated private func synthesizeRemote(index: Int, text: String, voice: String, speed: Float) async throws -> [Float] {
         try Task.checkCancellation()
         
         let baseURLString = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -500,39 +572,56 @@ final class ReaderTTSManager: ObservableObject {
 
         let voiceId = normalizedVoice(voice)
         let language = languageCode(for: voiceId)
+        let modelManager = self.modelManager
 
+        guard minWindow <= maxWindow else { return }
+
+        var previousTask: Task<[Float], Error>? = nil
         for index in minWindow...maxWindow {
             let text = batches[index].text
 
-            if activePrefetches[index] == nil {
-                activePrefetches[index] = Task { [weak self] in
-                    guard let self else { throw ReaderTTSError.audioBufferFailed }
-                    // Check cache first
-                    if let cached = await TTSAudioCache.shared.get(text: text, voice: voiceId, speed: speed) {
-                        return cached
-                    }
-                    
-                    let samples: [Float]
-                    if remote {
-                        samples = try await self.synthesizeRemote(index: index, text: text, voice: voiceId, speed: speed)
-                    } else if let model = optModel {
-                        samples = try await Task.detached(priority: .userInitiated) {
-                            try model.synthesize(
-                                text: text,
-                                voice: voiceId,
-                                language: language,
-                                speed: speed
-                            )
-                        }.value
-                    } else {
-                        throw ReaderTTSError.audioBufferFailed
-                    }
-                    
-                    // Save to cache
-                    await TTSAudioCache.shared.set(text: text, voice: voiceId, speed: speed, samples: samples)
-                    return samples
-                }
+            if let existing = activePrefetches[index] {
+                previousTask = existing
+                continue
             }
+
+            let capturedPrev = previousTask
+            let task = Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self else { throw ReaderTTSError.audioBufferFailed }
+                
+                // Wait for the previous prefetch to finish (or fail) before starting this one.
+                // This ensures sequential request order and prevents later requests from hitting the server first.
+                if let prev = capturedPrev {
+                    _ = try? await prev.value
+                }
+                
+                try Task.checkCancellation()
+                
+                // Check cache first
+                if let cached = await TTSAudioCache.shared.get(text: text, voice: voiceId, speed: speed) {
+                    return cached
+                }
+                
+                let samples: [Float]
+                if remote {
+                    samples = try await self.synthesizeRemote(index: index, text: text, voice: voiceId, speed: speed)
+                } else {
+                    // Load model in background
+                    let model = try await modelManager.loadModel()
+                    samples = try model.synthesize(
+                        text: text,
+                        voice: voiceId,
+                        language: language,
+                        speed: speed
+                    )
+                }
+                
+                // Save to cache
+                await TTSAudioCache.shared.set(text: text, voice: voiceId, speed: speed, samples: samples)
+                return samples
+            }
+            activePrefetches[index] = task
+            previousTask = task
         }
     }
 
@@ -540,7 +629,6 @@ final class ReaderTTSManager: ObservableObject {
         originalIndices: [Int],
         originalTexts: [String],
         duration: Double,
-        chapterName: String,
         startIndex: Int = 0
     ) {
         highlightTask?.cancel()
@@ -556,13 +644,6 @@ final class ReaderTTSManager: ObservableObject {
                 
                 // Update highlight index
                 self.currentBlockIndex = origIndex
-                
-                // Update live activity progress dynamically
-                await self.liveActivity.update(
-                    chapterName: chapterName,
-                    progress: self.progress(for: origIndex),
-                    isPaused: self.isPaused
-                )
                 
                 let charCount = originalTexts[offset].count
                 let fraction = totalChars > 0 ? (Double(charCount) / Double(totalChars)) : 1.0
@@ -585,20 +666,16 @@ final class ReaderTTSManager: ObservableObject {
 
     func togglePause() {
         guard isSpeaking else { return }
-        if isPaused {
-            audioPlayer.resume()
-        } else {
-            audioPlayer.pause()
-        }
-        withAnimation(.easeInOut(duration: 0.3)) {
-            isPaused.toggle()
-        }
+        isPaused.toggle()
+        let paused = isPaused
+        let player = audioPlayer
+        
         Task {
-            await liveActivity.update(
-                chapterName: currentChapterName,
-                progress: progress(for: currentBlockIndex ?? 0),
-                isPaused: isPaused
-            )
+            if paused {
+                await player.pause()
+            } else {
+                await player.resume()
+            }
         }
     }
 
@@ -621,24 +698,27 @@ final class ReaderTTSManager: ObservableObject {
         }
         activeDataTasks.removeAll()
         
-        audioPlayer.stop()
-        audioPlayer.deactivateAudioSession()
+        let player = audioPlayer
+        Task {
+            await player.stop()
+            await player.deactivateAudioSession()
+            await MainActor.run {
+                self.stopBackgroundTask()
+            }
+        }
         withAnimation(.easeInOut(duration: 0.3)) {
             isSpeaking = false
             isPaused = false
             currentBlockIndex = nil
         }
-        Task {
-            await liveActivity.stop()
-        }
     }
 
-    private func normalizedVoice(_ voice: String) -> String {
+    nonisolated private func normalizedVoice(_ voice: String) -> String {
         let trimmed = voice.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? KokoroTTSModel.defaultVoice : trimmed
     }
 
-    private func languageCode(for voice: String) -> String {
+    nonisolated private func languageCode(for voice: String) -> String {
         guard let prefix = voice.first else { return "en" }
         switch prefix {
         case "a", "b": return "en"
@@ -679,13 +759,15 @@ enum ReaderTTSError: LocalizedError {
 
 // MARK: - Audio Player
 
-final class TTSAudioPlayer {
+actor TTSAudioPlayer {
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
+    private let silencePlayerNode = AVAudioPlayerNode()
     private var completion: (() -> Void)?
 
     init() {
         audioEngine.attach(playerNode)
+        audioEngine.attach(silencePlayerNode)
         // Audio session is NOT activated here — deferred to activateAudioSession()
     }
 
@@ -700,12 +782,14 @@ final class TTSAudioPlayer {
         } catch {
             // Audio session failure is non-fatal; playback will fail gracefully later.
         }
+        startSilencePlayer()
         #endif
     }
 
     /// Deactivate the audio session so other apps can resume their audio.
     func deactivateAudioSession() {
         #if os(iOS)
+        stopSilencePlayer()
         do {
             try AVAudioSession.sharedInstance().setActive(
                 false, options: .notifyOthersOnDeactivation)
@@ -713,6 +797,36 @@ final class TTSAudioPlayer {
             // Deactivation failure is non-fatal.
         }
         #endif
+    }
+
+    private func startSilencePlayer() {
+        guard let silenceFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24000.0, channels: 1, interleaved: false) else { return }
+        let frameCount = AVAudioFrameCount(2400)
+        guard let silenceBuffer = AVAudioPCMBuffer(pcmFormat: silenceFormat, frameCapacity: frameCount) else { return }
+        silenceBuffer.frameLength = frameCount
+        
+        // Fill with zeroes
+        if let channelData = silenceBuffer.floatChannelData {
+            memset(channelData[0], 0, Int(frameCount) * MemoryLayout<Float>.size)
+        }
+        
+        audioEngine.connect(silencePlayerNode, to: audioEngine.mainMixerNode, format: silenceFormat)
+        
+        if !audioEngine.isRunning {
+            do {
+                try audioEngine.start()
+            } catch {
+                print("Failed to start audio engine for silence player: \(error)")
+            }
+        }
+        
+        silencePlayerNode.scheduleBuffer(silenceBuffer, at: nil, options: .loops, completionHandler: nil)
+        silencePlayerNode.play()
+    }
+
+    private func stopSilencePlayer() {
+        silencePlayerNode.stop()
+        audioEngine.disconnectNodeOutput(silencePlayerNode)
     }
 
     func play(samples: [Float], sampleRate: Double) async throws {
@@ -762,8 +876,8 @@ final class TTSAudioPlayer {
             }
 
             playerNode.scheduleBuffer(buffer, at: nil, options: []) { [weak self] in
-                DispatchQueue.main.async {
-                    self?.finishPlayback()
+                Task {
+                    await self?.finishPlayback()
                 }
             }
 

@@ -31,8 +31,9 @@ struct HistoryView: View {
                                             chapterPath: entry.chapterPath,
                                             chapterName: entry.chapterName,
                                             pluginId: entry.pluginId,
-                                            novel: novel(for: entry)
+                                            novelPath: entry.novelPath
                                         )
+                                        .id(entry.chapterPath)
                                     } label: {
                                         HistoryRow(entry: entry)
                                     }

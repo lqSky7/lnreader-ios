@@ -14,8 +14,9 @@ struct ChapterRow: View {
                 chapterPath: chapter.path,
                 chapterName: chapter.name,
                 pluginId: pluginId,
-                novel: novel
+                novelPath: novel?.path
             )
+            .id(chapter.path)
         } label: {
             HStack(spacing: 12) {
                 // Unread indicator dot
@@ -62,6 +63,7 @@ struct ChapterRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .background(Color(.systemBackground))
         }
         .buttonStyle(.plain)
     }

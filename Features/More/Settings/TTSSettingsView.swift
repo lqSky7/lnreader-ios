@@ -17,14 +17,37 @@ struct TTSSettingsView: View {
                     .tint(AppTheme.accent)
                 
                 if useRemote {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("Server URL")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        TextField("https://your-space.hf.space", text: $remoteURL)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .textFieldStyle(.roundedBorder)
+                            .padding(.leading, 8)
+                        
+                        HStack(spacing: 8) {
+                            Image(systemName: "link")
+                                .foregroundStyle(.secondary)
+                                .font(Typography.caption)
+
+                            TextField("https://your-space.hf.space", text: $remoteURL)
+                                .font(Typography.body)
+                                .textFieldStyle(.plain)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+
+                            if !remoteURL.isEmpty {
+                                Button {
+                                    withAnimation { remoteURL = "" }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                        .contentShape(.rect(cornerRadius: 20))
                     }
                     .padding(.vertical, 4)
                 }

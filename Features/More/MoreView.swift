@@ -28,10 +28,7 @@ struct MoreView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Profile/Journey Card (Name and PFP on bottom-left, no stats, edit button top-right)
                     profileHeaderCard
-
-                    syncPanel
                     
                     // Bento grid layout for settings (systemGray6 background, monochrome icons)
                     bentoSettingsGrid
@@ -53,86 +50,6 @@ struct MoreView: View {
         }
     }
 
-    private var syncPanel: some View {
-        HStack(spacing: 12) {
-            Image(systemName: syncManager.currentUser == nil ? "cloud.fill" : "icloud.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(.blue)
-                .frame(width: 38, height: 38)
-                .background(Color(UIColor.systemGray5), in: .circle)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(syncManager.currentUser?.displayUsername ?? syncManager.currentUser?.username ?? "Sync")
-                    .font(.headline)
-                Text(syncSubtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let error = syncManager.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                } else if let message = syncManager.lastMessage {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            if syncManager.currentUser == nil {
-                Button("Login") {
-                    showingAuth = true
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            } else {
-                HStack(spacing: 8) {
-                    Button {
-                        Task {
-                            await syncManager.push(
-                                profile: userProfile,
-                                novels: libraryNovels,
-                                sources: pluginManager.installedPluginsList
-                            )
-                        }
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-
-                    Button {
-                        Task { await syncManager.signOut() }
-                    } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .disabled(syncManager.isWorking)
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.systemGray6))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.gray.opacity(0.15), lineWidth: 1)
-        )
-        .padding(.horizontal)
-    }
-
-    private var syncSubtitle: String {
-        if let email = syncManager.currentUser?.email {
-            return email
-        }
-        return "Profile, sources, and cloud library"
-    }
-
     private func ensureProfileExists() {
         if profiles.isEmpty {
             let defaultProfile = UserProfile(name: "Reader")
@@ -141,68 +58,134 @@ struct MoreView: View {
         }
     }
 
-    // MARK: - Profile Header Card
-
     private var profileHeaderCard: some View {
-        ZStack {
-            // Profile image or default backdrop
-            GeometryReader { geometry in
+        VStack(spacing: 16) {
+            HStack(spacing: 16) {
+                // Circular PFP on the left
                 if let data = userProfile.avatarData, let uiImage = UIImage(data: data) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: geometry.size.width, height: 180)
-                        .clipped()
+                        .frame(width: 64, height: 64)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.gray.opacity(0.2), lineWidth: 1))
                 } else {
                     ZStack {
                         Color(UIColor.systemGray5)
                         Image(systemName: "person.fill")
-                            .font(.system(size: 64))
-                            .foregroundStyle(.gray.opacity(0.4))
+                            .font(.system(size: 28))
+                            .foregroundStyle(.gray.opacity(0.6))
                     }
-                    .frame(width: geometry.size.width, height: 180)
+                    .frame(width: 64, height: 64)
+                    .clipShape(Circle())
+                }
+                
+                // Name and details
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(userProfile.name)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.primary)
+                    
+                    if let currentUser = syncManager.currentUser {
+                        Text((currentUser.displayUsername ?? currentUser.username)!)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Local Profile")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // Pencil edit button
+                Button {
+                    lightFeedback.impactOccurred()
+                    showingEditProfile = true
+                } label: {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary)
                 }
             }
-            .frame(height: 180)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
             
-            // Dark overlay for legibility
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color.black.opacity(0.4))
+            Divider()
+                .background(Color.gray.opacity(0.1))
             
-            // Username on bottom-left (No stats or data details)
-            VStack(spacing: 0) {
-                Spacer()
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(userProfile.name)
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                    }
-                    Spacer()
-                }
-            }
-            .padding(20)
-            
-            // Pencil edit button in top-right
-            VStack {
-                HStack {
-                    Spacer()
-                    Button {
-                        lightFeedback.impactOccurred()
-                        showingEditProfile = true
-                    } label: {
-                        Image(systemName: "pencil.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .padding(12)
+            // Sync status and actions row
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let error = syncManager.lastError {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    } else if let message = syncManager.lastMessage {
+                        Label(message, systemImage: "info.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if syncManager.currentUser == nil {
+                        Label("Cloud sync offline", systemImage: "cloud.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Label("Cloud synced", systemImage: "icloud.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
                     }
                 }
+                
                 Spacer()
+                
+                if syncManager.currentUser == nil {
+                    Button("Login") {
+                        showingAuth = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else {
+                    HStack(spacing: 12) {
+                        if syncManager.isWorking {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Button {
+                                Task {
+                                    await syncManager.push(
+                                        profile: userProfile,
+                                        novels: libraryNovels,
+                                        sources: pluginManager.installedPluginsList
+                                    )
+                                }
+                            } label: {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        }
+                        
+                        Button {
+                            Task { await syncManager.signOut() }
+                        } label: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(syncManager.isWorking)
+                    }
+                }
             }
         }
-        .frame(height: 180)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(UIColor.systemGray6))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+        )
         .padding(.horizontal)
     }
 
@@ -270,79 +253,61 @@ struct MoreView: View {
                 .fill(Color(UIColor.separator))
                 .frame(height: 0.5)
             
-            // Row: TTS Settings
-            NavigationLink {
-                TTSSettingsView()
-            } label: {
-                HStack(spacing: 16) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                        .background(Color(UIColor.systemGray5), in: .circle)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("TTS")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                        Text("Voices, offline models & servers")
-                            .font(.caption)
+            // Row 2: TTS | Advanced
+            HStack(spacing: 0) {
+                NavigationLink {
+                    TTSSettingsView()
+                } label: {
+                    BentoCell(alignment: .bottomLeading) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 28))
                             .foregroundStyle(.secondary)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("TTS")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            Text("Voices & servers")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-            }
-            .buttonStyle(BentoCellButtonStyle())
-            .simultaneousGesture(TapGesture().onEnded {
-                lightFeedback.impactOccurred()
-            })
-            
-            Rectangle()
-                .fill(Color(UIColor.separator))
-                .frame(height: 0.5)
-            
-            // Row 2: Advanced (Full width)
-            NavigationLink {
-                AdvancedSettingsView()
-            } label: {
-                HStack(spacing: 16) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                        .background(Color(UIColor.systemGray5), in: .circle)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Advanced")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                        Text("Diagnostics & cache")
-                            .font(.caption)
+                .buttonStyle(BentoCellButtonStyle())
+                .simultaneousGesture(TapGesture().onEnded {
+                    lightFeedback.impactOccurred()
+                })
+                
+                Rectangle()
+                    .fill(Color(UIColor.separator))
+                    .frame(width: 0.5)
+                
+                NavigationLink {
+                    AdvancedSettingsView()
+                } label: {
+                    BentoCell(alignment: .bottomLeading) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 28))
                             .foregroundStyle(.secondary)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Advanced")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            Text("Diagnostics & cache")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
+                .buttonStyle(BentoCellButtonStyle())
+                .simultaneousGesture(TapGesture().onEnded {
+                    lightFeedback.impactOccurred()
+                })
             }
-            .buttonStyle(BentoCellButtonStyle())
-            .simultaneousGesture(TapGesture().onEnded {
-                lightFeedback.impactOccurred()
-            })
+            .frame(height: 140)
             
             Rectangle()
                 .fill(Color(UIColor.separator))
@@ -377,6 +342,7 @@ struct MoreView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
+                .contentShape(Rectangle())
             }
             .buttonStyle(BentoCellButtonStyle())
             .simultaneousGesture(TapGesture().onEnded {
@@ -416,6 +382,7 @@ struct MoreView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
+                .contentShape(Rectangle())
             }
             .buttonStyle(BentoCellButtonStyle())
             .simultaneousGesture(TapGesture().onEnded {

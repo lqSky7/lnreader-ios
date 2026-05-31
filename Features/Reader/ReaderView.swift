@@ -17,7 +17,15 @@ struct ReaderView: View {
     @State private var currentChapterPath: String
     @State private var currentChapterName: String
     let pluginId: String
-    let novel: Novel?
+    let novelPath: String?
+
+    private func fetchNovel() -> Novel? {
+        guard let novelPath else { return nil }
+        let predicate = #Predicate<Novel> { $0.path == novelPath && $0.pluginId == pluginId }
+        var descriptor = FetchDescriptor<Novel>(predicate: predicate)
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
 
     @State private var htmlContent = ""
     @State private var baseURL: URL? = nil
@@ -28,6 +36,7 @@ struct ReaderView: View {
     @State private var startTTSWhenReady = false
     @State private var errorMessage: String?
     @State private var isPreparingTTS = false
+    @State private var cachedChapters: [Chapter] = []
 
     // Reader settings persisted across sessions
     @AppStorage("reader.fontSize") private var fontSize: Double = 18
@@ -36,14 +45,25 @@ struct ReaderView: View {
     @AppStorage("reader.padding") private var horizontalPadding: Double = 16
     @AppStorage("reader.backgroundColor") private var backgroundColorHex: String = ""
     @AppStorage("reader.textColor") private var textColorHex: String = ""
+    @AppStorage("reader.bionicReading") private var bionicReading = false
+    @AppStorage("reader.characterSpacing") private var characterSpacing: Double = 0.0
+    @AppStorage("reader.wordSpacing") private var wordSpacing: Double = 0.0
+    @AppStorage("reader.grainIntensity") private var grainIntensity: Double = 10.0
+    @AppStorage("reader.lineFocusEnabled") private var lineFocusEnabled = false
+    @AppStorage("reader.lineFocusLines") private var lineFocusLines = 1
+    @AppStorage("reader.lineFocusDulling") private var lineFocusDulling = "mid"
+    @AppStorage("reader.readingMode") private var readingMode = "scroll"
+    @AppStorage("reader.verticalPadding") private var verticalPadding: Double = 20
     @AppStorage("tts.voice") private var ttsVoiceId: String = "af_heart"
     @AppStorage("tts.speed") private var ttsSpeed: Double = 1.0
 
-    init(chapterPath: String, chapterName: String, pluginId: String, novel: Novel?) {
+    @ObservedObject private var focusManager = FocusModeManager.shared
+
+    init(chapterPath: String, chapterName: String, pluginId: String, novelPath: String?) {
         self._currentChapterPath = State(initialValue: chapterPath)
         self._currentChapterName = State(initialValue: chapterName)
         self.pluginId = pluginId
-        self.novel = novel
+        self.novelPath = novelPath
         
         let model = TTSModelManager()
         self._modelManager = StateObject(wrappedValue: model)
@@ -77,10 +97,20 @@ struct ReaderView: View {
                     lineHeight: lineHeight,
                     fontFamily: fontFamily,
                     horizontalPadding: horizontalPadding,
+                    verticalPadding: verticalPadding,
                     backgroundColorHex: backgroundColorHex,
                     textColorHex: textColorHex,
+                    bionicReading: bionicReading,
+                    lineFocusEnabled: lineFocusEnabled,
+                    lineFocusLines: lineFocusLines,
+                    lineFocusDulling: lineFocusDulling,
+                    readingMode: readingMode,
+                    showControls: showControls,
                     bridge: ttsBridge,
                     baseURL: baseURL,
+                    characterSpacing: characterSpacing,
+                    wordSpacing: wordSpacing,
+                    grainIntensity: grainIntensity,
                     onTap: {
                         guard !ttsManager.isSpeaking else { return }
                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -98,7 +128,7 @@ struct ReaderView: View {
                         }
                     }
                 )
-                .ignoresSafeArea(edges: (showControls && !ttsManager.isSpeaking) ? .bottom : .all)
+                .ignoresSafeArea(.all)
             }
 
             // Normal Toolbar (visible when showControls is true AND ttsManager.isSpeaking is false)
@@ -125,6 +155,18 @@ struct ReaderView: View {
                 .blur(radius: ttsManager.isSpeaking ? 0.0 : 8.0)
                 .scaleEffect(ttsManager.isSpeaking ? 1.0 : 0.96)
                 .allowsHitTesting(ttsManager.isSpeaking)
+
+            // Focus Status Indicator Overlay (visible when controls and TTS speaking overlay are hidden)
+            VStack {
+                if !showControls && !ttsManager.isSpeaking {
+                    ReaderFocusIndicator()
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+                Spacer()
+            }
+            .ignoresSafeArea(.keyboard)
+            .allowsHitTesting(true)
+            .padding(.top, 12)
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
@@ -136,13 +178,22 @@ struct ReaderView: View {
                 lineHeight: $lineHeight,
                 fontFamily: $fontFamily,
                 horizontalPadding: $horizontalPadding,
+                verticalPadding: $verticalPadding,
                 backgroundColorHex: $backgroundColorHex,
-                textColorHex: $textColorHex
+                textColorHex: $textColorHex,
+                bionicReading: $bionicReading,
+                lineFocusEnabled: $lineFocusEnabled,
+                lineFocusLines: $lineFocusLines,
+                lineFocusDulling: $lineFocusDulling,
+                readingMode: $readingMode,
+                characterSpacing: $characterSpacing,
+                wordSpacing: $wordSpacing,
+                grainIntensity: $grainIntensity
             )
         }
         .fullScreenCover(isPresented: $showChapterList) {
             ReaderChapterListSheet(
-                novel: novel,
+                novel: fetchNovel(),
                 currentChapterPath: currentChapterPath,
                 onSelectChapter: { chapter in
                     showChapterList = false
@@ -155,13 +206,32 @@ struct ReaderView: View {
         }
         .task { await loadChapter() }
         .onChange(of: ttsBridge.isReady) { _, ready in
-            if ready && startTTSWhenReady {
-                startTTSWhenReady = false
-                startTTSPlayback()
+            if ready {
+                if let lastIndex = currentChapter?.lastReadParagraphIndex, lastIndex > 0 {
+                    ttsBridge.scrollToParagraph(lastIndex)
+                }
+                if startTTSWhenReady {
+                    startTTSWhenReady = false
+                    startTTSPlayback()
+                }
             }
         }
         .onChange(of: ttsManager.currentBlockIndex) { _, newIndex in
-            ttsBridge.setActiveIndex(newIndex)
+            if let newIndex = newIndex {
+                ttsBridge.setActiveIndex(newIndex)
+                
+                // Save reading progress to database
+                if let chapter = currentChapter {
+                    chapter.lastReadParagraphIndex = newIndex
+                    
+                    let total = ttsManager.totalBlocks
+                    if total > 0 {
+                        let percent = Int(Double(newIndex + 1) / Double(total) * 100)
+                        chapter.progress = min(max(percent, 0), 100)
+                    }
+                    try? modelContext.save()
+                }
+            }
         }
         .onChange(of: ttsManager.isSpeaking) { _, isSpeaking in
             if isSpeaking {
@@ -174,6 +244,17 @@ struct ReaderView: View {
             if error != nil {
                 isPreparingTTS = false
             }
+        }
+        .onReceive(ttsBridge.paragraphScrollPublisher) { index in
+            // Only update progress when TTS is not active (TTS updates it automatically)
+            guard !ttsManager.isSpeaking else { return }
+            if let chapter = currentChapter {
+                chapter.lastReadParagraphIndex = index
+                try? modelContext.save()
+            }
+        }
+        .onAppear {
+            FocusModeManager.shared.updateFocusStatus()
         }
         .onDisappear {
             ttsManager.stop()
@@ -188,22 +269,25 @@ struct ReaderView: View {
         return Color(hex: backgroundColorHex) ?? AppTheme.readerBackground
     }
 
+    private var currentChapter: Chapter? {
+        cachedChapters.first(where: { $0.path == currentChapterPath })
+    }
+
     // MARK: - Navigation Helpers
 
     private var sortedChapters: [Chapter] {
-        guard let novel else { return [] }
-        return novel.chapters.sorted { $0.position < $1.position }
+        cachedChapters
     }
 
     private var hasPreviousChapter: Bool {
-        guard novel != nil,
+        guard novelPath != nil,
             let currentIndex = sortedChapters.firstIndex(where: { $0.path == currentChapterPath })
         else { return false }
         return currentIndex > 0
     }
 
     private var hasNextChapter: Bool {
-        guard novel != nil,
+        guard novelPath != nil,
             let currentIndex = sortedChapters.firstIndex(where: { $0.path == currentChapterPath })
         else { return false }
         return currentIndex < sortedChapters.count - 1
@@ -253,12 +337,22 @@ struct ReaderView: View {
 
     private func loadChapter() async {
         ttsManager.stop()
+        ttsBridge.contentDidChange()
         
-        if pluginId == "local", let novel {
+        if cachedChapters.isEmpty, let novelPath {
+            let predicate = #Predicate<Chapter> { $0.novel?.path == novelPath && $0.novel?.pluginId == pluginId }
+            var descriptor = FetchDescriptor<Chapter>(predicate: predicate, sortBy: [SortDescriptor(\.position)])
+            descriptor.relationshipKeyPathsForPrefetching = []
+            if let fetched = try? modelContext.fetch(descriptor) {
+                self.cachedChapters = fetched
+            }
+        }
+        
+        if pluginId == "local", let novelPath {
             do {
                 let fileManager = FileManager.default
                 let docDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let novelId = novel.path.replacingOccurrences(of: "local://", with: "")
+                let novelId = novelPath.replacingOccurrences(of: "local://", with: "")
                 let bookDir = docDir.appendingPathComponent("LocalNovels").appendingPathComponent(novelId)
                 let chapterURL = bookDir.appendingPathComponent(currentChapterPath)
                 
@@ -274,7 +368,8 @@ struct ReaderView: View {
                 isLoading = false
                 
                 // Record reading history
-                if let chapter = novel.chapters.first(where: { $0.path == currentChapterPath }) {
+                if let chapter = cachedChapters.first(where: { $0.path == currentChapterPath }),
+                   let novel = fetchNovel() {
                     libraryManager.recordHistory(novel: novel, chapter: chapter, context: modelContext)
                 }
             } catch {
@@ -296,9 +391,8 @@ struct ReaderView: View {
             isLoading = false
 
             // Record reading history
-            if let novel,
-                let chapter = novel.chapters.first(where: { $0.path == currentChapterPath })
-            {
+            if let novel = fetchNovel(),
+               let chapter = cachedChapters.first(where: { $0.path == currentChapterPath }) {
                 libraryManager.recordHistory(novel: novel, chapter: chapter, context: modelContext)
             }
         } catch {
@@ -319,23 +413,28 @@ struct ReaderView: View {
         }
     }
 
-    private func startTTSPlayback(from startIndex: Int = 0) {
+    private func startTTSPlayback(from startIndex: Int? = nil) {
+        print("🔊 [ReaderView] startTTSPlayback called. ttsBridge.isReady: \(ttsBridge.isReady)")
         guard ttsBridge.isReady else {
+            print("🔊 [ReaderView] ttsBridge is not ready. Delaying start.")
             startTTSWhenReady = true
             return
         }
         isPreparingTTS = true
 
+        let resolvedStartIndex = startIndex ?? currentChapter?.lastReadParagraphIndex ?? 0
+        print("🔊 [ReaderView] Resolving start index: \(resolvedStartIndex). Fetching blocks…")
+
         Task {
             let blocks = await ttsBridge.fetchTTSBlocks()
+            print("🔊 [ReaderView] Fetched blocks: \(blocks.count). Calling ttsManager.startReading.")
             withAnimation(.easeInOut(duration: 0.3)) {
                 ttsManager.startReading(
                     blocks: blocks,
                     chapterName: currentChapterName,
-                    novelName: novel?.name,
                     voice: ttsVoice,
                     speed: Float(ttsSpeed),
-                    startBlockIndex: startIndex
+                    startBlockIndex: resolvedStartIndex
                 )
             }
         }
@@ -434,6 +533,82 @@ struct ReaderView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
+        }
+    }
+}
+
+// MARK: - Focus Indicator View Overlay
+struct ReaderFocusIndicator: View {
+    @ObservedObject var focusManager = FocusModeManager.shared
+    @State private var showLabel = false
+    @State private var labelTimer: Timer? = nil
+
+    var body: some View {
+        let activeType = focusManager.currentFocusType
+        if activeType != .none {
+            VStack(spacing: 8) {
+                Button {
+                    // Show label temporarily on tap
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showLabel = true
+                    }
+                    // Start timer to hide label
+                    labelTimer?.invalidate()
+                    labelTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            showLabel = false
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: activeType.iconName)
+                            .font(.system(size: 11, weight: .bold))
+                        
+                        if showLabel {
+                            Text(activeType.displayName)
+                                .font(.system(size: 11, weight: .bold))
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                    removal: .opacity
+                                ))
+                        }
+                    }
+                    .foregroundColor(.white.opacity(0.75))
+                    .padding(.horizontal, showLabel ? 12 : 8)
+                    .padding(.vertical, 6)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                
+                // If label is shown, offer a small manual override selector
+                if showLabel {
+                    HStack(spacing: 12) {
+                        Button {
+                            cycleOverride()
+                        } label: {
+                            Text("Change Focus")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.8))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .glassEffect(.regular.interactive(), in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+        }
+    }
+    
+    private func cycleOverride() {
+        let options = ["auto", "dnd", "work", "sleep", "none"]
+        if let index = options.firstIndex(of: focusManager.overrideType) {
+            let nextIndex = (index + 1) % options.count
+            withAnimation {
+                focusManager.overrideType = options[nextIndex]
+                focusManager.updateFocusStatus()
+            }
         }
     }
 }

@@ -40,6 +40,9 @@ final class Chapter: Hashable {
     /// Reading progress percentage (0–100)
     var progress: Int?
 
+    /// Last read paragraph index in the chapter content
+    var lastReadParagraphIndex: Int? = nil
+
     /// When the chapter was last updated from source
     var updatedTime: Date?
 

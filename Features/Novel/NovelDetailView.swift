@@ -13,22 +13,18 @@ struct NovelDetailView: View {
     let partialNovel: PartialNovel?
     let pluginId: String
 
+    @State private var localNovel: Novel? = nil
     @State private var sourceNovel: SourceNovel?
     @State private var isLoading = true
     @State private var showFullDescription = false
-    @State private var chapterSortAscending = true
+    @State private var selectedRange: ChapterRange = .progress
     @State private var selectedFilter: ChapterFilter = .all
     @State private var errorMessage: String?
 
-    // Pagination + search state
-    @State private var chapterPage = 0
+    // Search + navigation state
     @State private var chapterSearch = ""
     @State private var navigateToChapter: ChapterDisplay? = nil
     @State private var allChapters: [ChapterDisplay] = []
-
-    @Namespace private var paginationNamespace
-
-    private let pageSize = 20
 
     // MARK: - Initializers
 
@@ -37,6 +33,7 @@ struct NovelDetailView: View {
         self.novel = novel
         self.partialNovel = nil
         self.pluginId = novel.pluginId
+        self._localNovel = State(initialValue: novel)
     }
 
     /// View a novel discovered from browse/search.
@@ -44,23 +41,23 @@ struct NovelDetailView: View {
         self.novel = nil
         self.partialNovel = partialNovel
         self.pluginId = pluginId
+        self._localNovel = State(initialValue: nil)
     }
 
     var body: some View {
         NovelDetailScrollView(
-            totalChapterPages: totalChapterPages,
             content: VStack(spacing: 0) {
                 NovelHeaderView(
                     name: displayName,
                     author: displayAuthor,
                     cover: displayCover,
-                    status: novel?.status ?? statusFromSource,
-                    inLibrary: novel?.inLibrary ?? false,
+                    status: localNovel?.status ?? statusFromSource,
+                    inLibrary: localNovel?.inLibrary ?? false,
                     onToggleLibrary: toggleLibrary,
                     onContinueReading: continueReading
                 )
 
-                if isLoading && novel == nil {
+                if isLoading && localNovel == nil {
                     LoadingView(message: "Loading novel details...")
                         .frame(height: 200)
                 } else if let error = errorMessage {
@@ -71,11 +68,11 @@ struct NovelDetailView: View {
                     )
                 } else {
                     NovelInfoSection(
-                        summary: novel?.summary ?? sourceNovel?.summary,
+                        summary: localNovel?.summary ?? sourceNovel?.summary,
                         genres: displayGenres,
                         author: displayAuthor,
-                        artist: novel?.artist ?? sourceNovel?.artist,
-                        status: novel?.status ?? statusFromSource,
+                        artist: localNovel?.artist ?? sourceNovel?.artist,
+                        status: localNovel?.status ?? statusFromSource,
                         source: pluginManager.pluginName(for: pluginId),
                         showFullDescription: $showFullDescription
                     )
@@ -83,12 +80,12 @@ struct NovelDetailView: View {
                     Divider().padding(.horizontal)
 
                     ChapterListView(
-                        novel: novel,
+                        novel: localNovel,
                         chapters: pagedChapters,
                         totalCount: allChapters.count,
                         filteredCount: filteredChapters.count,
                         pluginId: pluginId,
-                        sortAscending: $chapterSortAscending,
+                        selectedRange: $selectedRange,
                         selectedFilter: $selectedFilter,
                         searchText: $chapterSearch
                     )
@@ -97,8 +94,7 @@ struct NovelDetailView: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 hideKeyboard()
-            },
-            paginationBar: paginationBar
+            }
         )
         .toolbar(removing: .title)
         .navigationDestination(item: $navigateToChapter) { chapter in
@@ -106,23 +102,25 @@ struct NovelDetailView: View {
                 chapterPath: chapter.path,
                 chapterName: chapter.name,
                 pluginId: pluginId,
-                novel: novel
+                novelPath: localNovel?.path
             )
+            .id(chapter.path)
         }
-        .onChange(of: selectedFilter) { chapterPage = 0 }
-        .onChange(of: chapterSortAscending) { chapterPage = 0 }
-        .onChange(of: chapterSearch) { chapterPage = 0 }
-        .onAppear { refreshChapters() }
+        .onAppear {
+            syncLocalNovel()
+            refreshChapters()
+        }
         .onChange(of: novel) { refreshChapters() }
+        .onChange(of: localNovel) { refreshChapters() }
         .task { await fetchNovelData() }
     }
 
     // MARK: - Chapter Computation
 
     private func refreshChapters() {
-        if let novel {
-            let novelPath = novel.path
-            let pluginId = novel.pluginId
+        if let localNovel {
+            let novelPath = localNovel.path
+            let pluginId = localNovel.pluginId
             let container = modelContext.container
             
             Task.detached(priority: .userInitiated) {
@@ -144,7 +142,7 @@ struct NovelDetailView: View {
                 } catch {
                     print("⚠️ Failed to fetch chapters on background context: \(error)")
                     await MainActor.run {
-                        let mapped = novel.chapters.map { ChapterDisplay(chapter: $0) }
+                        let mapped = localNovel.chapters.map { ChapterDisplay(chapter: $0) }
                         let sorted = mapped.sorted { ch1, ch2 in
                             if ch1.position != ch2.position {
                                 return ch1.position < ch2.position
@@ -178,83 +176,78 @@ struct NovelDetailView: View {
                 $0.name.localizedCaseInsensitiveContains(chapterSearch)
             }
         }
-        return chapterSortAscending ? result : result.reversed()
-    }
-
-    private var totalChapterPages: Int {
-        max(1, Int(ceil(Double(filteredChapters.count) / Double(pageSize))))
+        return result
     }
 
     private var pagedChapters: [ChapterDisplay] {
-        let start = chapterPage * pageSize
-        let end = min(start + pageSize, filteredChapters.count)
-        guard start < filteredChapters.count else { return [] }
-        return Array(filteredChapters[start..<end])
-    }
-
-    // MARK: - Pagination Bar
-
-    @ViewBuilder
-    private var paginationBar: some View {
-        HStack {
-            Spacer()
-            GlassEffectContainer(spacing: 0) {
-                HStack(spacing: 0) {
-                    Button {
-                        withAnimation(.smooth) {
-                            chapterPage = max(0, chapterPage - 1)
-                        }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(width: 44, height: 44)
+        let list = filteredChapters
+        guard !list.isEmpty else { return [] }
+        
+        switch selectedRange {
+        case .first:
+            return Array(list.prefix(10))
+            
+        case .last:
+            return Array(list.suffix(10))
+            
+        case .progress:
+            // Find the latest read chapter in the entire book
+            let readChapterPaths = allChapters.filter { !$0.unread }
+            let targetIndex: Int
+            
+            if !readChapterPaths.isEmpty,
+               let maxRead = readChapterPaths.max(by: { $0.position < $1.position }) {
+                // Find where it is in the filtered list
+                if let idx = list.firstIndex(where: { $0.path == maxRead.path }) {
+                    targetIndex = idx
+                } else {
+                    // Fallback: first chapter in filtered list with position >= maxRead.position
+                    if let idx = list.firstIndex(where: { $0.position >= maxRead.position }) {
+                        targetIndex = idx
+                    } else {
+                        targetIndex = list.count - 1
                     }
-                    .buttonStyle(.glass)
-                    .glassEffectID("pg-prev", in: paginationNamespace)
-                    .disabled(chapterPage == 0)
-
-                    Text("\(chapterPage + 1) / \(totalChapterPages)")
-                        .font(Typography.caption)
-                        .monospacedDigit()
-                        .frame(minWidth: 64)
-                        .frame(height: 44)
-                        .padding(.horizontal, 4)
-
-                    Button {
-                        withAnimation(.smooth) {
-                            chapterPage = min(totalChapterPages - 1, chapterPage + 1)
-                        }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.glass)
-                    .glassEffectID("pg-next", in: paginationNamespace)
-                    .disabled(chapterPage == totalChapterPages - 1)
                 }
+            } else {
+                targetIndex = 0
             }
-            Spacer()
+            
+            let totalCount = list.count
+            let sliceSize = 11
+            let halfSize = 5
+            
+            var start = targetIndex - halfSize
+            var end = targetIndex + halfSize
+            
+            if start < 0 {
+                start = 0
+                end = min(sliceSize - 1, totalCount - 1)
+            }
+            if end >= totalCount {
+                end = totalCount - 1
+                start = max(0, end - sliceSize + 1)
+            }
+            
+            return Array(list[start...end])
         }
-        .padding(.bottom, 8)
     }
 
     // MARK: - Display Helpers
 
     private var displayName: String {
-        novel?.name ?? partialNovel?.name ?? sourceNovel?.name ?? "Unknown"
+        localNovel?.name ?? partialNovel?.name ?? sourceNovel?.name ?? "Unknown"
     }
 
     private var displayAuthor: String? {
-        novel?.author ?? sourceNovel?.author
+        localNovel?.author ?? sourceNovel?.author
     }
 
     private var displayCover: String? {
-        novel?.cover ?? partialNovel?.cover ?? sourceNovel?.cover
+        localNovel?.cover ?? partialNovel?.cover ?? sourceNovel?.cover
     }
 
     private var displayGenres: [String] {
-        let raw = novel?.genres ?? sourceNovel?.genres
+        let raw = localNovel?.genres ?? sourceNovel?.genres
         return raw?.components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty } ?? []
@@ -266,11 +259,25 @@ struct NovelDetailView: View {
 
     // MARK: - Actions
 
+    private func syncLocalNovel() {
+        if localNovel == nil {
+            let path = novel?.path ?? partialNovel?.path ?? ""
+            guard !path.isEmpty else { return }
+            let predicate = #Predicate<Novel> { $0.path == path && $0.pluginId == pluginId }
+            var descriptor = FetchDescriptor<Novel>(predicate: predicate)
+            descriptor.fetchLimit = 1
+            if let fetched = try? modelContext.fetch(descriptor).first {
+                self.localNovel = fetched
+            }
+        }
+    }
+
     private func fetchNovelData() async {
+        syncLocalNovel()
         refreshChapters()
         
         guard sourceNovel == nil else { return }
-        let path = novel?.path ?? partialNovel?.path ?? ""
+        let path = localNovel?.path ?? partialNovel?.path ?? ""
         guard !path.isEmpty,
             let source = pluginManager.plugin(for: pluginId)
         else {
@@ -301,8 +308,8 @@ struct NovelDetailView: View {
                 print("📖 [\(pluginId)] NOT fetching all pages. hasParsePage=\(source.hasParsePage), totalPages=\(parsed.totalPages ?? -1)")
             }
             sourceNovel = parsed
-            if let novel {
-                libraryManager.updateNovel(novel, sourceNovel: parsed, context: modelContext)
+            if let localNovel {
+                libraryManager.updateNovel(localNovel, sourceNovel: parsed, context: modelContext)
             }
             isLoading = false
             refreshChapters()
@@ -313,11 +320,11 @@ struct NovelDetailView: View {
     }
 
     private func toggleLibrary() {
-        if let novel {
-            if novel.inLibrary {
-                libraryManager.removeFromLibrary(novel: novel, context: modelContext)
+        if let localNovel {
+            if localNovel.inLibrary {
+                libraryManager.removeFromLibrary(novel: localNovel, context: modelContext)
             } else {
-                novel.inLibrary = true
+                localNovel.inLibrary = true
                 try? modelContext.save()
             }
         } else if let sourceNovel {
@@ -326,13 +333,41 @@ struct NovelDetailView: View {
                 pluginId: pluginId,
                 context: modelContext
             )
+            syncLocalNovel()
         }
         refreshChapters()
     }
 
     private func continueReading() {
-        if let novel, !novel.chapters.isEmpty {
-            let sorted = novel.chapters.sorted { $0.position < $1.position }
+        if let localNovel, !localNovel.chapters.isEmpty {
+            let chapters = localNovel.chapters
+            let readChapters = chapters.filter { !$0.unread }
+            
+            if !readChapters.isEmpty {
+                // Find the latest read chapter based on readTime (or fallback to position if no readTime is set)
+                let latestRead: Chapter? = {
+                    let chaptersWithTime = readChapters.filter { $0.readTime != nil }
+                    if !chaptersWithTime.isEmpty {
+                        return chaptersWithTime.max(by: { ($0.readTime ?? .distantPast) < ($1.readTime ?? .distantPast) })
+                    } else {
+                        return readChapters.max(by: { $0.position < $1.position })
+                    }
+                }()
+                
+                if let latestRead {
+                    let unreadAfterLatest = chapters
+                        .filter { $0.unread && $0.position > latestRead.position }
+                        .sorted { $0.position < $1.position }
+                    
+                    if let nextChapter = unreadAfterLatest.first {
+                        navigateToChapter = ChapterDisplay(chapter: nextChapter)
+                        return
+                    }
+                }
+            }
+            
+            // Fallback: if no chapters are read, or no unread chapters exist after the latest read, open the first unread chapter
+            let sorted = chapters.sorted { $0.position < $1.position }
             if let firstUnread = sorted.first(where: { $0.unread }) {
                 navigateToChapter = ChapterDisplay(chapter: firstUnread)
                 return
@@ -360,14 +395,18 @@ enum ChapterFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// A performance-optimized ScrollView wrapper that isolates scroll offset tracking
-/// to prevent parent views from re-evaluating their layout on every scroll frame.
-struct NovelDetailScrollView<Content: View, Pagination: View>: View {
-    let totalChapterPages: Int
-    let content: Content
-    let paginationBar: Pagination
+/// Range options for the chapter list.
+enum ChapterRange: String, CaseIterable, Identifiable {
+    case progress = "Current Progress"
+    case first = "First 10 Chapters"
+    case last = "Last 10 Chapters"
 
-    @State private var scrollOffset: CGFloat = 0
+    var id: String { rawValue }
+}
+
+/// A performance-optimized ScrollView wrapper that isolates scroll offset tracking
+struct NovelDetailScrollView<Content: View>: View {
+    let content: Content
 
     var body: some View {
         ScrollView {
@@ -375,21 +414,5 @@ struct NovelDetailScrollView<Content: View, Pagination: View>: View {
         }
         .ignoresSafeArea(edges: .top)
         .scrollDismissesKeyboard(.immediately)
-        .onScrollGeometryChange(for: CGFloat.self) { proxy in
-            proxy.contentOffset.y + proxy.contentInsets.top
-        } action: { _, offset in
-            scrollOffset = offset
-        }
-        .safeAreaInset(edge: .bottom) {
-            if totalChapterPages > 1 {
-                let showPagination = scrollOffset > 300
-                paginationBar
-                    .opacity(showPagination ? 1.0 : 0.0)
-                    .blur(radius: showPagination ? 0.0 : 10.0)
-                    .scaleEffect(showPagination ? 1.0 : 0.95)
-                    .allowsHitTesting(showPagination)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showPagination)
-            }
-        }
     }
 }

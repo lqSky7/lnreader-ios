@@ -39,8 +39,9 @@ struct UpdatesView: View {
                                             chapterPath: chapter.path,
                                             chapterName: chapter.name,
                                             pluginId: chapter.novel?.pluginId ?? "",
-                                            novel: chapter.novel
+                                            novelPath: chapter.novel?.path
                                         )
+                                        .id(chapter.path)
                                     } label: {
                                         UpdateRow(chapter: chapter)
                                     }
