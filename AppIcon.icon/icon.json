@@ -1,34 +1,30 @@
 {
-  "fill" : "automatic",
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.91693,0.85899,0.95302,1.00000"
+  },
   "groups" : [
     {
       "layers" : [
         {
-          "blend-mode" : "plus-darker",
-          "glass" : true,
-          "image-name" : "book.svg",
-          "name" : "book",
-          "position-specializations" : [
-            {
-              "idiom" : "square",
-              "value" : {
-                "scale" : 1.7,
-                "translation-in-points" : [
-                  0,
-                  0
-                ]
-              }
-            }
-          ]
+          "blend-mode" : "darken",
+          "image-name" : "Minimal_PureCopy.svg",
+          "name" : "Minimal_PureCopy",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              321.6570601503777
+            ]
+          }
         }
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 0.6
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.5
+        "value" : 0.2
       }
     }
   ],

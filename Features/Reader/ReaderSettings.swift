@@ -15,7 +15,6 @@ struct ReaderSettings: View {
     @Binding var lineFocusEnabled: Bool
     @Binding var lineFocusLines: Int
     @Binding var lineFocusDulling: String
-    @Binding var readingMode: String
     @Binding var characterSpacing: Double
     @Binding var wordSpacing: Double
     @Binding var grainIntensity: Double
@@ -35,7 +34,6 @@ struct ReaderSettings: View {
     @State private var localLineFocusEnabled: Bool
     @State private var localLineFocusLines: Int
     @State private var localLineFocusDulling: String
-    @State private var localReadingMode: String
     @State private var localGrainIntensity: Double
     @State private var localFocusOverride: String
     
@@ -56,7 +54,6 @@ struct ReaderSettings: View {
         lineFocusEnabled: Binding<Bool>,
         lineFocusLines: Binding<Int>,
         lineFocusDulling: Binding<String>,
-        readingMode: Binding<String>,
         characterSpacing: Binding<Double>,
         wordSpacing: Binding<Double>,
         grainIntensity: Binding<Double>,
@@ -73,7 +70,6 @@ struct ReaderSettings: View {
         self._lineFocusEnabled = lineFocusEnabled
         self._lineFocusLines = lineFocusLines
         self._lineFocusDulling = lineFocusDulling
-        self._readingMode = readingMode
         self._characterSpacing = characterSpacing
         self._wordSpacing = wordSpacing
         self._grainIntensity = grainIntensity
@@ -92,7 +88,6 @@ struct ReaderSettings: View {
         self._localLineFocusEnabled = State(initialValue: lineFocusEnabled.wrappedValue)
         self._localLineFocusLines = State(initialValue: lineFocusLines.wrappedValue)
         self._localLineFocusDulling = State(initialValue: lineFocusDulling.wrappedValue)
-        self._localReadingMode = State(initialValue: readingMode.wrappedValue)
         self._localGrainIntensity = State(initialValue: grainIntensity.wrappedValue)
         self._localFocusOverride = State(initialValue: FocusModeManager.shared.overrideType)
         
@@ -222,7 +217,6 @@ struct ReaderSettings: View {
         .onChange(of: localLineFocusEnabled) { _, _ in commitIfEmbedded() }
         .onChange(of: localLineFocusLines) { _, _ in commitIfEmbedded() }
         .onChange(of: localLineFocusDulling) { _, _ in commitIfEmbedded() }
-        .onChange(of: localReadingMode) { _, _ in commitIfEmbedded() }
         .onChange(of: localCharacterSpacing) { _, _ in commitIfEmbedded() }
         .onChange(of: localWordSpacing) { _, _ in commitIfEmbedded() }
         .onChange(of: localGrainIntensity) { _, _ in commitIfEmbedded() }
@@ -404,12 +398,6 @@ struct ReaderSettings: View {
 
     private var moreLayoutSection: some View {
         Section("Custom Layout & Colors") {
-            Picker("Reading Mode", selection: $localReadingMode) {
-                Text("Scroll").tag("scroll")
-                Text("Horizontal Page").tag("paged")
-            }
-            .pickerStyle(.menu)
-            
             VStack(alignment: .leading) {
                 Text("Vertical Padding: \(Int(localVerticalPadding))px")
                     .font(Typography.caption)
@@ -653,7 +641,6 @@ struct ReaderSettings: View {
         lineFocusEnabled = localLineFocusEnabled
         lineFocusLines = localLineFocusLines
         lineFocusDulling = localLineFocusDulling
-        readingMode = localReadingMode
         characterSpacing = localCharacterSpacing
         wordSpacing = localWordSpacing
         grainIntensity = localGrainIntensity

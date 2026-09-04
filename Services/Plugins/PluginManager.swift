@@ -90,8 +90,23 @@ final class PluginManager {
     private static let registryURL =
         "https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json"
 
+    /// In-memory registry cache so tab switches don't re-download the list.
+    private var registryCachedAt: Date?
+    private static let registryCacheTTL: TimeInterval = 3600
+    private static let registryDiskCacheKey = "plugin_manager_registry_cache_v1"
+    private static let registryDiskCacheDateKey = "plugin_manager_registry_cache_date_v1"
+
     /// Fetch the plugin registry from the remote repository.
-    func fetchPluginList() async throws {
+    /// Uses a 1h in-memory + 24h disk cache; pass `forceRefresh` for pull-to-refresh.
+    func fetchPluginList(forceRefresh: Bool = false) async throws {
+        // Serve in-memory cache for rapid tab switches.
+        if !forceRefresh,
+           let cachedAt = registryCachedAt,
+           Date().timeIntervalSince(cachedAt) < Self.registryCacheTTL,
+           !plugins.isEmpty {
+            return
+        }
+
         isLoading = true
         lastError = nil
 
@@ -102,11 +117,40 @@ final class PluginManager {
                 urlString: Self.registryURL
             )
             plugins = items
+            registryCachedAt = Date()
+            persistRegistryCache(items)
             syncInstalledState()
         } catch {
+            // Offline: fall back to the last persisted registry so installed
+            // sources remain browsable instead of showing an empty list.
+            if let cached = loadPersistedRegistryCache(), !cached.isEmpty {
+                plugins = cached
+                syncInstalledState()
+                return
+            }
             lastError = error
             throw error
         }
+    }
+
+    private func persistRegistryCache(_ items: [PluginListItem]) {
+        if let data = try? JSONEncoder().encode(items) {
+            UserDefaults.standard.set(data, forKey: Self.registryDiskCacheKey)
+            UserDefaults.standard.set(Date(), forKey: Self.registryDiskCacheDateKey)
+        }
+    }
+
+    private func loadPersistedRegistryCache() -> [PluginListItem]? {
+        // Only trust disk cache younger than 7 days.
+        if let date = UserDefaults.standard.object(forKey: Self.registryDiskCacheDateKey) as? Date,
+           Date().timeIntervalSince(date) > 7 * 24 * 3600 {
+            return nil
+        }
+        guard let data = UserDefaults.standard.data(forKey: Self.registryDiskCacheKey),
+              let items = try? JSONDecoder().decode([PluginListItem].self, from: data) else {
+            return nil
+        }
+        return items
     }
 
     // MARK: - Installation
@@ -210,6 +254,8 @@ final class PluginManager {
     // MARK: - Persistence
 
     /// Restore previously installed plugins from saved JS files on disk.
+    /// File IO + JSContext creation run off the main thread so app launch
+    /// and tab switches don't hitch; assignment hops back to MainActor.
     func restoreInstalledPlugins() async {
         // Load metadata from UserDefaults first
         var savedItems: [PluginListItem] = []
@@ -221,41 +267,54 @@ final class PluginManager {
         let pluginsDir = Self.pluginsDirectory
         guard FileManager.default.fileExists(atPath: pluginsDir.path()) else { return }
 
-        let fileManager = FileManager.default
-        guard let files = try? fileManager.contentsOfDirectory(
-            at: pluginsDir,
-            includingPropertiesForKeys: nil
-        ) else { return }
+        let registrySnapshot = plugins
+        let installedSnapshot = installedPlugins
 
-        for file in files where file.pathExtension == "js" {
-            let pluginID = file.deletingPathExtension().lastPathComponent
+        // Heavy work (directory scan, file reads, JS evaluation) off-main.
+        let restored: [(String, JSSourcePlugin)] = await Task.detached(priority: .userInitiated) {
+            let fileManager = FileManager.default
+            guard let files = try? fileManager.contentsOfDirectory(
+                at: pluginsDir,
+                includingPropertiesForKeys: [.fileSizeKey]
+            ) else { return [] }
 
-            // Skip if already installed
-            guard installedPlugins[pluginID] == nil else { continue }
+            var out: [(String, JSSourcePlugin)] = []
+            for file in files where file.pathExtension == "js" {
+                let pluginID = file.deletingPathExtension().lastPathComponent
 
-            // Find registry item for metadata (fallback to savedItems if registry is empty)
-            guard let item = plugins.first(where: { $0.id == pluginID }) ?? savedItems.first(where: { $0.id == pluginID }) else {
-                print("⚠️ No metadata found for local plugin '\(pluginID)'")
-                continue
+                // Skip if already installed
+                guard installedSnapshot[pluginID] == nil else { continue }
+
+                // Find registry item for metadata (fallback to savedItems if registry is empty)
+                guard let item = registrySnapshot.first(where: { $0.id == pluginID }) ?? savedItems.first(where: { $0.id == pluginID }) else {
+                    print("⚠️ No metadata found for local plugin '\(pluginID)'")
+                    continue
+                }
+
+                guard let jsCode = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+                do {
+                    let plugin = try JSSourcePlugin(
+                        id: item.id,
+                        name: item.name,
+                        iconURL: item.iconUrl,
+                        siteURL: item.site,
+                        language: item.lang,
+                        version: item.version,
+                        jsCode: jsCode
+                    )
+                    out.append((pluginID, plugin))
+                } catch {
+                    // Log and skip corrupt plugins
+                    print("⚠️ Failed to restore plugin '\(pluginID)': \(error)")
+                }
             }
+            return out
+        }.value
 
-            guard let jsCode = try? String(contentsOf: file, encoding: .utf8) else { continue }
-
-            do {
-                let plugin = try JSSourcePlugin(
-                    id: item.id,
-                    name: item.name,
-                    iconURL: item.iconUrl,
-                    siteURL: item.site,
-                    language: item.lang,
-                    version: item.version,
-                    jsCode: jsCode
-                )
-                installedPlugins[pluginID] = plugin
-            } catch {
-                // Log and skip corrupt plugins
-                print("⚠️ Failed to restore plugin '\(pluginID)': \(error)")
-            }
+        guard !restored.isEmpty else { return }
+        for (pluginID, plugin) in restored where installedPlugins[pluginID] == nil {
+            installedPlugins[pluginID] = plugin
         }
 
         syncInstalledState()

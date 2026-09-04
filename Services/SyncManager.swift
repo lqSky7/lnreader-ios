@@ -82,10 +82,22 @@ final class SyncManager {
     var lastMessage: String?
     var lastError: String?
 
-    var backendURL: String = UserDefaults.standard.string(forKey: "sync.backendURL") ?? "https://lnreader-sync-sky788.azurewebsites.net"
+    var backendURL: String = UserDefaults.standard.string(forKey: "sync.backendURL") ?? SyncManager.defaultBackendURL
+
+    static let defaultBackendURL = "https://lnreader-sync.onrender.com"
+    /// Retired Azure backend — existing installs still have this saved.
+    private static let legacyBackendURL = "https://lnreader-sync-sky788.azurewebsites.net"
+
+    init() {
+        // One-time migration off the retired Azure backend.
+        if backendURL == Self.legacyBackendURL {
+            backendURL = Self.defaultBackendURL
+            UserDefaults.standard.set(backendURL, forKey: "sync.backendURL")
+        }
+    }
 
     private var baseURL: URL {
-        URL(string: backendURL.trimmingCharacters(in: .whitespacesAndNewlines)) ?? URL(string: "https://lnreader-sync-sky788.azurewebsites.net")!
+        URL(string: backendURL.trimmingCharacters(in: .whitespacesAndNewlines)) ?? URL(string: SyncManager.defaultBackendURL)!
     }
 
     func updateBackendURL(_ value: String) {

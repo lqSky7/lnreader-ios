@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Dark squircle base -->
+  <rect width="1024" height="1024" rx="230" fill="#0A0A0A" />
+
+  <!-- Back sheet (Copy origin) -->
+  <rect x="290" y="250" width="370" height="450" rx="36" fill="none" stroke="#262626" stroke-width="44" />
+
+  <!-- Front sheet (Paste / TextCP) -->
+  <rect x="364" y="324" width="370" height="450" rx="36" fill="#2563EB" />
+</svg>

@@ -16,6 +16,7 @@ struct ChapterListView: View {
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
+    @State private var showSearchField = false
 
     private var isFiltered: Bool {
         selectedFilter != .all || !searchText.isEmpty
@@ -35,71 +36,97 @@ struct ChapterListView: View {
 
                 Spacer()
 
-                Menu {
-                    ForEach(ChapterFilter.allCases) { filter in
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        // Search Button
                         Button {
-                            selectedFilter = filter
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                showSearchField.toggle()
+                            }
                         } label: {
-                            Label(filter.rawValue, systemImage: filterIcon(filter))
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 16, weight: .bold))
+                                .frame(width: 40, height: 40)
+                                .contentShape(Circle())
                         }
-                    }
-                } label: {
-                    Label("Filter", systemImage: selectedFilter == .all
-                          ? "line.3.horizontal.decrease"
-                          : "line.3.horizontal.decrease.circle.fill")
-                        .font(Typography.caption)
-                }
+                        .glassEffect(showSearchField ? .regular.tint(AppTheme.accent) : .regular, in: .circle)
 
-                Menu {
-                    Button {
-                        selectedRange = .progress
-                    } label: {
-                        Label("Current Progress", systemImage: "bookmark.fill")
+                        // Filter Menu
+                        Menu {
+                            ForEach(ChapterFilter.allCases) { filter in
+                                Button {
+                                    selectedFilter = filter
+                                } label: {
+                                    Label(filter.rawValue, systemImage: filterIcon(filter))
+                                }
+                            }
+                        } label: {
+                            Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .frame(width: 40, height: 40)
+                                .contentShape(Circle())
+                        }
+                        .glassEffect(selectedFilter != .all ? .regular.tint(AppTheme.accent) : .regular, in: .circle)
+
+                        // Current Range Menu
+                        Menu {
+                            Button {
+                                selectedRange = .progress
+                            } label: {
+                                Label("Current Progress", systemImage: "bookmark.fill")
+                            }
+                            Button {
+                                selectedRange = .first
+                            } label: {
+                                Label("First Chapters", systemImage: "arrow.up.circle.fill")
+                            }
+                            Button {
+                                selectedRange = .last
+                            } label: {
+                                Label("Last Chapters", systemImage: "arrow.down.circle.fill")
+                            }
+                        } label: {
+                            Image(systemName: rangeIcon(selectedRange))
+                                .font(.system(size: 16, weight: .bold))
+                                .frame(width: 40, height: 40)
+                                .contentShape(Circle())
+                        }
+                        .glassEffect(selectedRange != .progress ? .regular.tint(AppTheme.accent) : .regular, in: .circle)
                     }
-                    Button {
-                        selectedRange = .first
-                    } label: {
-                        Label("First Chapters", systemImage: "arrow.up.circle.fill")
-                    }
-                    Button {
-                        selectedRange = .last
-                    } label: {
-                        Label("Last Chapters", systemImage: "arrow.down.circle.fill")
-                    }
-                } label: {
-                    Label(rangeLabel(selectedRange), systemImage: rangeIcon(selectedRange))
-                        .font(Typography.caption)
                 }
             }
             .padding(.horizontal)
             .padding(.top, 8)
 
-            // Search bar
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                    .font(Typography.caption)
+            // Inline Search bar (expands when toggled)
+            if showSearchField {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .font(Typography.caption)
 
-                TextField("Search chapters…", text: $searchText)
-                    .font(Typography.body)
-                    .textFieldStyle(.plain)
-                    .autocorrectionDisabled()
+                    TextField("Search chapters…", text: $searchText)
+                        .font(Typography.body)
+                        .textFieldStyle(.plain)
+                        .autocorrectionDisabled()
 
-                if !searchText.isEmpty {
-                    Button {
-                        withAnimation { searchText = "" }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                    if !searchText.isEmpty {
+                        Button {
+                            withAnimation { searchText = "" }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                .contentShape(.rect(cornerRadius: 20))
+                .padding(.horizontal)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
-            .contentShape(.rect(cornerRadius: 20))
-            .padding(.horizontal)
 
             // Chapter rows
             if chapters.isEmpty {
@@ -120,6 +147,9 @@ struct ChapterListView: View {
                     }
                 }
             }
+        }
+        .onAppear {
+            showSearchField = !searchText.isEmpty
         }
     }
 

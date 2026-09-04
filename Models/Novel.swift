@@ -71,12 +71,12 @@ final class Novel: Hashable {
 
     /// Number of downloaded chapters
     var chaptersDownloaded: Int {
-        chapters.filter(\.isDownloaded).count
+        chapters.count(where: \.isDownloaded)
     }
 
     /// Number of unread chapters
     var chaptersUnread: Int {
-        chapters.filter(\.unread).count
+        chapters.count(where: \.unread)
     }
 
     /// Total number of chapters

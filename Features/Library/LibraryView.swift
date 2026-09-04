@@ -197,6 +197,18 @@ struct LibraryView: View {
     }
 
     private func sortedNovels(_ novels: [Novel]) -> [Novel] {
+        // Precompute per-novel chapter stats ONCE. The old code called
+        // `chaptersUnread` / `totalChapters` inside the sort comparator,
+        // re-faulting + re-scanning every novel's chapter list O(log n) times.
+        var unreadByID: [PersistentIdentifier: Int] = [:]
+        var totalByID: [PersistentIdentifier: Int] = [:]
+        let needsCounts = (sortOrder == .unread || sortOrder == .totalChapters)
+        if needsCounts {
+            for novel in novels {
+                unreadByID[novel.persistentModelID] = novel.chaptersUnread
+                totalByID[novel.persistentModelID] = novel.totalChapters
+            }
+        }
         let sorted: [Novel]
         switch sortOrder {
         case .custom:
@@ -214,9 +226,15 @@ struct LibraryView: View {
                 ($0.lastUpdatedAt ?? .distantPast) > ($1.lastUpdatedAt ?? .distantPast)
             }
         case .totalChapters:
-            sorted = novels.sorted { $0.totalChapters > $1.totalChapters }
+            sorted = novels.sorted {
+                (totalByID[$0.persistentModelID] ?? $0.totalChapters)
+                    > (totalByID[$1.persistentModelID] ?? $1.totalChapters)
+            }
         case .unread:
-            sorted = novels.sorted { $0.chaptersUnread > $1.chaptersUnread }
+            sorted = novels.sorted {
+                (unreadByID[$0.persistentModelID] ?? $0.chaptersUnread)
+                    > (unreadByID[$1.persistentModelID] ?? $1.chaptersUnread)
+            }
         case .dateAdded:
             sorted = novels.sorted { $0.dateAdded > $1.dateAdded }
         }

@@ -119,19 +119,10 @@ final class LibraryManager {
     }
 
     /// Check if the current network connection is cellular.
+    /// Uses a shared NWPathMonitor instead of spinning one up per call
+    /// (the old code created a monitor + semaphore + thread on every update).
     private func isCellularConnection() -> Bool {
-        let monitor = NWPathMonitor()
-        let semaphore = DispatchSemaphore(value: 0)
-        var isCellular = false
-        monitor.pathUpdateHandler = { path in
-            isCellular = path.usesInterfaceType(.cellular)
-            semaphore.signal()
-        }
-        let queue = DispatchQueue(label: "NetworkMonitorTemp")
-        monitor.start(queue: queue)
-        _ = semaphore.wait(timeout: .now() + 0.1)
-        monitor.cancel()
-        return isCellular
+        NetworkMonitor.shared.isCellular()
     }
 
     /// Update all novels in the library by fetching the latest details and chapters from sources.
@@ -151,40 +142,103 @@ final class LibraryManager {
 
         let predicate = #Predicate<Novel> { $0.inLibrary }
         let descriptor = FetchDescriptor(predicate: predicate)
-        guard let novels = try? context.fetch(descriptor) else { return }
+        guard let novels = try? context.fetch(descriptor), !novels.isEmpty else { return }
 
+        // Fetch all sources CONCURRENTLY (network-bound, max 4 at a time),
+        // then apply SwiftData updates SEQUENTIALLY on the MainActor context.
+        // The old code awaited each novel one-by-one: N novels × latency.
+        //
+        // Concurrency-safety: plugin instances are snapshotted on the MainActor
+        // before the group (same pattern as GlobalSearchView) and each child
+        // task only touches its own snapshot plus its Sendable job. Chapter
+        // results are Sendable value types; failures travel as plain strings
+        // so the group's result type stays Sendable under Swift 6 checking.
+        struct UpdateJob: Sendable {
+            let id: PersistentIdentifier
+            let pluginId: String
+            let path: String
+            let name: String
+        }
+        struct UpdateWork {
+            let source: any SourcePlugin
+            let hasParsePage: Bool
+            let job: UpdateJob
+        }
+        var pending: [UpdateWork] = []
         for novel in novels {
-            let pluginId = novel.pluginId
-            let path = novel.path
-            guard let source = pluginManager.plugin(for: pluginId) else { continue }
-
-            do {
-                var sourceNovel = try await source.parseNovel(path: path)
-                if source.hasParsePage, let totalPages = sourceNovel.totalPages, totalPages > 1 {
-                    print("🔌 [\(pluginId)] Paginated chapters detected during library update, fetching \(totalPages) pages...")
-                    let allChapters = try await source.fetchAllChapters(path: path, totalPages: totalPages)
-                    sourceNovel = SourceNovel(
-                        name: sourceNovel.name,
-                        path: sourceNovel.path,
-                        cover: sourceNovel.cover,
-                        genres: sourceNovel.genres,
-                        summary: sourceNovel.summary,
-                        author: sourceNovel.author,
-                        artist: sourceNovel.artist,
-                        status: sourceNovel.status,
-                        chapters: allChapters,
-                        totalPages: sourceNovel.totalPages
-                    )
-                }
-                updateNovel(novel, sourceNovel: sourceNovel, context: context)
-            } catch {
-                print("Failed to update novel \(novel.name): \(error.localizedDescription)")
+            let job = UpdateJob(id: novel.persistentModelID, pluginId: novel.pluginId, path: novel.path, name: novel.name)
+            if let source = pluginManager.plugin(for: job.pluginId) {
+                pending.append(UpdateWork(source: source, hasParsePage: source.hasParsePage, job: job))
             }
+        }
+        guard !pending.isEmpty else { return }
+
+        typealias UpdateResult = (id: PersistentIdentifier, novel: SourceNovel?, error: String?)
+        let results = await withTaskGroup(of: UpdateResult.self, returning: [UpdateResult].self) { group in
+            let maxConcurrent = 4
+            var queue = pending[...]
+            var collected: [UpdateResult] = []
+            collected.reserveCapacity(pending.count)
+
+            func submit(_ work: UpdateWork) {
+                group.addTask {
+                    do {
+                        var sourceNovel = try await work.source.parseNovel(path: work.job.path)
+                        if work.hasParsePage, let totalPages = sourceNovel.totalPages, totalPages > 1 {
+                            #if DEBUG
+                            print("🔌 [\(work.job.pluginId)] Paginated chapters detected during library update, fetching \(totalPages) pages...")
+                            #endif
+                            let allChapters = try await work.source.fetchAllChapters(path: work.job.path, totalPages: totalPages)
+                            sourceNovel = SourceNovel(
+                                name: sourceNovel.name,
+                                path: sourceNovel.path,
+                                cover: sourceNovel.cover,
+                                genres: sourceNovel.genres,
+                                summary: sourceNovel.summary,
+                                author: sourceNovel.author,
+                                artist: sourceNovel.artist,
+                                status: sourceNovel.status,
+                                chapters: allChapters,
+                                totalPages: sourceNovel.totalPages
+                            )
+                        }
+                        return (work.job.id, sourceNovel, nil)
+                    } catch {
+                        return (work.job.id, nil, error.localizedDescription)
+                    }
+                }
+            }
+
+            for _ in 0..<min(maxConcurrent, queue.count) {
+                submit(queue.removeFirst())
+            }
+            while let result = await group.next() {
+                collected.append(result)
+                if !queue.isEmpty {
+                    submit(queue.removeFirst())
+                }
+            }
+            return collected
+        }
+
+        let byID = Dictionary(uniqueKeysWithValues: novels.map { ($0.persistentModelID, $0) })
+        var didChange = false
+        for result in results {
+            guard let novel = byID[result.id] else { continue }
+            if let sourceNovel = result.novel {
+                updateNovel(novel, sourceNovel: sourceNovel, context: context, saveImmediately: false)
+                didChange = true
+            } else {
+                print("Failed to update novel \(novel.name): \(result.error ?? "unknown error")")
+            }
+        }
+        if didChange {
+            try? context.save()
         }
     }
 
     /// Update a single novel's chapters and metadata from source.
-    func updateNovel(_ novel: Novel, sourceNovel: SourceNovel, context: ModelContext) {
+    func updateNovel(_ novel: Novel, sourceNovel: SourceNovel, context: ModelContext, saveImmediately: Bool = true) {
         novel.name = sourceNovel.name
         if let cover = sourceNovel.cover {
             novel.cover = cover
@@ -203,17 +257,16 @@ final class LibraryManager {
         novel.totalPages = sourceNovel.totalPages ?? 0
         novel.lastUpdatedAt = .now
 
-        let existingChapters = novel.chapters
-        let existingPaths = Set(existingChapters.map { $0.path })
+        // O(n) lookup via dictionary. The old `first(where:)` inside the loop
+        // was O(n²) — painful for 2000-chapter novels on every library update.
+        let existingByPath = Dictionary(uniqueKeysWithValues: novel.chapters.map { ($0.path, $0) })
 
         for (index, sourceChapter) in sourceNovel.chapters.enumerated() {
-            if existingPaths.contains(sourceChapter.path) {
-                if let existing = existingChapters.first(where: { $0.path == sourceChapter.path }) {
-                    existing.name = sourceChapter.name
-                    existing.releaseTime = sourceChapter.releaseTime
-                    existing.chapterNumber = sourceChapter.chapterNumber
-                    existing.position = index
-                }
+            if let existing = existingByPath[sourceChapter.path] {
+                existing.name = sourceChapter.name
+                existing.releaseTime = sourceChapter.releaseTime
+                existing.chapterNumber = sourceChapter.chapterNumber
+                existing.position = index
             } else {
                 let newChapter = Chapter(
                     path: sourceChapter.path,
@@ -228,7 +281,9 @@ final class LibraryManager {
                 context.insert(newChapter)
             }
         }
-        try? context.save()
+        if saveImmediately {
+            try? context.save()
+        }
     }
 
     /// Clear all updates by setting updatedTime to nil for all chapters.
@@ -241,5 +296,43 @@ final class LibraryManager {
             }
             try? context.save()
         }
+    }
+}
+
+// MARK: - Shared network path monitor
+
+/// Singleton wrapper around NWPathMonitor. Creating a monitor per check
+/// (plus a semaphore wait) blocks the caller and spins up threads;
+/// share one long-lived monitor instead.
+final class NetworkMonitor: Sendable {
+    static let shared = NetworkMonitor()
+
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "com.lnreader.network-monitor")
+    private let lock = NSLock()
+    private var _isCellular = false
+    private var started = false
+
+    private init() {}
+
+    private func ensureStarted() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !started else { return }
+        started = true
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            self.lock.lock()
+            self._isCellular = path.usesInterfaceType(.cellular)
+            self.lock.unlock()
+        }
+        monitor.start(queue: queue)
+    }
+
+    func isCellular() -> Bool {
+        ensureStarted()
+        lock.lock()
+        defer { lock.unlock() }
+        return _isCellular
     }
 }

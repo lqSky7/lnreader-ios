@@ -14,10 +14,12 @@ struct ReaderToolbar: View {
     let onPreviousChapter: () -> Void
     let onNextChapter: () -> Void
     let onChapterClick: () -> Void
+    var onComments: (() -> Void)? = nil
 
     @Namespace private var topNamespace
     @Namespace private var bottomNamespace
     @State private var backButtonHeight: CGFloat = 44
+    @AppStorage("tts.enabled") private var ttsEnabled = true
 
     var body: some View {
         VStack {
@@ -67,22 +69,24 @@ struct ReaderToolbar: View {
                 HStack {
                     Spacer()
                     
-                    if isPreparingTTS {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 44, height: 44)
-                            .glassEffect(.regular, in: .circle)
+                    if ttsEnabled {
+                        if isPreparingTTS {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 44, height: 44)
+                                .glassEffect(.regular, in: .circle)
+                                .glassEffectID("tts-trigger", in: topNamespace)
+                        } else {
+                            Button(action: onTTSStart) {
+                                Image(systemName: "waveform")
+                                    .font(.title2.weight(.bold))
+                            }
+                            .buttonStyle(.glass)
                             .glassEffectID("tts-trigger", in: topNamespace)
-                    } else {
-                        Button(action: onTTSStart) {
-                            Image(systemName: "waveform")
-                                .font(.title2.weight(.bold))
+                            #if os(macOS)
+                                .tint(.clear)
+                            #endif
                         }
-                        .buttonStyle(.glass)
-                        .glassEffectID("tts-trigger", in: topNamespace)
-                        #if os(macOS)
-                            .tint(.clear)
-                        #endif
                     }
                 }
             }
@@ -105,6 +109,19 @@ struct ReaderToolbar: View {
                 .buttonStyle(InteractivePlainButtonStyle())
                 .glassEffect(.regular.interactive(), in: .circle)
                 .glassEffectID("settings", in: bottomNamespace)
+                
+                if let onComments = onComments {
+                    Button(action: onComments) {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 16, weight: .medium))
+                            .frame(width: 46, height: 46)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(InteractivePlainButtonStyle())
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .glassEffectID("comments", in: bottomNamespace)
+                    .padding(.leading, 8)
+                }
                 
                 Spacer()
                 

@@ -76,8 +76,11 @@ struct NovelDetailView: View {
                         source: pluginManager.pluginName(for: pluginId),
                         showFullDescription: $showFullDescription
                     )
+                    .padding(.bottom, 12)
 
-                    Divider().padding(.horizontal)
+                    Divider()
+                        .padding(.horizontal)
+                        .padding(.vertical, 16)
 
                     ChapterListView(
                         novel: localNovel,
@@ -287,11 +290,17 @@ struct NovelDetailView: View {
 
         do {
             var parsed = try await source.parseNovel(path: path)
+            #if DEBUG
             print("📖 [\(pluginId)] parseNovel returned: chapters=\(parsed.chapters.count), totalPages=\(parsed.totalPages ?? -1), hasParsePage=\(source.hasParsePage)")
+            #endif
             if source.hasParsePage, let totalPages = parsed.totalPages, totalPages > 1 {
+                #if DEBUG
                 print("📖 [\(pluginId)] Paginated chapters detected, fetching \(totalPages) pages...")
+                #endif
                 let allChapters = try await source.fetchAllChapters(path: path, totalPages: totalPages)
+                #if DEBUG
                 print("📖 [\(pluginId)] fetchAllChapters returned \(allChapters.count) total chapters")
+                #endif
                 parsed = SourceNovel(
                     name: parsed.name,
                     path: parsed.path,
@@ -305,7 +314,9 @@ struct NovelDetailView: View {
                     totalPages: parsed.totalPages
                 )
             } else {
+                #if DEBUG
                 print("📖 [\(pluginId)] NOT fetching all pages. hasParsePage=\(source.hasParsePage), totalPages=\(parsed.totalPages ?? -1)")
+                #endif
             }
             sourceNovel = parsed
             if let localNovel {

@@ -65,6 +65,17 @@ struct SourceDetailView: View {
             }
         }
         .task { await loadPopular() }
+        .toolbar {
+            if let site = CommentSite.site(for: plugin.id) {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink(destination: NovelFireLoginView(onLoginSuccess: {
+                        Task { await loadPopular() }
+                    }, site: site)) {
+                        Label("Login", systemImage: "person.badge.key")
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Data Loading

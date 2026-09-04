@@ -383,12 +383,18 @@ final class JSSourcePlugin: SourcePlugin {
                                     }
                                 }
 
+                                #if DEBUG
                                 print("📡 [\(pluginID)] [encoding-fetch] \(request.httpMethod ?? "GET") \(urlString)")
+                                #endif
                                 if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
+                                    #if DEBUG
                                     print("   Headers: \(headers)")
+                                    #endif
                                 }
                                 if let body = request.httpBody, let bodyStr = String(data: body, encoding: .utf8) {
+                                    #if DEBUG
                                     print("   Body: \(bodyStr)")
+                                    #endif
                                 }
 
                                 let semaphore = DispatchSemaphore(value: 0)
@@ -414,7 +420,9 @@ final class JSSourcePlugin: SourcePlugin {
                                     return
                                 }
 
+                                #if DEBUG
                                 print("📥 [\(pluginID)] [encoding-fetch] Completed (status: \(statusCode), size: \(responseData?.count ?? 0) bytes)")
+                                #endif
 
                                 let data = responseData ?? Data()
                                 let text: String
@@ -533,12 +541,18 @@ final class JSSourcePlugin: SourcePlugin {
                                 }
                             }
 
+                            #if DEBUG
                             print("📡 [\(pluginID)] [fetch] \(request.httpMethod ?? "GET") \(urlString)")
+                            #endif
                             if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
+                                #if DEBUG
                                 print("   Headers: \(headers)")
+                                #endif
                             }
                             if let body = request.httpBody, let bodyStr = String(data: body, encoding: .utf8) {
+                                #if DEBUG
                                 print("   Body: \(bodyStr)")
+                                #endif
                             }
 
                             let semaphore = DispatchSemaphore(value: 0)
@@ -563,7 +577,9 @@ final class JSSourcePlugin: SourcePlugin {
                             }
 
                             let statusCode = httpResponse?.statusCode ?? 200
+                            #if DEBUG
                             print("📥 [\(pluginID)] [fetch] Completed (status: \(statusCode), size: \(responseData?.count ?? 0) bytes)")
+                            #endif
 
                             let isOk = (200...299).contains(statusCode)
                             let text = String(data: responseData ?? Data(), encoding: .utf8) ?? ""
@@ -894,25 +910,35 @@ final class JSSourcePlugin: SourcePlugin {
     }
 
     func parsePage(path: String, page: String) async throws -> SourcePage {
+        #if DEBUG
         print("📄 [\(id)] parsePage: path=\(path), page=\(page)")
+        #endif
         let result = try await callPluginFunction("parsePage", args: [path, page])
 
         let chapters: [SourceChapter]
         if let array = castToDictArray(result.toArray()) {
+            #if DEBUG
             print("📄 [\(id)] parsePage result: top-level array with \(array.count) items")
+            #endif
             chapters = array.compactMap(parseSourceChapter)
         } else if let chaptersVal = result.forProperty("chapters"),
             let array = castToDictArray(chaptersVal.toArray())
         {
+            #if DEBUG
             print("📄 [\(id)] parsePage result: object with 'chapters' array (\(array.count) items)")
+            #endif
             chapters = array.compactMap(parseSourceChapter)
         } else {
+            #if DEBUG
             print("📄 [\(id)] parsePage result: could not parse chapters. isObject=\(result.isObject), isArray=\(!result.isUndefined && result.toArray() != nil)")
+            #endif
             if let raw = result.toDictionary() {
             }
             chapters = []
         }
+        #if DEBUG
         print("📄 [\(id)] parsePage returning \(chapters.count) parsed chapters")
+        #endif
         return SourcePage(chapters: chapters)
     }
 
@@ -950,7 +976,9 @@ final class JSSourcePlugin: SourcePlugin {
 
     /// Call a function on the plugin object, handling Promises automatically.
     private func callPluginFunction(_ name: String, args: [Any]) async throws -> JSValue {
+        #if DEBUG
         print("🔌 [\(id)] Calling function '\(name)' with args: \(args)")
+        #endif
         do {
             let result = try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<JSValue, Error>) in
@@ -994,10 +1022,14 @@ final class JSSourcePlugin: SourcePlugin {
                     }
                 }
             }
+            #if DEBUG
             print("✅ [\(id)] Function '\(name)' succeeded")
+            #endif
             return result
         } catch {
+            #if DEBUG
             print("❌ [\(id)] Function '\(name)' failed with error: \(error)")
+            #endif
             throw error
         }
     }
@@ -1132,7 +1164,9 @@ final class JSSourcePlugin: SourcePlugin {
 
         let totalPages: Int?
         let rawTotalPages = dict["totalPages"]
+        #if DEBUG
         print("📖 [\(id)] parseSourceNovel: rawTotalPages=\(String(describing: rawTotalPages)), type=\(type(of: rawTotalPages as Any))")
+        #endif
         if let num = rawTotalPages as? Int {
             totalPages = num
         } else if let numDouble = rawTotalPages as? Double {
@@ -1144,7 +1178,9 @@ final class JSSourcePlugin: SourcePlugin {
         } else {
             totalPages = nil
         }
+        #if DEBUG
         print("📖 [\(id)] parseSourceNovel: totalPages=\(String(describing: totalPages)), chapters=\(chapters.count)")
+        #endif
 
         return SourceNovel(
             name: name,

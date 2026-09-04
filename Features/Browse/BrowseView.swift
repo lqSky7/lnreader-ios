@@ -56,7 +56,7 @@ struct BrowseView: View {
                 }
             }
             .task { await loadPlugins() }
-            .refreshable { await loadPlugins() }
+            .refreshable { await loadPlugins(forceRefresh: true) }
             .overlay {
                 if pluginManager.isLoading && pluginManager.plugins.isEmpty {
                     LoadingView(message: "Fetching sources...")
@@ -81,8 +81,8 @@ struct BrowseView: View {
 
     // MARK: - Actions
 
-    private func loadPlugins() async {
-        try? await pluginManager.fetchPluginList()
+    private func loadPlugins(forceRefresh: Bool = false) async {
+        try? await pluginManager.fetchPluginList(forceRefresh: forceRefresh)
         await pluginManager.restoreInstalledPlugins()
     }
 

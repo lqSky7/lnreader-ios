@@ -3,6 +3,7 @@
 
 import SwiftData
 import SwiftUI
+import WebKit
 
 struct ReaderView: View {
     @Environment(PluginManager.self) private var pluginManager
@@ -37,6 +38,20 @@ struct ReaderView: View {
     @State private var errorMessage: String?
     @State private var isPreparingTTS = false
     @State private var cachedChapters: [Chapter] = []
+    
+    // NovelFire / NovelPhoenix Comments State (same backend, different host)
+    @State private var novelfirePostId = ""
+    @State private var novelfireChapterId = ""
+    @State private var novelfireCsrfToken = ""
+    @State private var commentsHtml = ""
+    @State private var nextCursor: String? = nil
+    @State private var hasMoreComments = false
+    @State private var showLoginSheet = false
+    @State private var showCommentsSheet = false
+    @State private var commentsTask: Task<Void, Never>?
+
+    /// Comment site for the current plugin, if chapter comments are supported.
+    private var commentSite: CommentSite? { CommentSite.site(for: pluginId) }
 
     // Reader settings persisted across sessions
     @AppStorage("reader.fontSize") private var fontSize: Double = 18
@@ -52,7 +67,6 @@ struct ReaderView: View {
     @AppStorage("reader.lineFocusEnabled") private var lineFocusEnabled = false
     @AppStorage("reader.lineFocusLines") private var lineFocusLines = 1
     @AppStorage("reader.lineFocusDulling") private var lineFocusDulling = "mid"
-    @AppStorage("reader.readingMode") private var readingMode = "scroll"
     @AppStorage("reader.verticalPadding") private var verticalPadding: Double = 20
     @AppStorage("tts.voice") private var ttsVoiceId: String = "af_heart"
     @AppStorage("tts.speed") private var ttsSpeed: Double = 1.0
@@ -104,13 +118,14 @@ struct ReaderView: View {
                     lineFocusEnabled: lineFocusEnabled,
                     lineFocusLines: lineFocusLines,
                     lineFocusDulling: lineFocusDulling,
-                    readingMode: readingMode,
                     showControls: showControls,
                     bridge: ttsBridge,
                     baseURL: baseURL,
                     characterSpacing: characterSpacing,
                     wordSpacing: wordSpacing,
                     grainIntensity: grainIntensity,
+                    commentsHtml: "",
+                    hasMoreComments: false,
                     onTap: {
                         guard !ttsManager.isSpeaking else { return }
                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -126,7 +141,10 @@ struct ReaderView: View {
                                 startTTSPlayback(from: index)
                             }
                         }
-                    }
+                    },
+                    onLoadMoreComments: nil,
+                    onLikeComment: nil,
+                    onDislikeComment: nil
                 )
                 .ignoresSafeArea(.all)
             }
@@ -142,7 +160,8 @@ struct ReaderView: View {
                 onTTSStart: { startTTSPlayback() },
                 onPreviousChapter: navigateToPreviousChapter,
                 onNextChapter: navigateToNextChapter,
-                onChapterClick: { showChapterList = true }
+                onChapterClick: { showChapterList = true },
+                onComments: commentSite != nil ? { showCommentsSheet = true } : nil
             )
             .opacity((showControls && !ttsManager.isSpeaking) ? 1.0 : 0.0)
             .blur(radius: (showControls && !ttsManager.isSpeaking) ? 0.0 : 8.0)
@@ -156,16 +175,16 @@ struct ReaderView: View {
                 .scaleEffect(ttsManager.isSpeaking ? 1.0 : 0.96)
                 .allowsHitTesting(ttsManager.isSpeaking)
 
-            // Focus Status Indicator Overlay (visible when controls and TTS speaking overlay are hidden)
+            // Focus Status Indicator Overlay (visible when controls and TTS speaking overlay are hidden, and Line Focus mode is active)
             VStack {
-                if !showControls && !ttsManager.isSpeaking {
+                if !showControls && !ttsManager.isSpeaking && lineFocusEnabled {
                     ReaderFocusIndicator()
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
                 Spacer()
             }
             .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(true)
+            .allowsHitTesting(!showControls && !ttsManager.isSpeaking && lineFocusEnabled)
             .padding(.top, 12)
         }
         .navigationBarBackButtonHidden(true)
@@ -185,7 +204,6 @@ struct ReaderView: View {
                 lineFocusEnabled: $lineFocusEnabled,
                 lineFocusLines: $lineFocusLines,
                 lineFocusDulling: $lineFocusDulling,
-                readingMode: $readingMode,
                 characterSpacing: $characterSpacing,
                 wordSpacing: $wordSpacing,
                 grainIntensity: $grainIntensity
@@ -202,6 +220,25 @@ struct ReaderView: View {
                 onDismiss: {
                     showChapterList = false
                 }
+            )
+        }
+        .sheet(isPresented: $showLoginSheet) {
+            NovelFireLoginView(onLoginSuccess: {
+                loadNovelFireComments()
+            }, site: commentSite ?? .novelFire)
+        }
+        .sheet(isPresented: $showCommentsSheet) {
+            NovelFireCommentsView(
+                postId: novelfirePostId,
+                chapterId: novelfireChapterId,
+                csrfToken: novelfireCsrfToken,
+                initialCommentsHtml: commentsHtml,
+                initialNextCursor: nextCursor,
+                initialHasMore: hasMoreComments,
+                chapterPath: currentChapterPath,
+                backgroundColorHex: backgroundColorHex,
+                textColorHex: textColorHex,
+                site: commentSite ?? .novelFire
             )
         }
         .task { await loadChapter() }
@@ -259,6 +296,7 @@ struct ReaderView: View {
         .onDisappear {
             ttsManager.stop()
             modelManager.cancelDownload()
+            commentsTask?.cancel()
         }
     }
 
@@ -395,9 +433,132 @@ struct ReaderView: View {
                let chapter = cachedChapters.first(where: { $0.path == currentChapterPath }) {
                 libraryManager.recordHistory(novel: novel, chapter: chapter, context: modelContext)
             }
+            
+            // Fetch NovelFire / NovelPhoenix comments asynchronously
+            if commentSite != nil {
+                loadNovelFireComments()
+            }
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+    
+    private func loadNovelFireComments() {
+        guard let site = commentSite else { return }
+        // Cancel any in-flight fetch from a previous chapter so a slow
+        // response can't overwrite the current chapter's comments.
+        commentsTask?.cancel()
+        self.novelfirePostId = ""
+        self.novelfireChapterId = ""
+        self.novelfireCsrfToken = ""
+        self.commentsHtml = ""
+        self.nextCursor = nil
+        self.hasMoreComments = false
+
+        commentsTask = Task {
+            do {
+                let meta = try await NovelFireCommentsService.shared.fetchChapterMetadata(chapterPath: currentChapterPath, site: site)
+                guard !Task.isCancelled else { return }
+                self.novelfirePostId = meta.postId
+                self.novelfireChapterId = meta.chapterId
+                self.novelfireCsrfToken = meta.csrfToken
+
+                let response = try await NovelFireCommentsService.shared.fetchComments(postId: meta.postId, chapterId: meta.chapterId, site: site)
+                guard !Task.isCancelled else { return }
+                self.commentsHtml = response.html
+                self.nextCursor = response.next_cursor
+                self.hasMoreComments = response.has_more_pages
+            } catch is CancellationError {
+                // Superseded by a newer chapter — ignore.
+            } catch {
+                #if DEBUG
+                print("⚠️ Failed to load \(site.displayName) comments: \(error.localizedDescription)")
+                #endif
+            }
+        }
+    }
+
+    private func loadMoreComments() {
+        guard let site = commentSite,
+              !novelfirePostId.isEmpty && !novelfireChapterId.isEmpty,
+              let cursor = nextCursor else { return }
+        Task {
+            do {
+                let response = try await NovelFireCommentsService.shared.fetchComments(
+                    postId: novelfirePostId,
+                    chapterId: novelfireChapterId,
+                    cursor: cursor,
+                    site: site
+                )
+                self.commentsHtml += response.html
+                self.nextCursor = response.next_cursor
+                self.hasMoreComments = response.has_more_pages
+
+                // Append comments via JS to prevent losing scroll position.
+                // JSON-encode the fragment so quotes/newlines/emoji survive.
+                let encoded: String = {
+                    if let data = try? JSONEncoder().encode(response.html),
+                       let s = String(data: data, encoding: .utf8) { return s }
+                    return "\"\""
+                }()
+                let js = "window.appendComments(\(encoded), \(response.has_more_pages ? "true" : "false"));"
+                _ = try? await ttsBridge.webView?.evaluateJavaScript(js)
+            } catch {
+                #if DEBUG
+                print("⚠️ Failed to load more comments: \(error)")
+                #endif
+            }
+        }
+    }
+
+    private func handleLikeComment(commentId: String) {
+        handleCommentAction(commentId: commentId, isLike: true)
+    }
+
+    private func handleDislikeComment(commentId: String) {
+        handleCommentAction(commentId: commentId, isLike: false)
+    }
+
+    private func handleCommentAction(commentId: String, isLike: Bool) {
+        guard let site = commentSite else { return }
+        if !NovelFireCommentsService.shared.hasSession(for: site) {
+            self.showLoginSheet = true
+            return
+        }
+
+        let csrf = self.novelfireCsrfToken
+        let referer = site.referer(chapterPath: currentChapterPath)
+
+        Task {
+            do {
+                let response: NovelFireCommentsService.ActionResponse
+                if isLike {
+                    response = try await NovelFireCommentsService.shared.likeComment(commentId: commentId, csrfToken: csrf, referer: referer, site: site)
+                } else {
+                    response = try await NovelFireCommentsService.shared.dislikeComment(commentId: commentId, csrfToken: csrf, referer: referer, site: site)
+                }
+
+                // Success! Update WebView UI
+                let js = "window.updateCommentLikes(\"\(commentId)\", \(response.likes), \(response.dislikes), \(isLike ? "true" : "false"));"
+                _ = try? await ttsBridge.webView?.evaluateJavaScript(js)
+            } catch {
+                #if DEBUG
+                print("⚠️ Comment action failed: \(error)")
+                #endif
+                if (error as NSError).code == 419 {
+                    do {
+                        let meta = try await NovelFireCommentsService.shared.fetchChapterMetadata(chapterPath: currentChapterPath, site: site, forceRefresh: true)
+                        self.novelfireCsrfToken = meta.csrfToken
+                        let js = "alert('Session refreshed. Please try liking/disliking again.');"
+                        _ = try? await ttsBridge.webView?.evaluateJavaScript(js)
+                    } catch {
+                        #if DEBUG
+                        print("⚠️ Failed to refresh CSRF token: \(error)")
+                        #endif
+                    }
+                }
+            }
         }
     }
 

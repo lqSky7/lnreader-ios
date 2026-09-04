@@ -9,7 +9,6 @@ struct ReaderSettingsView: View {
     @AppStorage("reader.fontFamily") private var fontFamily = "Georgia"
     @AppStorage("reader.padding") private var horizontalPadding: Double = 16
     @AppStorage("reader.verticalPadding") private var verticalPadding: Double = 20
-    @AppStorage("reader.readingMode") private var readingMode = "scroll"
     @AppStorage("reader.bionicReading") private var bionicReading = false
     @AppStorage("reader.lineFocusEnabled") private var lineFocusEnabled = false
     @AppStorage("reader.lineFocusLines") private var lineFocusLines = 1
@@ -33,7 +32,6 @@ struct ReaderSettingsView: View {
             lineFocusEnabled: $lineFocusEnabled,
             lineFocusLines: $lineFocusLines,
             lineFocusDulling: $lineFocusDulling,
-            readingMode: $readingMode,
             characterSpacing: $characterSpacing,
             wordSpacing: $wordSpacing,
             grainIntensity: $grainIntensity,

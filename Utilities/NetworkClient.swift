@@ -33,6 +33,12 @@ actor NetworkClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 120
+        // Reuse connections + serve registry/plugin JS from cache when possible.
+        config.httpMaximumConnectionsPerHost = 6
+        config.httpShouldUsePipelining = true
+        config.requestCachePolicy = .reloadRevalidatingCacheData
+        config.urlCache = URLCache(memoryCapacity: 8 * 1024 * 1024, diskCapacity: 32 * 1024 * 1024)
+        config.waitsForConnectivity = true
         config.httpAdditionalHeaders = [
             "User-Agent": "LNReader-iOS/1.0"
         ]

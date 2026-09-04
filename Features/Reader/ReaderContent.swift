@@ -18,15 +18,19 @@ import WebKit
         let lineFocusEnabled: Bool
         let lineFocusLines: Int
         let lineFocusDulling: String
-        let readingMode: String
         let showControls: Bool
         let bridge: ReaderContentBridge
         let baseURL: URL?
         let characterSpacing: Double
         let wordSpacing: Double
         let grainIntensity: Double
+        let commentsHtml: String
+        let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
         var onParagraphTap: ((Int) -> Void)? = nil
+        var onLoadMoreComments: (() -> Void)? = nil
+        var onLikeComment: ((String) -> Void)? = nil
+        var onDislikeComment: ((String) -> Void)? = nil
 
         class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
             var parent: ReaderContent?
@@ -46,11 +50,12 @@ import WebKit
             var loadedLineFocusEnabled: Bool?
             var loadedLineFocusLines: Int?
             var loadedLineFocusDulling: String?
-            var loadedReadingMode: String?
             var loadedShowControls: Bool?
             var loadedCharacterSpacing: Double?
             var loadedWordSpacing: Double?
             var loadedGrainIntensity: Double?
+            var loadedCommentsHtml: String?
+            var loadedHasMoreComments: Bool?
 
             init(onTap: (() -> Void)?, bridge: ReaderContentBridge?) {
                 self.onTap = onTap
@@ -82,6 +87,20 @@ import WebKit
                     DispatchQueue.main.async { [weak self] in
                         self?.onTap?()
                     }
+                } else if message.name == "loadMoreComments" {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.parent?.onLoadMoreComments?()
+                    }
+                } else if message.name == "likeComment",
+                          let commentId = message.body as? String {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.parent?.onLikeComment?(commentId)
+                    }
+                } else if message.name == "dislikeComment",
+                          let commentId = message.body as? String {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.parent?.onDislikeComment?(commentId)
+                    }
                 }
             }
         }
@@ -98,6 +117,9 @@ import WebKit
             userContentController.add(helper, name: "scrollParagraph")
             userContentController.add(helper, name: "jsError")
             userContentController.add(helper, name: "toggleControls")
+            userContentController.add(helper, name: "loadMoreComments")
+            userContentController.add(helper, name: "likeComment")
+            userContentController.add(helper, name: "dislikeComment")
             config.userContentController = userContentController
 
             let webView = WKWebView(frame: .zero, configuration: config)
@@ -123,13 +145,12 @@ import WebKit
             let uiColor = UIColor(hex: backgroundColorHex) ?? .systemBackground
             webView.backgroundColor = uiColor
             webView.scrollView.backgroundColor = uiColor
-            webView.isOpaque = true
-            webView.scrollView.isScrollEnabled = readingMode != "paged"
+            webView.scrollView.isScrollEnabled = true
             #endif
             
             let contentChanged = context.coordinator.loadedHtmlContent != htmlContent ||
-                                 context.coordinator.loadedBionicReading != bionicReading ||
-                                 context.coordinator.loadedReadingMode != readingMode
+                                 context.coordinator.loadedBionicReading != bionicReading
+            let commentsChanged = context.coordinator.loadedCommentsHtml != commentsHtml
             let styleChanged = context.coordinator.loadedFontSize != fontSize ||
                                context.coordinator.loadedLineHeight != lineHeight ||
                                context.coordinator.loadedFontFamily != fontFamily ||
@@ -144,19 +165,23 @@ import WebKit
                                context.coordinator.loadedWordSpacing != wordSpacing ||
                                context.coordinator.loadedGrainIntensity != grainIntensity
             
+            #if DEBUG
             print("🔊 [ReaderContent] updateUIView. loadedHtmlContentIsNil: \(context.coordinator.loadedHtmlContent == nil), contentChanged: \(contentChanged), styleChanged: \(styleChanged)")
+            #endif
             if contentChanged {
                 if context.coordinator.loadedHtmlContent != htmlContent {
+                    #if DEBUG
                     print("🔊   -> htmlContent changed! (\(context.coordinator.loadedHtmlContent?.count ?? 0) chars -> \(htmlContent.count) chars)")
+                    #endif
                 }
                 if context.coordinator.loadedBionicReading != bionicReading {
+                    #if DEBUG
                     print("🔊   -> bionicReading changed! (\(String(describing: context.coordinator.loadedBionicReading)) -> \(bionicReading))")
-                }
-                if context.coordinator.loadedReadingMode != readingMode {
-                    print("🔊   -> readingMode changed! (\(String(describing: context.coordinator.loadedReadingMode)) -> \(readingMode))")
+                    #endif
                 }
             }
             if styleChanged {
+                #if DEBUG
                 if context.coordinator.loadedFontSize != fontSize {
                     print("🔊   -> fontSize changed! (\(String(describing: context.coordinator.loadedFontSize)) -> \(fontSize))")
                 }
@@ -196,14 +221,16 @@ import WebKit
                 if context.coordinator.loadedGrainIntensity != grainIntensity {
                     print("🔊   -> grainIntensity changed! (\(String(describing: context.coordinator.loadedGrainIntensity)) -> \(grainIntensity))")
                 }
+                #endif
             }
             
-            if contentChanged || context.coordinator.loadedHtmlContent == nil {
+            if contentChanged || context.coordinator.loadedHtmlContent == nil || (commentsChanged && context.coordinator.loadedCommentsHtml == nil) {
                 bridge.contentDidChange()
-                let html = readerHTML(content: htmlContent)
+                let html = readerHTML(content: htmlContent, comments: commentsHtml)
                 webView.loadHTMLString(html, baseURL: baseURL)
                 
                 context.coordinator.loadedHtmlContent = htmlContent
+                context.coordinator.loadedCommentsHtml = commentsHtml
                 context.coordinator.loadedFontSize = fontSize
                 context.coordinator.loadedLineHeight = lineHeight
                 context.coordinator.loadedFontFamily = fontFamily
@@ -215,11 +242,12 @@ import WebKit
                 context.coordinator.loadedLineFocusEnabled = lineFocusEnabled
                 context.coordinator.loadedLineFocusLines = lineFocusLines
                 context.coordinator.loadedLineFocusDulling = lineFocusDulling
-                context.coordinator.loadedReadingMode = readingMode
                 context.coordinator.loadedShowControls = showControls
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+            } else if commentsChanged {
+                context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
                 let resolvedBg = backgroundColorHex.isEmpty ? "" : backgroundColorHex
                 let resolvedText = textColorHex.isEmpty ? "" : textColorHex
@@ -237,15 +265,9 @@ import WebKit
                 document.body.style.lineHeight = '\(lineHeight)';
                 document.body.style.letterSpacing = '\(characterSpacing / 100.0)em';
                 document.body.style.wordSpacing = '\(wordSpacing / 100.0)em';
-                if ('\(readingMode)' !== 'paged') {
-                    document.body.style.padding = '\(topOffset)px \(horizontalPadding)px \(bottomOffset)px';
-                    document.body.style.overflow = 'visible';
-                    document.body.style.height = 'auto';
-                } else {
-                    document.body.style.padding = '0px';
-                    document.body.style.overflow = 'hidden';
-                    document.body.style.height = '100vh';
-                }
+                document.body.style.padding = '\(topOffset)px \(horizontalPadding)px \(bottomOffset)px';
+                document.body.style.overflow = 'visible';
+                document.body.style.height = 'auto';
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
@@ -260,38 +282,6 @@ import WebKit
                 if (grain) {
                     grain.style.opacity = '\(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0)';
                 }
-                
-                var pagedContent = document.getElementById("paged-content");
-                if (pagedContent) {
-                    pagedContent.style.top = '\(topOffset)px';
-                    pagedContent.style.bottom = '\(bottomOffset)px';
-                    pagedContent.style.columnWidth = 'calc(100vw - \(2 * horizontalPadding)px)';
-                    pagedContent.style.columnGap = '\(2 * horizontalPadding)px';
-                    pagedContent.style.paddingLeft = '\(horizontalPadding)px';
-                    pagedContent.style.paddingRight = '\(horizontalPadding)px';
-                }
-                
-                // Recalculate columns and restore alignment after layout reflow
-                setTimeout(function() {
-                    var content = document.getElementById("paged-content");
-                    if (content) {
-                        pageWidth = window.innerWidth;
-                        totalPages = Math.max(1, Math.ceil(content.scrollWidth / pageWidth));
-                        if (window.__restoreIndex !== undefined) {
-                            var target = document.querySelector('[data-tts-index="' + window.__restoreIndex + '"]');
-                            if (target) {
-                                currentPage = Math.floor(target.offsetLeft / pageWidth);
-                            }
-                        }
-                        if (currentPage >= totalPages) {
-                            currentPage = totalPages - 1;
-                        }
-                        if (currentPage < 0) {
-                            currentPage = 0;
-                        }
-                        updatePage();
-                    }
-                }, 100);
                 """
                 webView.evaluateJavaScript(js)
                 
@@ -325,13 +315,14 @@ import WebKit
             lhs.lineFocusEnabled == rhs.lineFocusEnabled &&
             lhs.lineFocusLines == rhs.lineFocusLines &&
             lhs.lineFocusDulling == rhs.lineFocusDulling &&
-            lhs.readingMode == rhs.readingMode &&
             lhs.showControls == rhs.showControls &&
             lhs.bridge === rhs.bridge &&
             lhs.baseURL == rhs.baseURL &&
             lhs.characterSpacing == rhs.characterSpacing &&
             lhs.wordSpacing == rhs.wordSpacing &&
-            lhs.grainIntensity == rhs.grainIntensity
+            lhs.grainIntensity == rhs.grainIntensity &&
+            lhs.commentsHtml == rhs.commentsHtml &&
+            lhs.hasMoreComments == rhs.hasMoreComments
         }
     }
 #else
@@ -348,15 +339,19 @@ import WebKit
         let lineFocusEnabled: Bool
         let lineFocusLines: Int
         let lineFocusDulling: String
-        let readingMode: String
         let showControls: Bool
         let bridge: ReaderContentBridge
         let baseURL: URL?
         let characterSpacing: Double
         let wordSpacing: Double
         let grainIntensity: Double
+        let commentsHtml: String
+        let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
         var onParagraphTap: ((Int) -> Void)? = nil
+        var onLoadMoreComments: (() -> Void)? = nil
+        var onLikeComment: ((String) -> Void)? = nil
+        var onDislikeComment: ((String) -> Void)? = nil
 
         class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
             var loadedHtmlContent: String?
@@ -371,14 +366,16 @@ import WebKit
             var loadedLineFocusEnabled: Bool?
             var loadedLineFocusLines: Int?
             var loadedLineFocusDulling: String?
-            var loadedReadingMode: String?
             var loadedShowControls: Bool?
             var loadedCharacterSpacing: Double?
             var loadedWordSpacing: Double?
             var loadedGrainIntensity: Double?
+            var loadedCommentsHtml: String?
+            var loadedHasMoreComments: Bool?
             weak var bridge: ReaderContentBridge?
             var onParagraphTap: ((Int) -> Void)?
             var onTap: (() -> Void)?
+            var parent: ReaderContent?
 
             func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
                 bridge?.contentDidFinishLoad()
@@ -401,6 +398,20 @@ import WebKit
                     DispatchQueue.main.async { [weak self] in
                         self?.onTap?()
                     }
+                } else if message.name == "loadMoreComments" {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.parent?.onLoadMoreComments?()
+                    }
+                } else if message.name == "likeComment",
+                          let commentId = message.body as? String {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.parent?.onLikeComment?(commentId)
+                    }
+                } else if message.name == "dislikeComment",
+                          let commentId = message.body as? String {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.parent?.onDislikeComment?(commentId)
+                    }
                 }
             }
         }
@@ -418,6 +429,9 @@ import WebKit
             userContentController.add(helper, name: "tapParagraph")
             userContentController.add(helper, name: "scrollParagraph")
             userContentController.add(helper, name: "toggleControls")
+            userContentController.add(helper, name: "loadMoreComments")
+            userContentController.add(helper, name: "likeComment")
+            userContentController.add(helper, name: "dislikeComment")
             config.userContentController = userContentController
 
             let webView = WKWebView(frame: .zero, configuration: config)
@@ -427,13 +441,14 @@ import WebKit
         }
 
         func updateNSView(_ webView: WKWebView, context: Context) {
+            context.coordinator.parent = self
             context.coordinator.bridge = bridge
             context.coordinator.onParagraphTap = onParagraphTap
             context.coordinator.onTap = onTap
             
             let contentChanged = context.coordinator.loadedHtmlContent != htmlContent ||
-                                 context.coordinator.loadedBionicReading != bionicReading ||
-                                 context.coordinator.loadedReadingMode != readingMode
+                                 context.coordinator.loadedBionicReading != bionicReading
+            let commentsChanged = context.coordinator.loadedCommentsHtml != commentsHtml
             let styleChanged = context.coordinator.loadedFontSize != fontSize ||
                                context.coordinator.loadedLineHeight != lineHeight ||
                                context.coordinator.loadedFontFamily != fontFamily ||
@@ -448,12 +463,13 @@ import WebKit
                                context.coordinator.loadedWordSpacing != wordSpacing ||
                                context.coordinator.loadedGrainIntensity != grainIntensity
             
-            if contentChanged || context.coordinator.loadedHtmlContent == nil {
+            if contentChanged || context.coordinator.loadedHtmlContent == nil || (commentsChanged && context.coordinator.loadedCommentsHtml == nil) {
                 bridge.contentDidChange()
-                let html = readerHTML(content: htmlContent)
+                let html = readerHTML(content: htmlContent, comments: commentsHtml)
                 webView.loadHTMLString(html, baseURL: baseURL)
                 
                 context.coordinator.loadedHtmlContent = htmlContent
+                context.coordinator.loadedCommentsHtml = commentsHtml
                 context.coordinator.loadedFontSize = fontSize
                 context.coordinator.loadedLineHeight = lineHeight
                 context.coordinator.loadedFontFamily = fontFamily
@@ -465,11 +481,12 @@ import WebKit
                 context.coordinator.loadedLineFocusEnabled = lineFocusEnabled
                 context.coordinator.loadedLineFocusLines = lineFocusLines
                 context.coordinator.loadedLineFocusDulling = lineFocusDulling
-                context.coordinator.loadedReadingMode = readingMode
                 context.coordinator.loadedShowControls = showControls
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+            } else if commentsChanged {
+                context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
                 let resolvedBg = backgroundColorHex.isEmpty ? "" : backgroundColorHex
                 let resolvedText = textColorHex.isEmpty ? "" : textColorHex
@@ -487,15 +504,9 @@ import WebKit
                 document.body.style.lineHeight = '\(lineHeight)';
                 document.body.style.letterSpacing = '\(characterSpacing / 100.0)em';
                 document.body.style.wordSpacing = '\(wordSpacing / 100.0)em';
-                if ('\(readingMode)' !== 'paged') {
-                    document.body.style.padding = '\(topOffset)px \(horizontalPadding)px \(bottomOffset)px';
-                    document.body.style.overflow = 'visible';
-                    document.body.style.height = 'auto';
-                } else {
-                    document.body.style.padding = '0px';
-                    document.body.style.overflow = 'hidden';
-                    document.body.style.height = '100vh';
-                }
+                document.body.style.padding = '\(topOffset)px \(horizontalPadding)px \(bottomOffset)px';
+                document.body.style.overflow = 'visible';
+                document.body.style.height = 'auto';
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
@@ -510,38 +521,6 @@ import WebKit
                 if (grain) {
                     grain.style.opacity = '\(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0)';
                 }
-                
-                var pagedContent = document.getElementById("paged-content");
-                if (pagedContent) {
-                    pagedContent.style.top = '\(topOffset)px';
-                    pagedContent.style.bottom = '\(bottomOffset)px';
-                    pagedContent.style.columnWidth = 'calc(100vw - \(2 * horizontalPadding)px)';
-                    pagedContent.style.columnGap = '\(2 * horizontalPadding)px';
-                    pagedContent.style.paddingLeft = '\(horizontalPadding)px';
-                    pagedContent.style.paddingRight = '\(horizontalPadding)px';
-                }
-                
-                // Recalculate columns and restore alignment after layout reflow
-                setTimeout(function() {
-                    var content = document.getElementById("paged-content");
-                    if (content) {
-                        pageWidth = window.innerWidth;
-                        totalPages = Math.max(1, Math.ceil(content.scrollWidth / pageWidth));
-                        if (window.__restoreIndex !== undefined) {
-                            var target = document.querySelector('[data-tts-index="' + window.__restoreIndex + '"]');
-                            if (target) {
-                                currentPage = Math.floor(target.offsetLeft / pageWidth);
-                            }
-                        }
-                        if (currentPage >= totalPages) {
-                            currentPage = totalPages - 1;
-                        }
-                        if (currentPage < 0) {
-                            currentPage = 0;
-                        }
-                        updatePage();
-                    }
-                }, 100);
                 """
                 webView.evaluateJavaScript(js)
                 
@@ -575,13 +554,14 @@ import WebKit
             lhs.lineFocusEnabled == rhs.lineFocusEnabled &&
             lhs.lineFocusLines == rhs.lineFocusLines &&
             lhs.lineFocusDulling == rhs.lineFocusDulling &&
-            lhs.readingMode == rhs.readingMode &&
             lhs.showControls == rhs.showControls &&
             lhs.bridge === rhs.bridge &&
             lhs.baseURL == rhs.baseURL &&
             lhs.characterSpacing == rhs.characterSpacing &&
             lhs.wordSpacing == rhs.wordSpacing &&
-            lhs.grainIntensity == rhs.grainIntensity
+            lhs.grainIntensity == rhs.grainIntensity &&
+            lhs.commentsHtml == rhs.commentsHtml &&
+            lhs.hasMoreComments == rhs.hasMoreComments
         }
     }
 #endif
@@ -589,7 +569,7 @@ import WebKit
 // MARK: - HTML Template
 
 extension ReaderContent {
-    func readerHTML(content: String) -> String {
+    func readerHTML(content: String, comments: String = "") -> String {
         let resolvedBg = backgroundColorHex.isEmpty ? "transparent" : backgroundColorHex
         let resolvedText = textColorHex.isEmpty ? "#2c2c2e" : textColorHex
 
@@ -603,6 +583,26 @@ extension ReaderContent {
 
         let topOffset = 70.0 + verticalPadding
         let bottomOffset = verticalPadding
+
+        var commentsSection = ""
+        if !comments.isEmpty {
+            commentsSection = """
+            <hr class="comments-divider">
+            <div id="lnw-comments-section" class="skiptranslate">
+                <div class="comments-header">
+                    <h3>User Comments</h3>
+                </div>
+                <div class="comment-wrapper">
+                    <ul>
+                        \(comments)
+                    </ul>
+                </div>
+                <div class="comments-footer">
+                    <button id="lmcomments" class="button \(hasMoreComments ? "" : "d-none")" onclick="loadMoreComments()">Load More Comments</button>
+                </div>
+            </div>
+            """
+        }
 
         return """
             <!DOCTYPE html>
@@ -621,15 +621,15 @@ extension ReaderContent {
                 line-height: \(lineHeight);
                 letter-spacing: \(characterSpacing / 100.0)em;
                 word-spacing: \(wordSpacing / 100.0)em;
-                padding: \(readingMode == "paged" ? "0" : "\(topOffset)px \(horizontalPadding)px \(bottomOffset)px");
+                padding: \(topOffset)px \(horizontalPadding)px \(bottomOffset)px;
                 color: \(resolvedText);
                 background: \(resolvedBg);
                 -webkit-font-smoothing: antialiased;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 position: relative;
-                overflow: \(readingMode == "paged" ? "hidden" : "visible");
-                height: \(readingMode == "paged" ? "100vh" : "auto");
+                overflow: visible;
+                height: auto;
             }
             \(darkMediaQuery)
             p {
@@ -699,38 +699,246 @@ extension ReaderContent {
                 background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
                 mix-blend-mode: overlay;
             }
-            #paged-wrapper {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                overflow: hidden;
-                background: rgba(0, 0, 0, 0.0001);
-                display: \(readingMode == "paged" ? "block" : "none");
-                z-index: 1;
+
+            /* Comments Section CSS */
+            hr.comments-divider {
+                border: none;
+                border-top: 1px solid rgba(128, 128, 128, 0.2);
+                margin: 3em 0 2em;
             }
-            #paged-content {
-                position: absolute;
-                top: \(topOffset)px;
-                bottom: \(bottomOffset)px;
-                left: 0;
+            #lnw-comments-section {
+                padding: 0 0 4em;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                font-size: 15px;
+                line-height: 1.5;
+            }
+            .comments-header h3 {
+                font-size: 1.3em;
+                font-weight: bold;
+                margin-bottom: 1.5em;
+                opacity: 0.9;
+            }
+            .comment-wrapper ul {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+            .comment-wrapper li {
+                margin-bottom: 1.5em;
+                padding-bottom: 1.5em;
+                border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+            }
+            .comment-wrapper li:last-child {
+                border-bottom: none;
+            }
+            .comment-item {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .comment-header {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                overflow: hidden;
+                background: rgba(128, 128, 128, 0.1);
+            }
+            .user-avatar img.avatar {
                 width: 100%;
-                column-width: calc(100vw - 2 * \(horizontalPadding)px);
-                column-gap: calc(2 * \(horizontalPadding)px);
-                column-fill: auto;
-                transition: transform 0.4s cubic-bezier(0.15, 0.85, 0.35, 1);
-                will-change: transform;
-                padding-left: \(horizontalPadding)px;
-                padding-right: \(horizontalPadding)px;
-                box-sizing: border-box;
-                display: \(readingMode == "paged" ? "block" : "none");
-                column-rule: 1px solid rgba(212, 165, 116, 0.15);
+                height: 100%;
+                object-fit: cover;
+                margin: 0;
+                border-radius: 0;
+            }
+            .user-info {
+                display: flex;
+                flex-direction: column;
+            }
+            .head-items {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .username {
+                font-weight: 600;
+                color: inherit;
+                opacity: 0.95;
+                font-size: 14px;
+            }
+            .tier {
+                font-size: 10px;
+                background: rgba(128, 128, 128, 0.15);
+                padding: 2px 6px;
+                border-radius: 4px;
+                opacity: 0.7;
+                text-transform: uppercase;
+                font-weight: bold;
+                letter-spacing: 0.5px;
+            }
+            .post-date {
+                font-size: 12px;
+                opacity: 0.5;
+                margin-left: auto;
+            }
+            .comment-body {
+                padding-left: 0;
+            }
+            .comment-text {
+                font-size: 14.5px;
+                opacity: 0.9;
+                word-break: break-word;
+            }
+            .comment-text p {
+                margin-bottom: 0.5em;
+                text-align: left;
+            }
+            .comment-text p:last-child {
+                margin-bottom: 0;
+            }
+            .comment-text[data-spoiler="1"] {
+                background: rgba(128, 128, 128, 0.1);
+                color: transparent !important;
+                text-shadow: 0 0 8px rgba(128, 128, 128, 0.8);
+                cursor: pointer;
+                border-radius: 4px;
+                padding: 4px 8px;
+                user-select: none;
+            }
+            .comment-text[data-spoiler="1"] * {
+                color: transparent !important;
+            }
+            .comment-text[data-spoiler="1"]::before {
+                content: "Spoiler Warning (Tap to reveal)";
+                display: block;
+                color: #e53e3e !important;
+                font-weight: bold;
+                font-size: 12px;
+                margin-bottom: 4px;
+                text-shadow: none;
+            }
+            .comment-text[data-spoiler="1"].revealed {
+                background: transparent;
+                color: inherit !important;
+                text-shadow: none;
+                user-select: auto;
+                padding: 0;
+            }
+            .comment-text[data-spoiler="1"].revealed * {
+                color: inherit !important;
+            }
+            .comment-text[data-spoiler="1"].revealed::before {
+                display: none;
+            }
+            .toolbar {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-top: 6px;
+                font-size: 12px;
+                opacity: 0.7;
+            }
+            .toolbar a.reply, .toolbar button.btn-report, .toolbar .reportComment {
+                background: none;
+                border: none;
+                color: inherit;
+                font-family: inherit;
+                font-size: inherit;
+                cursor: pointer;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                text-decoration: none;
+            }
+            .toolbar .divider {
+                width: 1px;
+                height: 12px;
+                background: rgba(128, 128, 128, 0.2);
+            }
+            .toolbar .spacer {
+                margin-left: auto;
+            }
+            .usrlike {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .like-group, .dislike-group {
+                display: flex;
+                align-items: center;
+            }
+            .like-button, .dislike-button {
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 4px 8px;
+                border-radius: 4px;
+                background: rgba(128, 128, 128, 0.08);
+                transition: background 0.2s, color 0.2s;
+            }
+            .like-button:hover, .dislike-button:hover {
+                background: rgba(128, 128, 128, 0.15);
+            }
+            .like-button.checked {
+                color: #3182ce !important;
+                background: rgba(49, 130, 206, 0.15);
+            }
+            .dislike-button.checked {
+                color: #e53e3e !important;
+                background: rgba(229, 62, 62, 0.15);
+            }
+            .reply-comments {
+                margin-left: 20px;
+                padding-left: 14px;
+                border-left: 2px solid rgba(128, 128, 128, 0.15);
+                margin-top: 1em;
+            }
+            .parent-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                opacity: 0.6;
+                margin-left: 4px;
+            }
+            .parent-link a {
+                color: inherit;
+                text-decoration: underline;
+            }
+            .comments-footer {
+                display: flex;
+                justify-content: center;
+                margin-top: 2em;
+            }
+            button#lmcomments {
+                border: none;
+                font-family: inherit;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 10px 24px;
+                border-radius: 20px;
+                background: rgba(128, 128, 128, 0.1);
+                color: inherit;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            button#lmcomments:hover {
+                background: rgba(128, 128, 128, 0.2);
+            }
+            .d-none {
+                display: none !important;
             }
             </style>
             </head>
             <body>
-            \(readingMode == "paged" ? "<div id=\"paged-wrapper\"><div id=\"paged-content\">\(content)</div></div>" : content)
+            \(content)
+            \(commentsSection)
             <div id="tts-dot"></div>
             <div id="line-focus-ruler"></div>
             <div id="paper-grain-overlay"></div>
@@ -744,6 +952,94 @@ extension ReaderContent {
             };
             </script>
             <script>
+            window.loadMoreComments = function() {
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.loadMoreComments) {
+                    window.webkit.messageHandlers.loadMoreComments.postMessage("");
+                }
+            }
+
+            window.appendComments = function(newHtml, hasMore) {
+                var container = document.querySelector(".comment-wrapper > ul");
+                if (container) {
+                    container.insertAdjacentHTML('beforeend', newHtml);
+                }
+                var loadMoreBtn = document.getElementById("lmcomments");
+                if (loadMoreBtn) {
+                    if (hasMore) {
+                        loadMoreBtn.classList.remove("d-none");
+                    } else {
+                        loadMoreBtn.classList.add("d-none");
+                    }
+                }
+                window.initSpoilers();
+            }
+
+            window.initSpoilers = function() {
+                var spoilers = document.querySelectorAll('.comment-text[data-spoiler="1"]');
+                spoilers.forEach(function(el) {
+                    if (!el.classList.contains('has-spoiler-click')) {
+                        el.classList.add('has-spoiler-click');
+                        el.addEventListener('click', function() {
+                            el.classList.add('revealed');
+                            el.setAttribute('data-spoiler', '0');
+                        });
+                    }
+                });
+            }
+
+            // Hook up like and dislike handlers
+            document.addEventListener("click", function(e) {
+                var likeBtn = e.target.closest(".like-button");
+                if (likeBtn) {
+                    var commentId = likeBtn.getAttribute("data-comment-id");
+                    if (commentId && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.likeComment) {
+                        window.webkit.messageHandlers.likeComment.postMessage(commentId);
+                    }
+                    return;
+                }
+                
+                var dislikeBtn = e.target.closest(".dislike-button");
+                if (dislikeBtn) {
+                    var commentId = dislikeBtn.getAttribute("data-comment-id");
+                    if (commentId && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.dislikeComment) {
+                        window.webkit.messageHandlers.dislikeComment.postMessage(commentId);
+                    }
+                    return;
+                }
+            });
+
+            window.updateCommentLikes = function(commentId, likes, dislikes, isLikeAction) {
+                var commentEl = document.getElementById("lnw-comment-" + commentId);
+                if (!commentEl) return;
+                
+                var likeBtn = commentEl.querySelector(".like-button");
+                var dislikeBtn = commentEl.querySelector(".dislike-button");
+                
+                if (likeBtn) {
+                    var countSpan = likeBtn.querySelector("span");
+                    if (countSpan) countSpan.innerText = likes;
+                    if (isLikeAction) {
+                        likeBtn.classList.toggle("checked");
+                        if (dislikeBtn) dislikeBtn.classList.remove("checked");
+                    }
+                }
+                if (dislikeBtn) {
+                    var countSpan = dislikeBtn.querySelector("span");
+                    if (countSpan) countSpan.innerText = dislikes;
+                    if (!isLikeAction) {
+                        dislikeBtn.classList.toggle("checked");
+                        if (likeBtn) likeBtn.classList.remove("checked");
+                    }
+                }
+            }
+
+            // Trigger initial spoiler init
+            window.addEventListener("DOMContentLoaded", function() {
+                window.initSpoilers();
+            });
+            window.initSpoilers();
+            </script>
+            <script>
             \(getTTSJavaScriptSource())
             </script>
             </body>
@@ -754,149 +1050,19 @@ extension ReaderContent {
     func getTTSJavaScriptSource() -> String {
         let resolvedBionic = bionicReading ? "true" : "false"
         return """
-        var currentPage = 0;
-        var totalPages = 1;
-        var pageWidth = window.innerWidth;
-
-        window.initPagedReader = function() {
-            var content = document.getElementById("paged-content");
-            if (!content) return;
-            pageWidth = window.innerWidth;
-            totalPages = Math.max(1, Math.ceil(content.scrollWidth / pageWidth));
-            
-            window.addEventListener("resize", function() {
-                pageWidth = window.innerWidth;
-                totalPages = Math.max(1, Math.ceil(content.scrollWidth / pageWidth));
-                if (currentPage >= totalPages) {
-                    currentPage = totalPages - 1;
-                }
-                window.updatePage();
-            });
-            
-            setTimeout(function() {
-                totalPages = Math.max(1, Math.ceil(content.scrollWidth / pageWidth));
-                if (window.__restoreIndex !== undefined) {
-                    window.scrollToParagraph(window.__restoreIndex);
-                }
-            }, 100);
-        }
-        
-        window.updatePage = function() {
-            var content = document.getElementById("paged-content");
-            if (!content) return;
-            var translateX = -currentPage * pageWidth;
-            content.style.transform = "translate3d(" + translateX + "px, 0, 0)";
-            
-            if (window.__restoreIndex !== undefined) {
-                setTimeout(function() {
-                    var target = document.querySelector('[data-tts-index="' + window.__restoreIndex + '"]');
-                    var dot = window.ensureDot();
-                    if (target && dot) {
-                        var rect = target.getBoundingClientRect();
-                        var x = rect.left + window.scrollX - 10;
-                        var y = rect.top + window.scrollY + 8;
-                        if (x < 6) { x = 6; }
-                        dot.style.transform = "translate(" + x + "px, " + y + "px)";
-                        if (target.classList.contains("tts-active")) {
-                            dot.style.opacity = 1;
-                        } else {
-                            dot.style.opacity = 0;
-                        }
-                    }
-                }, 100);
-            }
-        }
-
-        window.nextPage = function() {
-            var content = document.getElementById("paged-content");
-            if (!content) return;
-            pageWidth = window.innerWidth;
-            totalPages = Math.max(1, Math.ceil(content.scrollWidth / pageWidth));
-            if (currentPage < totalPages - 1) {
-                currentPage++;
-                content.style.transition = "transform 0.4s cubic-bezier(0.15, 0.85, 0.35, 1)";
-                window.updatePage();
-                window.updateReadingProgressForPage(currentPage);
-            }
-        };
-
-        window.prevPage = function() {
-            var content = document.getElementById("paged-content");
-            if (!content) return;
-            pageWidth = window.innerWidth;
-            totalPages = Math.max(1, Math.ceil(content.scrollWidth / pageWidth));
-            if (currentPage > 0) {
-                currentPage--;
-                content.style.transition = "transform 0.4s cubic-bezier(0.15, 0.85, 0.35, 1)";
-                window.updatePage();
-                window.updateReadingProgressForPage(currentPage);
-            }
-        };
-
-        window.updateReadingProgressForPage = function(page) {
-            var paragraphs = window.getParagraphs();
-            
-            // First try to find the first paragraph that actually starts on this page
-            for (var i = 0; i < paragraphs.length; i++) {
-                var node = paragraphs[i];
-                var pPage = Math.floor(node.offsetLeft / pageWidth);
-                if (pPage === page) {
-                    var indexAttr = node.getAttribute("data-tts-index");
-                    if (indexAttr) {
-                        var index = parseInt(indexAttr);
-                        if (index >= 0 && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph) {
-                            window.__restoreIndex = index;
-                            window.webkit.messageHandlers.scrollParagraph.postMessage(String(index));
-                            return;
-                        }
-                    }
-                }
-            }
-
-            // Fallback: use elementFromPoint to find whatever paragraph is at the top of the page
-            var x = \(horizontalPadding) + 20;
-            var y = 70.0 + \(verticalPadding) + 20;
-            var element = document.elementFromPoint(x, y);
-            var paragraph = element ? element.closest('p, h1, h2, h3, h4, h5, h6, li') : null;
-            
-            if (!paragraph && element) {
-                element = document.elementFromPoint(x + 50, y + 50);
-                paragraph = element ? element.closest('p, h1, h2, h3, h4, h5, h6, li') : null;
-            }
-            
-            if (paragraph) {
-                var indexAttr = paragraph.getAttribute("data-tts-index");
-                if (indexAttr) {
-                    var index = parseInt(indexAttr);
-                    if (index >= 0 && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph) {
-                        window.__restoreIndex = index;
-                        window.webkit.messageHandlers.scrollParagraph.postMessage(String(index));
-                        return;
-                    }
-                }
-            }
-        };
-
         window.scrollToParagraph = function(index) {
             var target = document.querySelector('[data-tts-index="' + index + '"]');
             if (!target) return;
             window.__restoreIndex = index;
-            if ('\(readingMode)' === 'paged') {
-                 var page = Math.floor(target.offsetLeft / pageWidth);
-                 currentPage = page;
-                 var content = document.getElementById("paged-content");
-                 if (content) {
-                     content.style.transition = "none";
-                 }
-                 window.updatePage();
-            } else {
-                target.scrollIntoView({ behavior: 'auto', block: 'center' });
-            }
+            target.scrollIntoView({ behavior: 'auto', block: 'center' });
         }
 
         window.getParagraphs = function() {
             if (!window.__cachedParagraphs) {
-                window.__cachedParagraphs = Array.from(document.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li"));
+                var allNodes = Array.from(document.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li"));
+                window.__cachedParagraphs = allNodes.filter(function(node) {
+                    return !node.closest("#lnw-comments-section");
+                });
             }
             return window.__cachedParagraphs;
         }
@@ -1020,9 +1186,6 @@ extension ReaderContent {
             }
             window.collectBlocks();
             window.ensureDot();
-            if ('\(readingMode)' === 'paged') {
-                window.initPagedReader();
-            }
         };
 
         window.getTTSBlocks = function() {
@@ -1052,20 +1215,8 @@ extension ReaderContent {
             }
             target.classList.add("tts-active");
             window.__restoreIndex = index;
-            if ('\(readingMode)' === 'paged') {
-                var page = Math.floor(target.offsetLeft / pageWidth);
-                if (page !== currentPage) {
-                    currentPage = page;
-                    var content = document.getElementById("paged-content");
-                    if (content) {
-                        content.style.transition = "transform 0.4s cubic-bezier(0.15, 0.85, 0.35, 1)";
-                    }
-                    window.updatePage();
-                }
-            } else {
-                if (!window.isElementVisible(target)) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
+            if (!window.isElementVisible(target)) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
             if (dot) {
                 var rect = target.getBoundingClientRect();
@@ -1089,7 +1240,6 @@ extension ReaderContent {
         };
 
         window.addEventListener("scroll", function() {
-            if ('\(readingMode)' === 'paged') return;
             if (window.__scrollTimeout) {
                 clearTimeout(window.__scrollTimeout);
             }
@@ -1103,7 +1253,7 @@ extension ReaderContent {
                         var indexAttr = node.getAttribute("data-tts-index");
                         if (indexAttr) {
                             var index = parseInt(indexAttr);
-                            if (index >= 0 && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph) {
+                            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph) {
                                 window.webkit.messageHandlers.scrollParagraph.postMessage(String(index));
                             }
                             break;
@@ -1144,71 +1294,21 @@ extension ReaderContent {
                 return;
             }
 
-            // Swipe detection (horizontal only)
-            if (Math.abs(diffX) > 40 && Math.abs(diffY) < 40 && elapsed < 300) {
-                if ('\(readingMode)' === 'paged') {
-                    if (diffX < 0) {
-                        window.nextPage();
-                    } else {
-                        window.prevPage();
-                    }
-                }
-                return;
-            }
-
             // Tap detection
             if (Math.abs(diffX) < 8 && Math.abs(diffY) < 8 && elapsed < 300) {
-                if ('\(readingMode)' === 'paged') {
-                    var width = window.innerWidth;
-                    var x = e.clientX;
-                    if (x < width * 0.25) {
-                        window.prevPage();
-                    } else if (x > width * 0.75) {
-                        window.nextPage();
-                    } else {
-                        // Tapped the middle portion
-                        var paragraph = e.target.closest('p, h1, h2, h3, h4, h5, h6, li');
-                        if (paragraph) {
-                            var indexAttr = paragraph.getAttribute("data-tts-index");
-                            if (indexAttr && indexAttr !== "-1") {
-                                var index = parseInt(indexAttr);
-                                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tapParagraph) {
-                                    window.webkit.messageHandlers.tapParagraph.postMessage(String(index));
-                                }
-                            }
+                // Scroll mode: tap toggles controls, or triggers tapParagraph if on a paragraph
+                var paragraph = e.target.closest('p, h1, h2, h3, h4, h5, h6, li');
+                if (paragraph) {
+                    var indexAttr = paragraph.getAttribute("data-tts-index");
+                    if (indexAttr && indexAttr !== "-1") {
+                        var index = parseInt(indexAttr);
+                        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tapParagraph) {
+                            window.webkit.messageHandlers.tapParagraph.postMessage(String(index));
                         }
-                        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
-                            window.webkit.messageHandlers.toggleControls.postMessage("");
-                        }
-                    }
-                } else {
-                    // Scroll mode: tap toggles controls, or triggers tapParagraph if on a paragraph
-                    var paragraph = e.target.closest('p, h1, h2, h3, h4, h5, h6, li');
-                    if (paragraph) {
-                        var indexAttr = paragraph.getAttribute("data-tts-index");
-                        if (indexAttr && indexAttr !== "-1") {
-                            var index = parseInt(indexAttr);
-                            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tapParagraph) {
-                                window.webkit.messageHandlers.tapParagraph.postMessage(String(index));
-                            }
-                        }
-                    }
-                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
-                        window.webkit.messageHandlers.toggleControls.postMessage("");
                     }
                 }
-            }
-        });
-
-        // Keydown keyboard event listener for macOS arrows, space, and page-up/down
-        window.addEventListener("keydown", function(e) {
-            if ('\(readingMode)' === 'paged') {
-                if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
-                    e.preventDefault();
-                    window.nextPage();
-                } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
-                    e.preventDefault();
-                    window.prevPage();
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
+                    window.webkit.messageHandlers.toggleControls.postMessage("");
                 }
             }
         });

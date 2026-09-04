@@ -266,7 +266,9 @@ extension SourcePlugin {
 
     /// Fetch all chapters for a novel concurrently with concurrency throttling.
     func fetchAllChapters(path: String, totalPages: Int) async throws -> [SourceChapter] {
+        #if DEBUG
         print("📚 [\(id)] fetchAllChapters: path=\(path), totalPages=\(totalPages)")
+        #endif
         let maxConcurrent = 4
         var pagesData = [Int: [SourceChapter]]()
 
@@ -279,7 +281,9 @@ extension SourcePlugin {
                 pageToFetch += 1
                 group.addTask {
                     let pageResult = try await self.parsePage(path: path, page: String(p))
+                    #if DEBUG
                     print("📚 [\(self.id)] Page \(p): \(pageResult.chapters.count) chapters")
+                    #endif
                     return (p, pageResult.chapters)
                 }
             }
@@ -292,7 +296,9 @@ extension SourcePlugin {
                     pageToFetch += 1
                     group.addTask {
                         let pageResult = try await self.parsePage(path: path, page: String(nextP))
+                        #if DEBUG
                         print("📚 [\(self.id)] Page \(nextP): \(pageResult.chapters.count) chapters")
+                        #endif
                         return (nextP, pageResult.chapters)
                     }
                 }
@@ -336,7 +342,9 @@ extension SourcePlugin {
                 allChapters.append(contentsOf: taggedChapters)
             }
         }
+        #if DEBUG
         print("📚 [\(id)] fetchAllChapters complete: \(allChapters.count) total chapters, reversed=\(shouldReversePages)")
+        #endif
         return allChapters
     }
 }

@@ -6,65 +6,73 @@ import SwiftUI
 struct TTSSettingsView: View {
     @StateObject private var modelManager = TTSModelManager()
 
+    @AppStorage("tts.enabled") private var ttsEnabled: Bool = true
     @AppStorage("tts.useRemote") private var useRemote: Bool = false
     @AppStorage("tts.remoteURL") private var remoteURL: String = "https://sky788-tts.hf.space"
     @AppStorage("tts.voice") private var ttsVoiceId: String = "af_heart"
 
     var body: some View {
         Form {
-            Section("TTS Mode") {
-                Toggle("Use Remote TTS (Hugging Face)", isOn: $useRemote)
+            Section {
+                Toggle("Enable Text-to-Speech", isOn: $ttsEnabled)
                     .tint(AppTheme.accent)
-                
-                if useRemote {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Server URL")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.leading, 8)
-                        
-                        HStack(spacing: 8) {
-                            Image(systemName: "link")
-                                .foregroundStyle(.secondary)
-                                .font(Typography.caption)
+            }
+            
+            if ttsEnabled {
+                Section("TTS Mode") {
+                    Toggle("Use Remote TTS (Hugging Face)", isOn: $useRemote)
+                        .tint(AppTheme.accent)
+                    
+                    if useRemote {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Server URL")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.leading, 8)
+                            
+                            HStack(spacing: 8) {
+                                Image(systemName: "link")
+                                    .foregroundStyle(.secondary)
+                                    .font(Typography.caption)
 
-                            TextField("https://your-space.hf.space", text: $remoteURL)
-                                .font(Typography.body)
-                                .textFieldStyle(.plain)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
+                                TextField("https://your-space.hf.space", text: $remoteURL)
+                                    .font(Typography.body)
+                                    .textFieldStyle(.plain)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
 
-                            if !remoteURL.isEmpty {
-                                Button {
-                                    withAnimation { remoteURL = "" }
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
+                                if !remoteURL.isEmpty {
+                                    Button {
+                                        withAnimation { remoteURL = "" }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                            .contentShape(.rect(cornerRadius: 20))
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-                        .contentShape(.rect(cornerRadius: 20))
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-            
-            Section("Local TTS Model") {
-                modelStatusRow
-            }
-            
-            Section("Voice Selection") {
-                Picker("Voice", selection: $ttsVoiceId) {
-                    ForEach(voiceOptions, id: \.self) { option in
-                        Text(voiceLabel(for: option))
-                            .tag(option)
+                        .padding(.vertical, 4)
                     }
                 }
-                .pickerStyle(.navigationLink)
+                
+                Section("Local TTS Model") {
+                    modelStatusRow
+                }
+                
+                Section("Voice Selection") {
+                    Picker("Voice", selection: $ttsVoiceId) {
+                        ForEach(voiceOptions, id: \.self) { option in
+                            Text(voiceLabel(for: option))
+                                .tag(option)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
             }
         }
         .navigationTitle("TTS Settings")

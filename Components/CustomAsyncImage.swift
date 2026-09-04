@@ -23,7 +23,49 @@ extension Image {
 
 /// Simple in-memory cache to prevent redundant image downloads.
 final class ImageCache {
-    static let shared = NSCache<NSURL, PlatformImage>()
+    static let shared: NSCache<NSURL, PlatformImage> = {
+        let cache = NSCache<NSURL, PlatformImage>()
+        // ~200 covers at ~1MB decoded each. Evicts under pressure automatically.
+        cache.countLimit = 200
+        cache.totalCostLimit = 200 * 1024 * 1024
+        return cache
+    }()
+
+    /// In-flight downloads keyed by URL so 20 cells showing the same cover
+    /// share one network request instead of firing 20.
+    private static let lock = NSLock()
+    private static var inFlight: [NSURL: Task<PlatformImage, Error>] = [:]
+
+    static func dedupedDownload(for key: NSURL, download: @escaping () async throws -> PlatformImage) async throws -> PlatformImage {
+        lock.lock()
+        if let existing = inFlight[key] {
+            lock.unlock()
+            return try await existing.value
+        }
+        let task = Task<PlatformImage, Error> { try await download() }
+        inFlight[key] = task
+        lock.unlock()
+        defer {
+            lock.lock()
+            inFlight.removeValue(forKey: key)
+            lock.unlock()
+        }
+        return try await task.value
+    }
+}
+
+/// Shared session with a real URLCache so covers survive restarts and
+/// revalidates with the CDN instead of re-downloading.
+private enum CoverNetwork {
+    static let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.requestCachePolicy = .returnCacheDataElseLoad
+        config.urlCache = URLCache(memoryCapacity: 20 * 1024 * 1024, diskCapacity: 200 * 1024 * 1024)
+        config.httpMaximumConnectionsPerHost = 6
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 30
+        return URLSession(configuration: config)
+    }()
 }
 
 /// A drop-in replacement for SwiftUI's AsyncImage that fetches images with
@@ -113,22 +155,22 @@ struct CustomAsyncImage: View {
                 forHTTPHeaderField: "User-Agent"
             )
             request.timeoutInterval = 15
+            // Let URLCache serve stored covers without hitting the network.
+            request.cachePolicy = .returnCacheDataElseLoad
 
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                phase = .failure(URLError(.badServerResponse))
-                return
-            }
-
-            guard let downloadedImage = PlatformImage(data: data) else {
-                phase = .failure(URLError(.cannotDecodeContentData))
-                return
+            let key = url as NSURL
+            let downloadedImage = try await ImageCache.dedupedDownload(for: key) {
+                let (data, response) = try await CoverNetwork.session.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode),
+                      let image = PlatformImage(data: data) else {
+                    throw URLError(.badServerResponse)
+                }
+                return image
             }
 
             // Cache for future loads
-            ImageCache.shared.setObject(downloadedImage, forKey: url as NSURL)
+            ImageCache.shared.setObject(downloadedImage, forKey: key)
 
             phase = .success(Image(platformImage: downloadedImage))
         } catch {

@@ -2,6 +2,7 @@
 // Hero header with cover, background extension effect, and glass action buttons.
 
 import SwiftUI
+import Glur
 
 struct NovelHeaderView: View {
     let name: String
@@ -29,25 +30,36 @@ struct NovelHeaderView: View {
             // Content overlay
             contentOverlay
         }
-        .frame(height: 540)
+        .frame(height: 660)
     }
 
     // MARK: - Hero Background
 
     @ViewBuilder
     private var heroBackground: some View {
-        if let cover, let url = URL(string: cover) {
-            CustomAsyncImage(url: url) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(
-                        minWidth: 0, maxWidth: .infinity,
-                        minHeight: 0, maxHeight: .infinity
-                    )
-                    .clipped()
-                    .backgroundExtensionEffect()
-            } placeholder: {
+        Group {
+            if let cover, let url = URL(string: cover) {
+                CustomAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(
+                            minWidth: 0, maxWidth: .infinity,
+                            minHeight: 0, maxHeight: .infinity
+                        )
+                        .clipped()
+                        .backgroundExtensionEffect()
+                } placeholder: {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [AppTheme.accent.opacity(0.3), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+            } else {
                 Rectangle()
                     .fill(
                         LinearGradient(
@@ -57,16 +69,8 @@ struct NovelHeaderView: View {
                         )
                     )
             }
-        } else {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [AppTheme.accent.opacity(0.3), .clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
         }
+        .glur(radius: 20.0, offset: 0.75, interpolation: 0.25, direction: .down)
     }
 
     // MARK: - Content Overlay
