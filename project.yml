@@ -1,0 +1,47 @@
+name: LNReader
+options:
+  bundleIdPrefix: com.lnreader
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+
+packages:
+  Glur:
+    url: https://github.com/joogps/Glur
+    from: 2.0.0
+
+targets:
+  LNReader:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: LNReaderApp.swift
+      - path: ContentView.swift
+      - path: Components
+      - path: Design
+      - path: Extensions
+      - path: Features
+      - path: Models
+      - path: Services
+      - path: Utilities
+      - path: Assets.xcassets
+      - path: AppIcon.icon
+    dependencies:
+      - package: Glur
+        product: Glur
+    settings:
+      base:
+        PRODUCT_NAME: LNReader
+        PRODUCT_BUNDLE_IDENTIFIER: com.lnreader.app
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        DEVELOPMENT_TEAM: "MP3CA7UWT5"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "Apple Development"
+        ENABLE_PREVIEWS: YES

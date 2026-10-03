@@ -1,160 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
-import KokoroTTS
 import SwiftUI
-
-// MARK: - Model State
-
-enum TTSModelState: Equatable {
-    case notDownloaded
-    case downloading(progress: Double, status: String)
-    case downloaded
-    case loading
-    case ready
-    case error(String)
-
-    var isReady: Bool {
-        if case .ready = self { return true }
-        return false
-    }
-
-    var isDownloaded: Bool {
-        switch self {
-        case .downloaded, .loading, .ready: return true
-        default: return false
-        }
-    }
-}
-
-// MARK: - Model Manager
-
-/// Manages the KokoroTTS model lifecycle: download, cache, load, delete.
-@MainActor
-final class TTSModelManager: ObservableObject {
-    @Published var state: TTSModelState = .notDownloaded
-
-    private var ttsModel: KokoroTTSModel?
-    private var downloadTask: Task<Void, Never>?
-
-    static let modelId = KokoroTTSModel.defaultModelId
-
-    init() {
-        checkModelStatus()
-    }
-
-    /// Check whether the model files are already cached on disk.
-    func checkModelStatus() {
-        guard !state.isReady else { return }
-        if case .downloading = state { return }
-
-        do {
-            let cacheDir = try getCacheDirectory()
-            if modelFilesExist(in: cacheDir) {
-                state = .downloaded
-            } else {
-                state = .notDownloaded
-            }
-        } catch {
-            state = .notDownloaded
-        }
-    }
-
-    /// Download the model from HuggingFace with progress tracking.
-    func downloadModel() {
-        switch state {
-        case .notDownloaded, .error:
-            break
-        default:
-            return
-        }
-
-        downloadTask?.cancel()
-        state = .downloading(progress: 0, status: "Starting download…")
-
-        downloadTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let model = try await KokoroTTSModel.fromPretrained(
-                    progressHandler: { [weak self] progress, status in
-                        Task { @MainActor [weak self] in
-                            guard let self else { return }
-                            if case .downloading = self.state {
-                                self.state = .downloading(progress: progress, status: status)
-                            }
-                        }
-                    }
-                )
-                // Model loaded successfully during download — go straight to ready
-                self.ttsModel = model
-                self.state = .ready
-            } catch is CancellationError {
-                self.state = .notDownloaded
-            } catch {
-                self.state = .error(error.localizedDescription)
-            }
-        }
-    }
-
-    /// Cancel an in-progress download.
-    func cancelDownload() {
-        downloadTask?.cancel()
-        downloadTask = nil
-        state = .notDownloaded
-    }
-
-    /// Load an already-downloaded model into memory.
-    func loadModel() async throws -> KokoroTTSModel {
-        if let ttsModel { return ttsModel }
-
-        state = .loading
-
-        do {
-            let model = try await KokoroTTSModel.fromPretrained(offlineMode: true)
-            self.ttsModel = model
-            state = .ready
-            return model
-        } catch {
-            state = .notDownloaded
-            throw error
-        }
-    }
-
-    /// Delete cached model files to free storage.
-    func deleteModel() {
-        ttsModel = nil
-        do {
-            let cacheDir = try getCacheDirectory()
-            try FileManager.default.removeItem(at: cacheDir)
-        } catch {
-            // Deletion failure is non-fatal
-        }
-        state = .notDownloaded
-    }
-
-    /// Dismiss an error and go back to the appropriate state.
-    func dismissError() {
-        checkModelStatus()
-    }
-
-    // MARK: - Private
-
-    private func getCacheDirectory() throws -> URL {
-        let fm = FileManager.default
-        let cacheBase = fm.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let modelDir = cacheBase.appendingPathComponent("qwen3-speech/models/\(Self.modelId)")
-        return modelDir
-    }
-
-    private func modelFilesExist(in directory: URL) -> Bool {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: directory.path) else { return false }
-
-        // Check for the main CoreML model bundle
-        let modelPath = directory.appendingPathComponent("kokoro_5s.mlmodelc")
-        return fm.fileExists(atPath: modelPath.path)
-    }
-}
 
 // MARK: - TTS Manager
 
@@ -173,7 +20,6 @@ final class ReaderTTSManager: ObservableObject {
     @Published var errorMessage: String? = nil
 
     private let audioPlayer = TTSAudioPlayer()
-    let modelManager: TTSModelManager
     private var readingTask: Task<Void, Never>?
     private var currentChapterName = ""
     private(set) var totalBlocks: Int = 0
@@ -185,8 +31,7 @@ final class ReaderTTSManager: ObservableObject {
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     #endif
 
-    init(modelManager: TTSModelManager) {
-        self.modelManager = modelManager
+    init() {
         Self.shared = self
     }
 
@@ -214,10 +59,6 @@ final class ReaderTTSManager: ObservableObject {
         #endif
     }
 
-    nonisolated private var useRemote: Bool {
-        UserDefaults.standard.bool(forKey: "tts.useRemote")
-    }
-
     nonisolated private var remoteURL: String {
         UserDefaults.standard.string(forKey: "tts.remoteURL") ?? "https://sky788-tts.hf.space"
     }
@@ -236,14 +77,6 @@ final class ReaderTTSManager: ObservableObject {
         guard !blocks.isEmpty else {
             print("⚠️ [ReaderTTSManager] blocks is empty, returning")
             errorMessage = ReaderTTSError.emptyContent.localizedDescription
-            return
-        }
-
-        let remote = useRemote
-        print("🔊 [ReaderTTSManager] useRemote: \(remote)")
-        guard remote || modelManager.state.isDownloaded || modelManager.state.isReady else {
-            print("⚠️ [ReaderTTSManager] Model is not downloaded/ready. State: \(modelManager.state)")
-            errorMessage = "TTS model not downloaded. Open the TTS menu to download it."
             return
         }
 
@@ -315,9 +148,7 @@ final class ReaderTTSManager: ObservableObject {
         print("🔊 [ReaderTTSManager] Starting from batch index: \(startBatchIndex)")
 
         let voiceId = normalizedVoice(voice)
-        let language = languageCode(for: voiceId)
         let player = audioPlayer
-        let modelManager = self.modelManager
 
         readingTask = Task.detached { [weak self] in
             guard let self else { return }
@@ -331,13 +162,6 @@ final class ReaderTTSManager: ObservableObject {
                 // Activate audio session only when TTS actually starts playing
                 await player.activateAudioSession()
                 print("🔊 [ReaderTTSManager] Audio session activated.")
-                
-                var optModel: KokoroTTSModel? = nil
-                if !remote {
-                    print("🔊 [ReaderTTSManager] Local mode. Loading model…")
-                    optModel = try await modelManager.loadModel()
-                    print("🔊 [ReaderTTSManager] Local model loaded successfully.")
-                }
 
                 for batchIndex in startBatchIndex..<batchedBlocks.count {
                     let batch = batchedBlocks[batchIndex]
@@ -373,24 +197,9 @@ final class ReaderTTSManager: ObservableObject {
                             print("🔊 [ReaderTTSManager] Batch \(batchIndex): Cache hit.")
                             samples = cached
                         } else {
-                            print("🔊 [ReaderTTSManager] Batch \(batchIndex): Cache miss. Synthesizing…")
-                            if remote {
-                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Remote synthesizing via remote URL: \(self.remoteURL)...")
-                                samples = try await self.synthesizeRemote(index: batchIndex, text: batch.text, voice: voiceId, speed: speed)
-                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Remote synthesis success. Samples: \(samples.count)")
-                            } else if let model = optModel {
-                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Local synthesizing…")
-                                samples = try model.synthesize(
-                                    text: batch.text,
-                                    voice: voiceId,
-                                    language: language,
-                                    speed: speed
-                                )
-                                print("🔊 [ReaderTTSManager] Batch \(batchIndex): Local synthesis success. Samples: \(samples.count)")
-                            } else {
-                                print("❌ [ReaderTTSManager] Batch \(batchIndex): Model not found and remote is false.")
-                                throw ReaderTTSError.audioBufferFailed
-                            }
+                            print("🔊 [ReaderTTSManager] Batch \(batchIndex): Cache miss. Remote synthesizing via \(self.remoteURL)…")
+                            samples = try await self.synthesizeRemote(index: batchIndex, text: batch.text, voice: voiceId, speed: speed)
+                            print("🔊 [ReaderTTSManager] Batch \(batchIndex): Remote synthesis success. Samples: \(samples.count)")
                             // Save to cache
                             await TTSAudioCache.shared.set(text: batch.text, voice: voiceId, speed: speed, samples: samples)
                         }
@@ -401,14 +210,12 @@ final class ReaderTTSManager: ObservableObject {
                         from: batchIndex,
                         batches: batchedBlocks,
                         voice: voice,
-                        speed: speed,
-                        remote: remote,
-                        optModel: optModel
+                        speed: speed
                     )
 
                     try Task.checkCancellation()
                     
-                    let sampleRate = remote ? 24000.0 : Double(KokoroTTSModel.outputSampleRate)
+                    let sampleRate = 24000.0
                     let duration = Double(samples.count) / sampleRate
                     
                     // Highlight updating task based on text length weights in the batch
@@ -494,8 +301,6 @@ final class ReaderTTSManager: ObservableObject {
         }
     }
 
-
-
     nonisolated private func synthesizeRemote(index: Int, text: String, voice: String, speed: Float) async throws -> [Float] {
         try Task.checkCancellation()
         
@@ -555,9 +360,7 @@ final class ReaderTTSManager: ObservableObject {
         from startIndex: Int,
         batches: [TTSBatchedBlock],
         voice: String,
-        speed: Float,
-        remote: Bool,
-        optModel: KokoroTTSModel?
+        speed: Float
     ) {
         let n = startIndex
         let minWindow = n + 1
@@ -571,8 +374,6 @@ final class ReaderTTSManager: ObservableObject {
         }
 
         let voiceId = normalizedVoice(voice)
-        let language = languageCode(for: voiceId)
-        let modelManager = self.modelManager
 
         guard minWindow <= maxWindow else { return }
 
@@ -590,7 +391,6 @@ final class ReaderTTSManager: ObservableObject {
                 guard let self else { throw ReaderTTSError.audioBufferFailed }
                 
                 // Wait for the previous prefetch to finish (or fail) before starting this one.
-                // This ensures sequential request order and prevents later requests from hitting the server first.
                 if let prev = capturedPrev {
                     _ = try? await prev.value
                 }
@@ -602,19 +402,7 @@ final class ReaderTTSManager: ObservableObject {
                     return cached
                 }
                 
-                let samples: [Float]
-                if remote {
-                    samples = try await self.synthesizeRemote(index: index, text: text, voice: voiceId, speed: speed)
-                } else {
-                    // Load model in background
-                    let model = try await modelManager.loadModel()
-                    samples = try model.synthesize(
-                        text: text,
-                        voice: voiceId,
-                        language: language,
-                        speed: speed
-                    )
-                }
+                let samples = try await self.synthesizeRemote(index: index, text: text, voice: voiceId, speed: speed)
                 
                 // Save to cache
                 await TTSAudioCache.shared.set(text: text, voice: voiceId, speed: speed, samples: samples)
@@ -715,23 +503,7 @@ final class ReaderTTSManager: ObservableObject {
 
     nonisolated private func normalizedVoice(_ voice: String) -> String {
         let trimmed = voice.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? KokoroTTSModel.defaultVoice : trimmed
-    }
-
-    nonisolated private func languageCode(for voice: String) -> String {
-        guard let prefix = voice.first else { return "en" }
-        switch prefix {
-        case "a", "b": return "en"
-        case "e": return "es"
-        case "f": return "fr"
-        case "h": return "hi"
-        case "i": return "it"
-        case "j": return "ja"
-        case "k": return "ko"
-        case "p": return "pt"
-        case "z": return "zh"
-        default: return "en"
-        }
+        return trimmed.isEmpty ? "af_heart" : trimmed
     }
 
     private func progress(for index: Int) -> Double {

@@ -11,7 +11,6 @@ struct ReaderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @StateObject private var modelManager: TTSModelManager
     @StateObject private var ttsBridge = ReaderContentBridge()
     @StateObject private var ttsManager: ReaderTTSManager
 
@@ -79,9 +78,7 @@ struct ReaderView: View {
         self.pluginId = pluginId
         self.novelPath = novelPath
         
-        let model = TTSModelManager()
-        self._modelManager = StateObject(wrappedValue: model)
-        self._ttsManager = StateObject(wrappedValue: ReaderTTSManager(modelManager: model))
+        self._ttsManager = StateObject(wrappedValue: ReaderTTSManager())
     }
 
     var body: some View {
@@ -295,7 +292,6 @@ struct ReaderView: View {
         }
         .onDisappear {
             ttsManager.stop()
-            modelManager.cancelDownload()
             commentsTask?.cancel()
         }
     }
