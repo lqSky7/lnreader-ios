@@ -99,7 +99,7 @@ struct AuthView: View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 42, weight: .semibold))
-                .foregroundStyle(.blue)
+                .foregroundStyle(AppTheme.accent)
 
             Text("Sync your reader")
                 .font(.title2.weight(.bold))

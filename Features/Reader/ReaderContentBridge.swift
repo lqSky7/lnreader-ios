@@ -2,105 +2,63 @@ import Combine
 import Foundation
 import WebKit
 
+struct TTSSourcePosition: Equatable {
+    let paragraphIndex: Int
+    let offset: Int
+}
+
 @MainActor
 final class ReaderContentBridge: ObservableObject {
     weak var webView: WKWebView?
     @Published private(set) var isReady = false
+    @Published private(set) var isFollowing = true
     let paragraphScrollPublisher = PassthroughSubject<Int, Never>()
+    let wordTapPublisher = PassthroughSubject<TTSSourcePosition, Never>()
+    private var activeWord: TTSWordTiming?
+    private var activeIndex: Int?
+    private var speechMode = false
 
-    func setWebView(_ webView: WKWebView) {
-        print("🔊 [ReaderContentBridge] setWebView called, resetting isReady to false")
-        self.webView = webView
-        self.isReady = false
-    }
-
-    func contentDidChange() {
-        print("🔊 [ReaderContentBridge] contentDidChange called, resetting isReady to false")
-        isReady = false
-    }
-
-    private var currentActiveIndex: Int? = nil
-
+    func setWebView(_ webView: WKWebView) { self.webView = webView; isReady = false }
+    func contentDidChange() { isReady = false }
     func contentDidFinishLoad() {
-        print("🔊 [ReaderContentBridge] contentDidFinishLoad called, setting isReady to true")
         isReady = true
-        if let currentActiveIndex {
-            setActiveIndex(currentActiveIndex)
+        setSpeechMode(speechMode)
+        if let activeWord { setActiveWord(activeWord) }
+        else if let activeIndex { setActiveIndex(activeIndex) }
+    }
+    func receive(_ name: String, body: Any) -> Bool {
+        if name == "ttsWordTap", let value = body as? [String: Any],
+           let paragraph = value["paragraphIndex"] as? Int, let offset = value["offset"] as? Int {
+            wordTapPublisher.send(.init(paragraphIndex: paragraph, offset: offset)); return true
         }
+        if name == "ttsFollowChanged", let following = body as? Bool { isFollowing = following; return true }
+        return false
     }
-
-    func onParagraphScroll(_ index: Int) {
-        paragraphScrollPublisher.send(index)
-    }
-
-    func scrollToParagraph(_ index: Int) {
-        guard isReady else { return }
-        evaluate("window.scrollToParagraph && window.scrollToParagraph(\(index))")
-    }
-
-    func prepareTTS() {
-        evaluate("window.prepareTTS && window.prepareTTS()")
-    }
-
+    func onParagraphScroll(_ index: Int) { paragraphScrollPublisher.send(index) }
+    func scrollToParagraph(_ index: Int) { evaluate("window.scrollToParagraph && window.scrollToParagraph(\(index))") }
+    func prepareTTS() { evaluate("window.prepareTTS && window.prepareTTS()") }
     func fetchTTSBlocks() async -> [String] {
-        guard isReady else { return [] }
-        let result = await evaluateAsync("window.getTTSBlocks && window.getTTSBlocks()")
-        return result as? [String] ?? []
+        guard isReady, let webView else { return [] }
+        return (try? await webView.evaluateJavaScript("window.getTTSBlocks && window.getTTSBlocks()")) as? [String] ?? []
     }
-
+    func setSpeechMode(_ active: Bool) { speechMode = active; evaluate("window.setTTSSpeechMode && window.setTTSSpeechMode(\(active ? "true" : "false"))") }
+    func setActiveWord(_ word: TTSWordTiming?) {
+        activeWord = word
+        guard isReady, let word, let data = try? JSONEncoder().encode(word), let json = String(data: data, encoding: .utf8) else { return }
+        evaluate("window.setTTSActiveWord && window.setTTSActiveWord(\(json))")
+    }
+    func resumeFollowing() {
+        isFollowing = true
+        evaluate("window.resumeTTSFollow && window.resumeTTSFollow()")
+    }
     func setActiveIndex(_ index: Int?) {
-        self.currentActiveIndex = index
-        guard isReady else { return }
-        guard let index else {
-            clearActive()
-            return
-        }
+        activeIndex = index
+        guard isReady, let index else { return }
         evaluate("window.setTTSActiveIndex && window.setTTSActiveIndex(\(index))")
     }
-
     func clearActive() {
-        self.currentActiveIndex = nil
+        activeIndex = nil; activeWord = nil
         evaluate("window.clearTTSActive && window.clearTTSActive()")
     }
-
-    private func evaluate(_ script: String) {
-        webView?.evaluateJavaScript(script)
-    }
-
-    private func evaluateAsync(_ script: String) async -> Any? {
-        print("🔊 [ReaderContentBridge] evaluateAsync called for script: \(script)")
-        guard webView != nil else {
-            print("⚠️ [ReaderContentBridge] webView is nil")
-            return nil
-        }
-        
-        print("🔊 [ReaderContentBridge] webView exists. Starting Task Group evaluate script…")
-        let output = await withTaskGroup(of: Any?.self) { group in
-            group.addTask { [weak self] in
-                print("🔊 [ReaderContentBridge] Starting evaluation Task…")
-                let task = Task { @MainActor [weak self] () -> Any? in
-                    guard let webView = self?.webView else { return nil }
-                    do {
-                        let result = try await webView.evaluateJavaScript(script)
-                        print("✅ [ReaderContentBridge] evaluateJavaScript success: \(result != nil)")
-                        return result
-                    } catch {
-                        print("❌ [ReaderContentBridge] evaluateJavaScript error: \(error)")
-                        return nil
-                    }
-                }
-                return await task.value
-            }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds timeout
-                print("⚠️ [ReaderContentBridge] evaluateJavaScript timed out after 2 seconds!")
-                return nil
-            }
-            let firstResult = await group.next()
-            group.cancelAll()
-            return firstResult ?? nil
-        }
-        print("🔊 [ReaderContentBridge] evaluateAsync finished. Result exists: \(output != nil)")
-        return output
-    }
+    private func evaluate(_ script: String) { guard isReady else { return }; webView?.evaluateJavaScript(script) }
 }

@@ -465,7 +465,7 @@ struct ProfileEditSheet: View {
                             PhotosPicker(selection: $selectedItem, matching: .images) {
                                 Text("Choose Photo")
                                     .font(.subheadline)
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(AppTheme.accent)
                             }
                             .onChange(of: selectedItem) { _, newItem in
                                 Task {

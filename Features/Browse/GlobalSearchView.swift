@@ -91,6 +91,7 @@ struct SourceSearchResult: Identifiable {
 // MARK: - Result Section
 
 struct SourceResultSection: View {
+    @Namespace private var bookTransitions
     let result: SourceSearchResult
 
     var body: some View {
@@ -106,6 +107,7 @@ struct SourceResultSection: View {
                                 partialNovel: novel,
                                 pluginId: result.pluginId
                             )
+                            .bookZoom(from: novel.path, in: bookTransitions)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 NovelCoverView(
@@ -113,6 +115,7 @@ struct SourceResultSection: View {
                                     aspectRatio: LayoutConstants.coverAspectRatio
                                 )
                                 .frame(width: 120)
+                                .bookTransitionSource(novel.path, in: bookTransitions)
 
                                 Text(novel.name)
                                     .font(Typography.small)

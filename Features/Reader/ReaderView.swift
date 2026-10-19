@@ -12,7 +12,12 @@ struct ReaderView: View {
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var ttsBridge = ReaderContentBridge()
-    @StateObject private var ttsManager: ReaderTTSManager
+    @ObservedObject private var ttsManager = ReaderTTSManager.shared
+    @ObservedObject private var audioLibrary = TTSOfflineLibrary.shared
+    @State private var showAudioDownloads = false
+    @State private var showVoicePicker = false
+    @State private var showSleepPicker = false
+    @State private var showSpeedPicker = false
 
     @State private var currentChapterPath: String
     @State private var currentChapterName: String
@@ -28,6 +33,8 @@ struct ReaderView: View {
     }
 
     @State private var htmlContent = ""
+    @State private var displayedAudioRevision: String?
+    @State private var chapterLoadID = UUID()
     @State private var baseURL: URL? = nil
     @State private var isLoading = true
     @State private var showControls = true
@@ -67,7 +74,7 @@ struct ReaderView: View {
     @AppStorage("reader.lineFocusLines") private var lineFocusLines = 1
     @AppStorage("reader.lineFocusDulling") private var lineFocusDulling = "mid"
     @AppStorage("reader.verticalPadding") private var verticalPadding: Double = 20
-    @AppStorage("tts.voice") private var ttsVoiceId: String = "af_heart"
+    @AppStorage("tts.voice") private var ttsVoiceId: String = "qwen-ryan"
     @AppStorage("tts.speed") private var ttsSpeed: Double = 1.0
 
     @ObservedObject private var focusManager = FocusModeManager.shared
@@ -78,7 +85,7 @@ struct ReaderView: View {
         self.pluginId = pluginId
         self.novelPath = novelPath
         
-        self._ttsManager = StateObject(wrappedValue: ReaderTTSManager())
+
     }
 
     var body: some View {
@@ -124,21 +131,12 @@ struct ReaderView: View {
                     commentsHtml: "",
                     hasMoreComments: false,
                     onTap: {
-                        guard !ttsManager.isSpeaking else { return }
+                        guard !isCurrentSpeech else { return }
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showControls.toggle()
                         }
                     },
-                    onParagraphTap: { index in
-                        if ttsManager.isSpeaking {
-                            // Restart TTS from the tapped paragraph immediately
-                            ttsManager.stop()
-                            Task {
-                                try? await Task.sleep(nanoseconds: 100_000_000)
-                                startTTSPlayback(from: index)
-                            }
-                        }
-                    },
+                    onParagraphTap: { _ in },
                     onLoadMoreComments: nil,
                     onLikeComment: nil,
                     onDislikeComment: nil
@@ -146,7 +144,7 @@ struct ReaderView: View {
                 .ignoresSafeArea(.all)
             }
 
-            // Normal Toolbar (visible when showControls is true AND ttsManager.isSpeaking is false)
+            // Normal Toolbar (visible when showControls is true AND isCurrentSpeech is false)
             ReaderToolbar(
                 chapterName: currentChapterName,
                 hasPrevious: hasPreviousChapter,
@@ -160,34 +158,34 @@ struct ReaderView: View {
                 onChapterClick: { showChapterList = true },
                 onComments: commentSite != nil ? { showCommentsSheet = true } : nil
             )
-            .opacity((showControls && !ttsManager.isSpeaking) ? 1.0 : 0.0)
-            .blur(radius: (showControls && !ttsManager.isSpeaking) ? 0.0 : 8.0)
-            .scaleEffect((showControls && !ttsManager.isSpeaking) ? 1.0 : 0.96)
-            .allowsHitTesting(showControls && !ttsManager.isSpeaking)
+            .opacity((showControls && !isCurrentSpeech) ? 1.0 : 0.0)
+            .blur(radius: (showControls && !isCurrentSpeech) ? 0.0 : 8.0)
+            .scaleEffect((showControls && !isCurrentSpeech) ? 1.0 : 0.96)
+            .allowsHitTesting(showControls && !isCurrentSpeech)
 
-            // TTS Controls Overlay (visible when ttsManager.isSpeaking is true)
+            // TTS Controls Overlay (visible when isCurrentSpeech is true)
             ttsControlsOverlay
-                .opacity(ttsManager.isSpeaking ? 1.0 : 0.0)
-                .blur(radius: ttsManager.isSpeaking ? 0.0 : 8.0)
-                .scaleEffect(ttsManager.isSpeaking ? 1.0 : 0.96)
-                .allowsHitTesting(ttsManager.isSpeaking)
+                .opacity(isCurrentSpeech ? 1.0 : 0.0)
+                .blur(radius: isCurrentSpeech ? 0.0 : 8.0)
+                .scaleEffect(isCurrentSpeech ? 1.0 : 0.96)
+                .allowsHitTesting(isCurrentSpeech)
 
             // Focus Status Indicator Overlay (visible when controls and TTS speaking overlay are hidden, and Line Focus mode is active)
             VStack {
-                if !showControls && !ttsManager.isSpeaking && lineFocusEnabled {
+                if !showControls && !isCurrentSpeech && lineFocusEnabled {
                     ReaderFocusIndicator()
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
                 Spacer()
             }
             .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(!showControls && !ttsManager.isSpeaking && lineFocusEnabled)
+            .allowsHitTesting(!showControls && !isCurrentSpeech && lineFocusEnabled)
             .padding(.top, 12)
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .statusBarHidden(!showControls || ttsManager.isSpeaking)
+        .statusBarHidden(!showControls || isCurrentSpeech)
         .fullScreenCover(isPresented: $showSettings) {
             ReaderSettings(
                 fontSize: $fontSize,
@@ -241,7 +239,9 @@ struct ReaderView: View {
         .task { await loadChapter() }
         .onChange(of: ttsBridge.isReady) { _, ready in
             if ready {
-                if let lastIndex = currentChapter?.lastReadParagraphIndex, lastIndex > 0 {
+                ttsBridge.setSpeechMode(isCurrentSpeech)
+                if isCurrentSpeech { ttsBridge.setActiveWord(ttsManager.currentWord) }
+                if !isCurrentSpeech, let lastIndex = currentChapter?.lastReadParagraphIndex, lastIndex > 0 {
                     ttsBridge.scrollToParagraph(lastIndex)
                 }
                 if startTTSWhenReady {
@@ -251,8 +251,9 @@ struct ReaderView: View {
             }
         }
         .onChange(of: ttsManager.currentBlockIndex) { _, newIndex in
+            guard isCurrentSpeech else { return }
             if let newIndex = newIndex {
-                ttsBridge.setActiveIndex(newIndex)
+                if let word = ttsManager.currentWord { ttsBridge.setActiveWord(word) }
                 
                 // Save reading progress to database
                 if let chapter = currentChapter {
@@ -267,7 +268,8 @@ struct ReaderView: View {
                 }
             }
         }
-        .onChange(of: ttsManager.isSpeaking) { _, isSpeaking in
+        .onChange(of: isCurrentSpeech) { _, isSpeaking in
+            ttsBridge.setSpeechMode(isSpeaking)
             if isSpeaking {
                 isPreparingTTS = false
             } else {
@@ -279,9 +281,12 @@ struct ReaderView: View {
                 isPreparingTTS = false
             }
         }
+        .alert("Narration", isPresented: Binding(get: { ttsManager.errorMessage != nil }, set: { if !$0 { ttsManager.errorMessage = nil } })) {
+            Button("OK", role: .cancel) { ttsManager.errorMessage = nil }
+        } message: { Text(ttsManager.errorMessage ?? "") }
         .onReceive(ttsBridge.paragraphScrollPublisher) { index in
             // Only update progress when TTS is not active (TTS updates it automatically)
-            guard !ttsManager.isSpeaking else { return }
+            guard !isCurrentSpeech else { return }
             if let chapter = currentChapter {
                 chapter.lastReadParagraphIndex = index
                 try? modelContext.save()
@@ -290,10 +295,48 @@ struct ReaderView: View {
         .onAppear {
             FocusModeManager.shared.updateFocusStatus()
         }
-        .onDisappear {
-            ttsManager.stop()
-            commentsTask?.cancel()
+        .onReceive(ttsBridge.wordTapPublisher) { position in
+            guard isCurrentSpeech else { return }
+            ttsManager.seek(paragraph: position.paragraphIndex, offset: position.offset)
+            ttsManager.resume()
+            ttsBridge.resumeFollowing()
         }
+        .onChange(of: ttsManager.currentWord) { _, word in
+            guard isCurrentSpeech else { return }
+            ttsBridge.setActiveWord(word)
+        }
+        .onChange(of: ttsManager.manifest?.id) { _, _ in
+            guard let manifest = ttsManager.manifest, manifest.bookId == audioBookId else { return }
+            if currentChapterPath != manifest.chapterId || displayedAudioRevision != manifest.contentRevision {
+                currentChapterPath = manifest.chapterId; currentChapterName = manifest.title; isLoading = true
+                Task { await loadChapter() }
+            }
+        }
+        .sheet(isPresented: $showAudioDownloads) {
+            BookAudioDownloadsView(bookId: audioBookId, bookTitle: fetchNovel()?.name ?? currentChapterName,
+                pluginId: pluginId, novelPath: novelPath ?? "",
+                chapters: audioChapterChoices, coverURL: fetchNovel()?.cover, initialChapter: currentChapterPath)
+        }
+        .confirmationDialog("Downloaded voices for this chapter", isPresented: $showVoicePicker, titleVisibility: .visible) {
+            ForEach(audioLibrary.downloads(bookId: audioBookId, chapterId: currentChapterPath).filter(\.isAvailable)) { record in
+                Button(audioLibrary.voices.first { $0.id == record.rendition.voiceId }?.name ?? record.rendition.voiceId) {
+                    audioLibrary.selectVoice(record.rendition.voiceId, bookId: audioBookId, chapterId: currentChapterPath)
+                    ttsManager.switchVoice(to: record)
+                }
+            }
+            Button("Get more voices / manage downloads") { showAudioDownloads = true }
+        }
+        .confirmationDialog("Playback speed", isPresented: $showSpeedPicker) {
+            ForEach([0.75, 1, 1.25, 1.5, 1.75, 2, 2.5], id: \.self) { speed in
+                Button(String(format: "%.2gx", speed)) { updateSpeed(speed) }
+            }
+        }
+        .confirmationDialog("Sleep timer", isPresented: $showSleepPicker) {
+            ForEach([15, 30, 60], id: \.self) { minutes in Button("\(minutes) minutes") { ttsManager.setSleep(minutes: minutes) } }
+            Button("End of chapter") { ttsManager.sleepAfterChapter() }
+            Button("Off") { ttsManager.setSleep(minutes: nil) }
+        }
+        .onDisappear { commentsTask?.cancel() }
     }
 
     private var resolvedBackgroundColor: Color {
@@ -370,9 +413,11 @@ struct ReaderView: View {
     // MARK: - Data Loading
 
     private func loadChapter() async {
-        ttsManager.stop()
+        let loadID = UUID(); chapterLoadID = loadID
+        let requestedPath = currentChapterPath
+        errorMessage = nil
         ttsBridge.contentDidChange()
-        
+        displayedAudioRevision = nil
         if cachedChapters.isEmpty, let novelPath {
             let predicate = #Predicate<Chapter> { $0.novel?.path == novelPath && $0.novel?.pluginId == pluginId }
             var descriptor = FetchDescriptor<Chapter>(predicate: predicate, sortBy: [SortDescriptor(\.position)])
@@ -381,7 +426,27 @@ struct ReaderView: View {
                 self.cachedChapters = fetched
             }
         }
-        
+        if let manifest = ttsManager.manifest, manifest.bookId == audioBookId, manifest.chapterId == currentChapterPath {
+            htmlContent = TTSBookIdentity.html(blocks: manifest.blocks)
+            displayedAudioRevision = manifest.contentRevision
+            baseURL = nil; isLoading = false
+            return
+        }
+        let selected = audioLibrary.selectedVoice(bookId: audioBookId, chapterId: currentChapterPath)
+        if let local = audioLibrary.downloaded(bookId: audioBookId, chapterId: currentChapterPath, voiceId: selected) ?? audioLibrary.downloaded(bookId: audioBookId, chapterId: currentChapterPath),
+           let manifest = try? audioLibrary.localManifest(local.id) {
+            htmlContent = TTSBookIdentity.html(blocks: manifest.blocks)
+            displayedAudioRevision = manifest.contentRevision
+            baseURL = nil; isLoading = false
+            return
+        }
+        if let local = audioLibrary.localText(bookId: audioBookId, chapterId: currentChapterPath) {
+            htmlContent = TTSBookIdentity.html(blocks: local.blocks)
+            displayedAudioRevision = local.contentRevision
+            baseURL = nil; isLoading = false
+            return
+        }
+
         if pluginId == "local", let novelPath {
             do {
                 let fileManager = FileManager.default
@@ -420,7 +485,9 @@ struct ReaderView: View {
         }
 
         do {
-            htmlContent = try await source.parseChapter(path: currentChapterPath)
+            let parsed = try await source.parseChapter(path: requestedPath)
+            guard chapterLoadID == loadID, currentChapterPath == requestedPath else { return }
+            htmlContent = parsed
             baseURL = nil
             isLoading = false
 
@@ -435,6 +502,7 @@ struct ReaderView: View {
                 loadNovelFireComments()
             }
         } catch {
+            guard chapterLoadID == loadID else { return }
             errorMessage = error.localizedDescription
             isLoading = false
         }
@@ -558,140 +626,49 @@ struct ReaderView: View {
         }
     }
 
-    private var ttsVoice: String {
-        ttsVoiceId.isEmpty ? "af_heart" : ttsVoiceId
+    private var audioBookId: String { TTSBookIdentity.make(pluginId: pluginId, novelPath: novelPath ?? currentChapterPath) }
+    private var isCurrentSpeech: Bool {
+        ttsManager.isSpeaking && ttsManager.manifest?.bookId == audioBookId && ttsManager.manifest?.chapterId == currentChapterPath
     }
-
+    private var audioChapterChoices: [TTSChapterChoice] {
+        if cachedChapters.isEmpty { return [.init(path: currentChapterPath, title: currentChapterName, position: 0)] }
+        return cachedChapters.map { .init(path: $0.path, title: $0.name, position: $0.position) }
+    }
     private func toggleTTSPlayback() {
-        if ttsManager.isSpeaking {
-            ttsManager.togglePause()
-        } else {
-            startTTSPlayback()
-        }
+        if isCurrentSpeech { ttsManager.togglePause() } else { startTTSPlayback() }
     }
-
     private func startTTSPlayback(from startIndex: Int? = nil) {
-        print("🔊 [ReaderView] startTTSPlayback called. ttsBridge.isReady: \(ttsBridge.isReady)")
-        guard ttsBridge.isReady else {
-            print("🔊 [ReaderView] ttsBridge is not ready. Delaying start.")
-            startTTSWhenReady = true
+        let voice = audioLibrary.selectedVoice(bookId: audioBookId, chapterId: currentChapterPath)
+        guard let record = audioLibrary.downloaded(bookId: audioBookId, chapterId: currentChapterPath, voiceId: voice) else {
+            showAudioDownloads = true
             return
         }
-        isPreparingTTS = true
-
-        let resolvedStartIndex = startIndex ?? currentChapter?.lastReadParagraphIndex ?? 0
-        print("🔊 [ReaderView] Resolving start index: \(resolvedStartIndex). Fetching blocks…")
-
-        Task {
-            let blocks = await ttsBridge.fetchTTSBlocks()
-            print("🔊 [ReaderView] Fetched blocks: \(blocks.count). Calling ttsManager.startReading.")
-            withAnimation(.easeInOut(duration: 0.3)) {
-                ttsManager.startReading(
-                    blocks: blocks,
-                    chapterName: currentChapterName,
-                    voice: ttsVoice,
-                    speed: Float(ttsSpeed),
-                    startBlockIndex: resolvedStartIndex
-                )
-            }
-        }
-    }
-
-    private func stopTTSPlayback() {
+        ttsManager.play(renditionID: record.id, paragraph: startIndex)
+        ttsBridge.setSpeechMode(true)
+        ttsBridge.resumeFollowing()
         isPreparingTTS = false
-        withAnimation(.easeInOut(duration: 0.3)) {
-            ttsManager.stop()
-        }
     }
-
-    private func updateSpeed(_ newSpeed: Double) {
-        ttsSpeed = newSpeed
-        if ttsManager.isSpeaking {
-            let currentIndex = ttsManager.currentBlockIndex ?? 0
-            ttsManager.stop()
-            Task {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                startTTSPlayback(from: currentIndex)
-            }
-        }
+    private func stopTTSPlayback() {
+        ttsManager.stop(); ttsBridge.setSpeechMode(false); ttsBridge.clearActive()
     }
-
+    private func updateSpeed(_ newSpeed: Double) { ttsSpeed = newSpeed; ttsManager.setRate(newSpeed) }
     private var ttsControlsOverlay: some View {
-        VStack {
-            Spacer()
-            
-            HStack(alignment: .bottom) {
-                // Bottom left: Exit TTS mode button
-                Button {
-                    stopTTSPlayback()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .bold))
-                        .frame(width: 46, height: 46)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(InteractivePlainButtonStyle())
-                .glassEffect(.regular.interactive(), in: .circle)
-                
-                Spacer()
-                
-                // Bottom mid: Play/Pause + Stop capsule
-                HStack(spacing: 0) {
-                    Button {
-                        toggleTTSPlayback()
-                    } label: {
-                        Image(systemName: ttsManager.isPaused ? "play.fill" : "pause.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: 46, height: 46)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Divider()
-                        .frame(height: 24)
-                        .background(Color.white.opacity(0.2))
-                    
-                    Button {
-                        stopTTSPlayback()
-                    } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: 46, height: 46)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .glassEffect(.regular.interactive(), in: .capsule)
-                
-                Spacer()
-                
-                // Bottom right: Speed menu popup
-                Menu {
-                    ForEach([1.0, 1.2, 1.5, 1.7, 1.8, 2.0], id: \.self) { speedOption in
-                        Button {
-                            updateSpeed(speedOption)
-                        } label: {
-                            HStack {
-                                Text(String(format: "%.1fx", speedOption))
-                                if ttsSpeed == speedOption {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Text(String(format: "%.1fx", ttsSpeed))
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 46, height: 46)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(InteractivePlainButtonStyle())
-                .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
-        }
+        TTSPlaybackControls(
+            title: fetchNovel()?.name ?? currentChapterName, chapterName: currentChapterName,
+            isPlaying: !ttsManager.isPaused, isBuffering: ttsManager.isBuffering,
+            elapsed: ttsManager.elapsed, duration: ttsManager.duration, rate: ttsManager.rate,
+            voiceName: ttsManager.manifest?.voiceName ?? "Qwen", isDownloaded: true,
+            isFollowing: ttsBridge.isFollowing, sleepTimerLabel: ttsManager.sleepTimerLabel,
+            onBack: { stopTTSPlayback() }, onMore: { showSettings = true },
+            onPlayPause: { ttsManager.togglePause() }, onSkipBack: { ttsManager.skip(-15) },
+            onSkipForward: { ttsManager.skip(30) }, onRate: { showSpeedPicker = true },
+            onVoice: { showVoicePicker = true }, onDownload: { showAudioDownloads = true },
+            onBookmark: { if let chapter = currentChapter { chapter.bookmark.toggle(); try? modelContext.save() } },
+            onChapters: { showChapterList = true }, onSleep: { showSleepPicker = true },
+            onFollow: { ttsBridge.resumeFollowing() }, onSeek: { ttsManager.seek(to: $0) }
+        )
     }
+
 }
 
 // MARK: - Focus Indicator View Overlay

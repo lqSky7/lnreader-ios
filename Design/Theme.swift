@@ -10,11 +10,11 @@ enum AppTheme {
 
     // MARK: Accent Colors
 
-    /// Primary accent — grey.
-    static let accent = Color(hue: 0.0, saturation: 0.0, brightness: 0.60)
+    /// Apple Music inspired red-pink.
+    static let accent = Color(red: 250 / 255, green: 45 / 255, blue: 72 / 255)
 
-    /// Secondary accent — soft teal.
-    static let secondaryAccent = Color(hue: 0.50, saturation: 0.45, brightness: 0.80)
+    /// A softer variation of the app accent.
+    static let secondaryAccent = accent.opacity(0.72)
 
     // MARK: Reader
 
@@ -162,5 +162,31 @@ extension Color {
                           Int(round(green * 255)),
                           Int(round(blue * 255)))
         }
+    }
+}
+
+// Native navigation keeps the source view alive for the interactive return zoom.
+extension View {
+    @ViewBuilder func bookTransitionSource<ID: Hashable>(_ id: ID, in namespace: Namespace.ID?) -> some View {
+        #if os(iOS)
+        if let namespace { self.matchedTransitionSource(id: id, in: namespace) } else { self }
+        #else
+        self
+        #endif
+    }
+    func bookZoom<ID: Hashable>(from id: ID, in namespace: Namespace.ID) -> some View {
+        modifier(BookZoomTransition(sourceID: id, namespace: namespace))
+    }
+}
+private struct BookZoomTransition<ID: Hashable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let sourceID: ID
+    let namespace: Namespace.ID
+    @ViewBuilder func body(content: Content) -> some View {
+        #if os(iOS)
+        if reduceMotion { content } else { content.navigationTransition(.zoom(sourceID: sourceID, in: namespace)) }
+        #else
+        content
+        #endif
     }
 }

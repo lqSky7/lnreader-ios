@@ -1,0 +1,336 @@
+import Foundation
+import SwiftUI
+
+struct TTSPlaybackControls: View {
+    let title: String
+    let chapterName: String
+    let isPlaying: Bool
+    let isBuffering: Bool
+    let elapsed: Double
+    let duration: Double
+    let rate: Double
+    let voiceName: String
+    let isDownloaded: Bool
+    let isFollowing: Bool
+    let sleepTimerLabel: String
+    let onBack: () -> Void
+    let onMore: () -> Void
+    let onPlayPause: () -> Void
+    let onSkipBack: () -> Void
+    let onSkipForward: () -> Void
+    let onRate: () -> Void
+    let onVoice: () -> Void
+    let onDownload: () -> Void
+    let onBookmark: () -> Void
+    let onChapters: () -> Void
+    let onSleep: () -> Void
+    let onFollow: () -> Void
+    let onSeek: (Double) -> Void
+
+    @State private var scrubValue: Double = 0.0
+    @State private var isScrubbing: Bool = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            topBar
+
+            if !isFollowing {
+                followBanner
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            Spacer()
+
+            bottomControlsPanel
+        }
+        .animation(.easeInOut(duration: 0.25), value: isFollowing)
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
+
+            Text(title)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity)
+
+            Button(action: onMore) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("More options")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .glassEffect()
+    }
+
+    private var followBanner: some View {
+        Button(action: onFollow) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.uturn.backward.circle.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Back to current")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+            .foregroundStyle(AppTheme.accent)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .glassEffect()
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back to current reading position")
+        .padding(.top, 12)
+    }
+
+    private var bottomControlsPanel: some View {
+        VStack(spacing: 14) {
+            chapterSelector
+            scrubberSection
+            transportRow
+            secondaryRow
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 20)
+        .glassEffect()
+    }
+
+    private var chapterSelector: some View {
+        Button(action: onChapters) {
+            HStack(spacing: 6) {
+                Text(chapterName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Chapter selection: \(chapterName)")
+    }
+
+    private var scrubberSection: some View {
+        VStack(spacing: 4) {
+            Slider(
+                value: scrubberBinding,
+                in: 0...safeRangeUpper,
+                onEditingChanged: handleScrubEditing
+            )
+            .tint(AppTheme.accent)
+            .disabled(safeDuration <= 0)
+            .accessibilityLabel("Playback progress")
+            .accessibilityValue("\(formatTime(displayedTime)) of \(formatTime(safeDuration))")
+
+            HStack {
+                Text(formatTime(displayedTime))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Text("-" + formatTime(max(0, safeDuration - displayedTime)))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var transportRow: some View {
+        HStack(spacing: 0) {
+            Button(action: onSleep) {
+                VStack(spacing: 2) {
+                    Image(systemName: (sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? "moon.zzz" : "moon.zzz.fill")
+                        .font(.system(size: 18))
+                    if !(sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") {
+                        Text(sleepTimerLabel)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                    }
+                }
+                .foregroundStyle((sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? .primary : AppTheme.accent)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel((sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? "Sleep timer" : "Sleep timer: \(sleepTimerLabel)")
+
+            Button(action: onSkipBack) {
+                Image(systemName: "gobackward.15")
+                    .font(.system(size: 22))
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Rewind 15 seconds")
+
+            Button(action: onPlayPause) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.accent)
+                        .frame(width: 54, height: 54)
+
+                    if isBuffering {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.white)
+                            .offset(x: isPlaying ? 0 : 2)
+                    }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isBuffering ? "Buffering" : (isPlaying ? "Pause" : "Play"))
+
+            Button(action: onSkipForward) {
+                Image(systemName: "goforward.30")
+                    .font(.system(size: 22))
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Fast forward 30 seconds")
+
+            Button(action: onRate) {
+                Text(formatRate(rate))
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Playback speed \(formatRate(rate))")
+        }
+    }
+
+    private var secondaryRow: some View {
+        HStack(spacing: 0) {
+            Button(action: onDownload) {
+                Image(systemName: isDownloaded ? "arrow.down.circle.fill" : "arrow.down.circle")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isDownloaded ? AppTheme.accent : .primary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isDownloaded ? "Downloaded" : "Download chapter")
+
+            Spacer()
+
+            Button(action: onVoice) {
+                HStack(spacing: 6) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 14))
+                    Text(voiceName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Voice: \(voiceName)")
+
+            Spacer()
+
+            Button(action: onBookmark) {
+                Image(systemName: "bookmark")
+                    .font(.system(size: 18))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Bookmark")
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var safeDuration: Double {
+        guard duration.isFinite && !duration.isNaN && duration > 0 else { return 0 }
+        return duration
+    }
+
+    private var safeRangeUpper: Double {
+        safeDuration > 0 ? safeDuration : 1.0
+    }
+
+    private var clampedElapsed: Double {
+        guard elapsed.isFinite && !elapsed.isNaN && elapsed >= 0 else { return 0 }
+        return safeDuration > 0 ? min(elapsed, safeDuration) : 0
+    }
+
+    private var displayedTime: Double {
+        isScrubbing ? scrubValue : clampedElapsed
+    }
+
+    private var scrubberBinding: Binding<Double> {
+        Binding(
+            get: { displayedTime },
+            set: { scrubValue = $0 }
+        )
+    }
+
+    private func handleScrubEditing(_ isEditing: Bool) {
+        if isEditing {
+            isScrubbing = true
+            scrubValue = clampedElapsed
+        } else {
+            isScrubbing = false
+            let clampedTarget = min(max(scrubValue, 0), safeDuration)
+            onSeek(clampedTarget)
+        }
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite && !seconds.isNaN && seconds >= 0 else { return "0:00" }
+        let total = Int(seconds)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let remainingSeconds = total % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, remainingSeconds)
+        } else {
+            return String(format: "%d:%02d", minutes, remainingSeconds)
+        }
+    }
+
+    private func formatRate(_ value: Double) -> String {
+        let text = String(format: "%g", value)
+        return "\(text)x"
+    }
+}
+

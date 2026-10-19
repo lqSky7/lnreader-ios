@@ -5,6 +5,7 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
+    @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ReadingHistory.lastReadAt, order: .reverse)
     private var history: [ReadingHistory]
@@ -34,8 +35,10 @@ struct HistoryView: View {
                                             novelPath: entry.novelPath
                                         )
                                         .id(entry.chapterPath)
+                                        .bookZoom(from: entry.persistentModelID, in: chapterTransitions)
                                     } label: {
                                         HistoryRow(entry: entry)
+                                            .bookTransitionSource(entry.persistentModelID, in: chapterTransitions)
                                     }
                                 }
                                 .onDelete { offsets in

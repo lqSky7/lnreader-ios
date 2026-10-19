@@ -6,6 +6,9 @@ import SwiftUI
 
 @main
 struct LNReaderApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(TTSAudioAppDelegate.self) private var audioDelegate
+    #endif
     @State private var pluginManager = PluginManager()
     @State private var libraryManager = LibraryManager()
     @State private var syncManager = SyncManager()
@@ -13,6 +16,7 @@ struct LNReaderApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .tint(AppTheme.accent)
                 .environment(pluginManager)
                 .environment(libraryManager)
                 .environment(syncManager)

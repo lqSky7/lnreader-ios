@@ -437,7 +437,7 @@ struct ReaderSettings: View {
                             focusManager.requestAuthorization()
                         }
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.blue)
+                        .foregroundColor(AppTheme.accent)
                     } else if authStatus == 1 { // denied
                         Text("Access to Focus status has been denied. You can enable it in iOS Settings > Privacy & Security > Focus.")
                             .font(.system(size: 12))

@@ -68,6 +68,7 @@ import WebKit
             }
 
             func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+                if bridge?.receive(message.name, body: message.body) == true { return }
                 if message.name == "tapParagraph",
                    let body = message.body as? String,
                    let index = Int(body) {
@@ -114,6 +115,8 @@ import WebKit
             let userContentController = WKUserContentController()
             let helper = ScriptMessageHandlerHelper(delegate: context.coordinator)
             userContentController.add(helper, name: "tapParagraph")
+            userContentController.add(helper, name: "ttsWordTap")
+            userContentController.add(helper, name: "ttsFollowChanged")
             userContentController.add(helper, name: "scrollParagraph")
             userContentController.add(helper, name: "jsError")
             userContentController.add(helper, name: "toggleControls")
@@ -382,6 +385,7 @@ import WebKit
             }
 
             func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+                if bridge?.receive(message.name, body: message.body) == true { return }
                 if message.name == "tapParagraph",
                    let body = message.body as? String,
                    let index = Int(body) {
@@ -427,6 +431,8 @@ import WebKit
             let userContentController = WKUserContentController()
             let helper = ScriptMessageHandlerHelper(delegate: context.coordinator)
             userContentController.add(helper, name: "tapParagraph")
+            userContentController.add(helper, name: "ttsWordTap")
+            userContentController.add(helper, name: "ttsFollowChanged")
             userContentController.add(helper, name: "scrollParagraph")
             userContentController.add(helper, name: "toggleControls")
             userContentController.add(helper, name: "loadMoreComments")
@@ -645,9 +651,9 @@ extension ReaderContent {
             h1 { font-size: 1.5em; }
             h2 { font-size: 1.3em; }
             h3 { font-size: 1.15em; }
-            a { color: #d4a574; text-decoration: none; }
+            a { color: #FA2D48; text-decoration: none; }
             blockquote {
-                border-left: 3px solid #d4a574;
+                border-left: 3px solid #FA2D48;
                 padding-left: 1em;
                 margin: 1em 0;
                 color: #8e8e93;
@@ -656,18 +662,20 @@ extension ReaderContent {
             em { font-style: italic; }
             strong { font-weight: bold; }
             .tts-active {
-                background: rgba(212, 165, 116, 0.18);
+                background: rgba(250, 45, 72, 0.18);
                 border-radius: 8px;
-                box-shadow: inset 0 0 0 1px rgba(212, 165, 116, 0.28);
-                padding: 0.05em 0.1em;
+                box-shadow: inset 0 0 0 1px rgba(250, 45, 72, 0.28);
+
             }
+            ::highlight(tts-word) { background-color: rgba(250,45,72,0.65); color: inherit; }
+            body.tts-speech-mode { padding-top: 130px !important; padding-bottom: 340px !important; }
             #tts-dot {
                 position: absolute;
                 width: 6px;
                 height: 6px;
                 border-radius: 999px;
-                background: #d4a574;
-                box-shadow: 0 0 8px rgba(212, 165, 116, 0.8);
+                background: #FA2D48;
+                box-shadow: 0 0 8px rgba(250, 45, 72, 0.8);
                 opacity: 0;
                 pointer-events: none;
                 transition: transform 0.2s ease, opacity 0.2s ease;
@@ -683,8 +691,8 @@ extension ReaderContent {
                 box-shadow: 0 0 0 9999px rgba(0, 0, 0, \(resolvedLineFocusOpacity(dulling: lineFocusDulling)));
                 pointer-events: none;
                 z-index: 9999;
-                border-top: 1px dashed rgba(212, 165, 116, 0.4);
-                border-bottom: 1px dashed rgba(212, 165, 116, 0.4);
+                border-top: 1px dashed rgba(250, 45, 72, 0.4);
+                border-bottom: 1px dashed rgba(250, 45, 72, 0.4);
                 display: \(lineFocusEnabled ? "block" : "none");
             }
             #paper-grain-overlay {
@@ -886,8 +894,8 @@ extension ReaderContent {
                 background: rgba(128, 128, 128, 0.15);
             }
             .like-button.checked {
-                color: #3182ce !important;
-                background: rgba(49, 130, 206, 0.15);
+                color: #FA2D48 !important;
+                background: rgba(250, 45, 72, 0.15);
             }
             .dislike-button.checked {
                 color: #e53e3e !important;
@@ -1061,28 +1069,16 @@ extension ReaderContent {
             if (!window.__cachedParagraphs) {
                 var allNodes = Array.from(document.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li"));
                 window.__cachedParagraphs = allNodes.filter(function(node) {
-                    return !node.closest("#lnw-comments-section");
+                    return !node.closest("#lnw-comments-section") && !(node.tagName === "LI" && node.querySelector("p,li"));
                 });
             }
             return window.__cachedParagraphs;
         }
 
+        \(ReaderTTSJavaScript.mapping)
         window.collectBlocks = function() {
-            if (window.__ttsBlocks) return;
-            var nodes = window.getParagraphs();
-            var texts = [];
-            nodes.forEach(function(node) {
-                var text = node.innerText.replace(/\\s+/g, " ").trim();
-                if (text.length === 0) {
-                    node.setAttribute("data-tts-index", "-1");
-                    return;
-                }
-                var index = texts.length;
-                node.setAttribute("data-tts-index", String(index));
-                texts.push(text);
-            });
-            window.__ttsBlocks = texts;
-        }
+            if (!window.__ttsBlocks) window.__ttsBlocks = window.ttsExtractBlocks();
+        };
 
         window.applyBionicToNode = function(startNode) {
             var processNode = function(node) {
@@ -1215,7 +1211,7 @@ extension ReaderContent {
             }
             target.classList.add("tts-active");
             window.__restoreIndex = index;
-            if (!window.isElementVisible(target)) {
+            if (window.__ttsFollowing && !window.isElementVisible(target)) {
                 target.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
             if (dot) {
@@ -1229,6 +1225,7 @@ extension ReaderContent {
         };
 
         window.clearTTSActive = function() {
+            if (window.CSS && CSS.highlights) CSS.highlights.delete("tts-word");
             var active = document.querySelector(".tts-active");
             if (active) {
                 active.classList.remove("tts-active");
@@ -1296,23 +1293,16 @@ extension ReaderContent {
 
             // Tap detection
             if (Math.abs(diffX) < 8 && Math.abs(diffY) < 8 && elapsed < 300) {
-                // Scroll mode: tap toggles controls, or triggers tapParagraph if on a paragraph
-                var paragraph = e.target.closest('p, h1, h2, h3, h4, h5, h6, li');
-                if (paragraph) {
-                    var indexAttr = paragraph.getAttribute("data-tts-index");
-                    if (indexAttr && indexAttr !== "-1") {
-                        var index = parseInt(indexAttr);
-                        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tapParagraph) {
-                            window.webkit.messageHandlers.tapParagraph.postMessage(String(index));
-                        }
+                clearTimeout(window.__ttsSingleTap);
+                window.__ttsSingleTap = setTimeout(function() {
+                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
+                        window.webkit.messageHandlers.toggleControls.postMessage("");
                     }
-                }
-                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
-                    window.webkit.messageHandlers.toggleControls.postMessage("");
-                }
+                }, window.__ttsSpeechMode ? 260 : 0);
             }
         });
 
+        \(ReaderTTSJavaScript.interaction)
         window.prepareTTS();
         """
     }

@@ -5,6 +5,7 @@ import SwiftData
 import SwiftUI
 
 struct UpdatesView: View {
+    @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
     @Environment(PluginManager.self) private var pluginManager
     @Environment(LibraryManager.self) private var libraryManager
@@ -42,8 +43,10 @@ struct UpdatesView: View {
                                             novelPath: chapter.novel?.path
                                         )
                                         .id(chapter.path)
+                                        .bookZoom(from: chapter.persistentModelID, in: chapterTransitions)
                                     } label: {
                                         UpdateRow(chapter: chapter)
+                                            .bookTransitionSource(chapter.persistentModelID, in: chapterTransitions)
                                     }
                                 }
                             }

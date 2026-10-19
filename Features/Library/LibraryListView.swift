@@ -5,6 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryListView: View {
+    var transitionNamespace: Namespace.ID? = nil
     let novels: [Novel]
     let isEditing: Bool
     @Binding var draggedItem: Novel?
@@ -38,6 +39,7 @@ struct LibraryListView: View {
                             ))
                     } else {
                         InteractiveListRow(
+                            transitionNamespace: transitionNamespace,
                             novel: novel,
                             onSelect: onSelect,
                             onStartEditing: onStartEditing
@@ -76,6 +78,7 @@ struct EditableListRow: View {
 // MARK: - Interactive List Row Wrapper
 
 struct InteractiveListRow: View {
+    var transitionNamespace: Namespace.ID? = nil
     let novel: Novel
     var onSelect: (Novel) -> Void
     var onStartEditing: () -> Void
@@ -91,6 +94,7 @@ struct InteractiveListRow: View {
             }
         }) {
             LibraryListRow(
+                transitionNamespace: transitionNamespace,
                 novel: novel,
                 isEditing: false,
                 onDelete: {}
@@ -114,6 +118,7 @@ struct InteractiveListRow: View {
 // MARK: - List Row
 
 struct LibraryListRow: View {
+    var transitionNamespace: Namespace.ID? = nil
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
     let novel: Novel
     var isEditing: Bool = false
@@ -139,6 +144,7 @@ struct LibraryListRow: View {
                 aspectRatio: LayoutConstants.coverAspectRatio
             )
             .frame(width: 60, height: 86)
+            .bookTransitionSource(novel.persistentModelID, in: transitionNamespace)
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {

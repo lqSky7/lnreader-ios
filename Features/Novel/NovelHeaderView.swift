@@ -5,6 +5,7 @@ import SwiftUI
 import Glur
 
 struct NovelHeaderView: View {
+    var transitionNamespace: Namespace.ID? = nil
     let name: String
     let author: String?
     let cover: String?
@@ -102,6 +103,7 @@ struct NovelHeaderView: View {
                     }
                     .buttonStyle(.glassProminent)
                     .glassEffectID("continue", in: namespace)
+                    .bookTransitionSource("continue", in: transitionNamespace)
 
                     Button(action: onToggleLibrary) {
                         Label(

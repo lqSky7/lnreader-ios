@@ -1,11 +1,1 @@
-{
-  "colors" : [
-    {
-      "idiom" : "universal"
-    }
-  ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
-  }
-}
+{"colors":[{"idiom":"universal","color":{"color-space":"srgb","components":{"red":"0.980392","green":"0.176471","blue":"0.282353","alpha":"1.000"}}}],"info":{"author":"xcode","version":1}}
