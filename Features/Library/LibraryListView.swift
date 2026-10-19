@@ -58,6 +58,7 @@ struct LibraryListView: View {
 /// Separates the delete button from the drag surface so taps on the button
 /// aren't swallowed by the drag gesture.
 struct EditableListRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let novel: Novel
     let isDragging: Bool
     var onDelete: () -> Void
@@ -71,7 +72,7 @@ struct EditableListRow: View {
         .contentShape(Rectangle())
         .wiggle(when: true)
         .opacity(isDragging ? 0.4 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isDragging)
+        .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isDragging)
     }
 }
 

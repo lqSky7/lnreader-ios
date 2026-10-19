@@ -14,11 +14,13 @@ struct NovelFireLoginView: View {
     /// Which LNW-family site to sign in to. Defaults to NovelFire for backwards compatibility.
     var site: CommentSite = .novelFire
     
+    @State private var retryID = UUID()
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
     
     var body: some View {
-        ZStack {
+        NavigationStack {
+          ZStack {
             NovelFireWebViewWrapper(
                 url: site.googleAuthURL,
                 site: site,
@@ -29,6 +31,7 @@ struct NovelFireLoginView: View {
                     dismiss()
                 }
             )
+            .id(retryID)
             .ignoresSafeArea(edges: .bottom)
             
             if isLoading {
@@ -49,6 +52,7 @@ struct NovelFireLoginView: View {
                     Button("Retry") {
                         errorMessage = nil
                         isLoading = true
+                        retryID = UUID()
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -59,11 +63,13 @@ struct NovelFireLoginView: View {
                 .background(Color(.windowBackgroundColor))
                 #endif
             }
-        }
-        .navigationTitle("Sign In to \(site.displayName)")
+          }
+          .navigationTitle("Sign In to \(site.displayName)")
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+          .navigationBarTitleDisplayMode(.inline)
+          #endif
+        }
     }
 }
 
@@ -83,13 +89,13 @@ struct NovelFireWebViewWrapper: PlatformViewRepresentable {
         return createWebView(context: context)
     }
     
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func updateUIView(_ uiView: WKWebView, context: Context) { context.coordinator.parent = self }
     #else
     func makeNSView(context: Context) -> WKWebView {
         return createWebView(context: context)
     }
     
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+    func updateNSView(_ nsView: WKWebView, context: Context) { context.coordinator.parent = self }
     #endif
     
     private func createWebView(context: Context) -> WKWebView {
@@ -97,43 +103,20 @@ struct NovelFireWebViewWrapper: PlatformViewRepresentable {
         configuration.websiteDataStore = WKWebsiteDataStore.default()
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         
         // Use a clean desktop Safari user agent to bypass Google disallowed_useragent OAuth block
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
         
-        // Wait for cookie store deletion to finish completely before loading the redirect URL
-        let cookieStore = configuration.websiteDataStore.httpCookieStore
-        let targetDomain = site.domain
-        cookieStore.getAllCookies { cookies in
-            let group = DispatchGroup()
-            for cookie in cookies {
-                if cookie.domain.contains(targetDomain) {
-                    group.enter()
-                    cookieStore.delete(cookie) {
-                        group.leave()
-                    }
-                }
-            }
-            group.notify(queue: .main) {
-                // Clear from HTTPCookieStorage as well
-                if let httpCookies = HTTPCookieStorage.shared.cookies {
-                    for hc in httpCookies {
-                        if hc.domain.contains(targetDomain) {
-                            HTTPCookieStorage.shared.deleteCookie(hc)
-                        }
-                    }
-                }
-                
-                // Now load the URL safely
-                let request = URLRequest(url: url)
-                webView.load(request)
-            }
-        }
-        
+        // Keep existing cookies. Laravel creates session cookies for guests too;
+        // their presence alone is never proof that Google sign-in completed.
+        webView.load(URLRequest(url: url))
+
         return webView
     }
     
-    class Coordinator: NSObject, WKNavigationDelegate {
+    class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        private var completed = false
         var parent: NovelFireWebViewWrapper
         
         init(parent: NovelFireWebViewWrapper) {
@@ -161,30 +144,33 @@ struct NovelFireWebViewWrapper: PlatformViewRepresentable {
         }
         
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            if (error as NSError).code == NSURLErrorCancelled { return }
             DispatchQueue.main.async {
                 self.parent.isLoading = false
                 self.parent.errorMessage = error.localizedDescription
             }
         }
         
-        private func checkCookies(webView: WKWebView) {
-            guard let url = webView.url else { return }
-            let urlString = url.absoluteString
-            let site = parent.site
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
+            return nil
+        }
 
-            // Only dismiss if we are back on the site's pages and it's not the initial redirect redirecting to Google
-            if urlString.contains(site.domain) && !urlString.contains("auth/redirect/google") {
+        private func checkCookies(webView: WKWebView) {
+            guard !completed, let url = webView.url, parent.site.matches(host: url.host) else { return }
+            let site = parent.site
+            webView.evaluateJavaScript("document.documentElement.outerHTML") { [weak self, weak webView] value, _ in
+                guard let self, let webView, !self.completed, site.matches(host: webView.url?.host), let html = value as? String,
+                      NovelFireCommentsService.isAuthenticatedPage(html) else { return }
                 webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-                    let hasSession = cookies.contains { $0.name == site.sessionCookieName }
-                    if hasSession {
-                        DispatchQueue.main.async {
-                            for cookie in cookies {
-                                if cookie.domain.contains(site.domain) {
-                                    HTTPCookieStorage.shared.setCookie(cookie)
-                                }
-                            }
-                            self.parent.onSuccess()
-                        }
+                    let matching = cookies.filter { site.matches(host: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) }
+                    guard matching.contains(where: { $0.name == site.sessionCookieName }) else { return }
+                    DispatchQueue.main.async {
+                        guard !self.completed else { return }
+                        self.completed = true
+                        matching.forEach { HTTPCookieStorage.shared.setCookie($0) }
+                        UserDefaults.standard.set(true, forKey: "comments.authenticated." + site.rawValue)
+                        self.parent.onSuccess()
                     }
                 }
             }

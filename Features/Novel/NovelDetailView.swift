@@ -192,7 +192,7 @@ struct NovelDetailView: View {
         }
         if !chapterSearch.isEmpty {
             result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(chapterSearch)
+                $0.name.localizedCaseInsensitiveContains(chapterSearch) || String($0.position + 1) == chapterSearch.trimmingCharacters(in: .whitespaces)
             }
         }
         return result

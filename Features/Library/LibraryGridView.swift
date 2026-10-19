@@ -62,6 +62,7 @@ struct LibraryGridView: View {
 /// Separates the delete badge from the drag surface so taps on the badge
 /// aren't swallowed by the drag gesture.
 struct EditableGridCell: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let novel: Novel
     let displayMode: DisplayMode
     let isDragging: Bool
@@ -77,7 +78,7 @@ struct EditableGridCell: View {
         .contentShape(Rectangle())
         .wiggle(when: true)
         .opacity(isDragging ? 0.4 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isDragging)
+        .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isDragging)
     }
 }
 

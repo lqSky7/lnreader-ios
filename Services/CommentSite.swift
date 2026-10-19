@@ -54,6 +54,11 @@ enum CommentSite: String, CaseIterable, Sendable, Hashable {
         }
     }
 
+    func matches(host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return host == domain || host.hasSuffix("." + domain)
+    }
+
     var googleAuthURL: URL {
         URL(string: "\(baseURLString)/auth/redirect/google")!
     }

@@ -64,7 +64,7 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         webView.navigationDelegate = self
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
-            webView.loadHTMLString("<style>" + ReaderTTSJavaScript.highlightStyle + "</style><p style='margin:40px;font-size:24px'>Read this book.</p>", baseURL: nil)
+            webView.loadHTMLString("<style>" + ReaderTTSJavaScript.highlightStyle + ReaderTTSJavaScript.speechLayoutStyle + "</style><p style='margin:40px;font-size:24px'>Read this book.</p>", baseURL: nil)
         }
         _ = try await webView.evaluateJavaScript(ReaderTTSJavaScript.mapping + ReaderTTSJavaScript.interaction + "window.ttsExtractBlocks(); window.setTTSSpeechMode(true); window.setTTSControlsVisible(false);")
         _ = try await webView.evaluateJavaScript("window.setTTSActiveWord({paragraphIndex:0,sourceStart:5,sourceEnd:9,start:0.5,end:0.9});")
@@ -76,6 +76,22 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         precondition(movedWord == "book", "Advancing narration must replace the previous word highlight")
         let marker = try await webView.evaluateJavaScript("({visible:document.getElementById('tts-word-marker').style.opacity,width:parseFloat(document.getElementById('tts-word-marker').style.width)})") as! [String: Any]
         precondition(marker["visible"] as? String == "1" && (marker["width"] as? Double ?? 0) > 0)
+        let stableFocus = try await webView.evaluateJavaScript("""
+        (() => {
+            const target = document.querySelector('p');
+            const before = {top: target.getBoundingClientRect().top, height: document.body.scrollHeight, scroll: window.scrollY};
+            for (let i = 0; i < 8; i++) { window.setTTSControlsVisible(i % 2 === 0); }
+            const after = {top: target.getBoundingClientRect().top, height: document.body.scrollHeight, scroll: window.scrollY};
+            return JSON.stringify(before) === JSON.stringify(after);
+        })()
+        """) as? Bool
+        precondition(stableFocus == true, "Focused/unfocused listening must not move text, change document height or scroll")
+        let themedHighlight = try await webView.evaluateJavaScript("""
+        document.documentElement.style.setProperty('--reader-highlight', 'rgba(80, 140, 100, 0.3)');
+        getComputedStyle(document.getElementById('tts-word-marker')).backgroundColor;
+        """) as? String
+        precondition(themedHighlight == "rgba(80, 140, 100, 0.3)", "Word highlight must follow the reader's selected color and strength")
+        print("PASS: repeated focus toggles preserve WebKit layout/scroll and highlight color updates in place")
         print("PASS: exactly one spoken-word highlight, media-clock updates, and no paragraph background in real WKWebView")
         let bridge = ReaderContentBridge()
         bridge.setWebView(webView); bridge.contentDidFinishLoad(); bridge.setSpeechMode(true)
@@ -93,8 +109,8 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         precondition(stoppedCleared == true, "Late word updates after stopping must not paint highlights")
         bridge.setSpeechMode(true); bridge.setControlsVisible(false)
         print("PASS: bridge clears silence, invalid mappings and stop; follow/focus cannot resurrect highlights")
-        let hidden = try await webView.evaluateJavaScript("window.__ttsSpeechMode && !window.__ttsControlsVisible && document.body.style.getPropertyValue('--tts-bottom') === '32px'") as? Bool
-        precondition(hidden == true, "Focused listening must retain speech mode and remove control insets")
+        let hidden = try await webView.evaluateJavaScript("window.__ttsSpeechMode && !window.__ttsControlsVisible && getComputedStyle(document.body).paddingBottom === '190px'") as? Bool
+        precondition(hidden == true, "Focused listening must retain speech mode and the same layout insets")
         let tap = "var p=document.querySelector('p'); p.dispatchEvent(new PointerEvent('pointerdown',{isPrimary:true,clientX:55,clientY:55,bubbles:true})); p.dispatchEvent(new PointerEvent('pointerup',{isPrimary:true,clientX:55,clientY:55,bubbles:true}));"
         _ = try await webView.evaluateJavaScript(tap)
         try await Task.sleep(for: .milliseconds(400))
@@ -104,7 +120,7 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         precondition(messages.filter { $0 == "toggleControls" }.count == 1, "Double tap seeking must not toggle focus")
         precondition(messages.filter { $0 == "ttsWordTap" }.count == 1, "Double tap must still seek the tapped word")
         _ = try await webView.evaluateJavaScript("window.ttsSetFollowing(false); window.setTTSControlsVisible(true);")
-        let restored = try await webView.evaluateJavaScript("window.__ttsControlsVisible && !window.__ttsFollowing && document.body.style.getPropertyValue('--tts-bottom') === '190px'") as? Bool
+        let restored = try await webView.evaluateJavaScript("window.__ttsControlsVisible && !window.__ttsFollowing && getComputedStyle(document.body).paddingBottom === '190px'") as? Bool
         precondition(restored == true, "Showing controls must preserve a manually detached reading position")
         print("PASS: listening focus toggle, control insets, double-tap word seek, and detached follow state in real WKWebView")
     }

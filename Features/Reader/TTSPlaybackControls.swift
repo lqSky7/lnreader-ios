@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 struct TTSPlaybackControls: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isPlaying: Bool
     let isBuffering: Bool
     let elapsed: Double
@@ -38,7 +39,7 @@ struct TTSPlaybackControls: View {
 
             bottomControlsPanel
         }
-        .animation(.easeInOut(duration: 0.25), value: isFollowing)
+        .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isFollowing)
     }
 
     private var followBanner: some View {

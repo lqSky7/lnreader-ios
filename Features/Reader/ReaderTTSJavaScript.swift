@@ -5,8 +5,13 @@ enum ReaderTTSJavaScript {
     static let highlightStyle = """
     .tts-active { background: transparent; box-shadow: none; }
     ::highlight(tts-word) { background-color: transparent; color: inherit; }
-    #tts-word-marker { position: absolute; top: 0; left: 0; pointer-events: none; border-radius: 5px; background: rgba(250,45,72,0.26); opacity: 0; z-index: 1; transition: transform 180ms cubic-bezier(.22,1.25,.36,1), width 180ms ease-out, height 180ms ease-out; will-change: transform; }
+    #tts-word-marker { position: absolute; top: 0; left: 0; pointer-events: none; border-radius: 5px; background: var(--reader-highlight, rgba(120,154,135,0.26)); opacity: 0; z-index: 1; transition: transform 180ms cubic-bezier(.22,1.25,.36,1), width 180ms ease-out, height 180ms ease-out; will-change: transform; }
     @media (prefers-reduced-motion: reduce) { #tts-word-marker { transition: none !important; } }
+    """
+
+    static let speechLayoutStyle = """
+    body.tts-speech-mode { padding-top: var(--reader-top-inset, 156px) !important; padding-bottom: 190px !important; }
+    body.tts-speech-mode #line-focus-ruler { display: none !important; }
     """
 
     static let mapping = #"""
@@ -94,9 +99,7 @@ enum ReaderTTSJavaScript {
     };
     window.setTTSControlsVisible = function(value) {
         window.__ttsControlsVisible = value;
-        document.body.style.setProperty('--tts-top', value ? '120px' : '24px');
-        document.body.style.setProperty('--tts-bottom', value ? '190px' : '32px');
-        if (window.__ttsSpeechMode && window.__ttsWord) window.setTTSActiveWord(window.__ttsWord);
+        // Chrome visibility changes only the overlay, never document geometry or following.
     };
     window.ttsRange = function(word) {
         var target = document.querySelector('[data-tts-index="' + word.paragraphIndex + '"]');
@@ -131,8 +134,9 @@ enum ReaderTTSJavaScript {
             marker.getAnimations().forEach(function(animation) { animation.cancel(); });
             marker.animate([{opacity: 0.25, scale: '0.96'}, {opacity: 1, scale: '1'}], {duration: 170, easing: 'cubic-bezier(.22,1.25,.36,1)'});
         }
-        var topInset = window.__ttsControlsVisible ? 120 : 32;
-        var bottomInset = window.__ttsSpeechMode ? (window.__ttsControlsVisible ? 190 : 32) : 120;
+        // Keep the reading band fixed when controls appear or disappear.
+        var topInset = 156;
+        var bottomInset = window.__ttsSpeechMode ? 190 : 120;
         if (window.__ttsFollowing && (rect.top < topInset || rect.bottom > window.innerHeight - bottomInset)) {
             var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             window.scrollBy({top: rect.top - Math.max(topInset, (window.innerHeight - bottomInset) * 0.42), behavior: reduceMotion ? 'instant' : 'smooth'});

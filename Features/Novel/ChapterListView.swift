@@ -5,13 +5,11 @@
 import SwiftUI
 
 struct ChapterListView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let novel: Novel?
     var allChapters: [ChapterDisplay] = []
-    /// Pre-filtered, pre-sorted, pre-paged slice to display.
     let chapters: [ChapterDisplay]
-    /// Total chapters (unfiltered) — shown in the header.
     let totalCount: Int
-    /// Filtered chapter count — used for the header when a search/filter is active.
     let filteredCount: Int
     let pluginId: String
     @Binding var selectedRange: ChapterRange
@@ -19,181 +17,89 @@ struct ChapterListView: View {
     @Binding var searchText: String
     @State private var showSearchField = false
     @State private var showDirectory = false
+    @FocusState private var searchFocused: Bool
 
-    private var isFiltered: Bool {
-        selectedFilter != .all || !searchText.isEmpty
+    private var isFiltered: Bool { selectedFilter != .all || !searchText.isEmpty }
+    private var rangeDescription: String {
+        guard let first = chapters.first, let last = chapters.last else { return "No chapters" }
+        return "\(first.position + 1)–\(last.position + 1) of \(totalCount)"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                if isFiltered {
-                    Text("\(filteredCount) / \(totalCount) Chapters")
-                        .font(Typography.title)
-                } else {
-                    Text("\(totalCount) Chapters")
-                        .font(Typography.title)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Chapters").font(Typography.title)
+                    Text(isFiltered ? "\(filteredCount) matching chapters" : rangeDescription)
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
-
                 Spacer()
-
-                GlassEffectContainer(spacing: 8) {
-                    HStack(spacing: 8) {
-                        // Search Button
-                        Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                showSearchField.toggle()
-                            }
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 16, weight: .bold))
-                                .frame(width: 40, height: 40)
-                                .contentShape(Circle())
-                        }
-                        .glassEffect(showSearchField ? .regular.tint(AppTheme.accent) : .regular, in: .circle)
-
-                        // Filter Menu
-                        Menu {
-                            ForEach(ChapterFilter.allCases) { filter in
-                                Button {
-                                    selectedFilter = filter
-                                } label: {
-                                    Label(filter.rawValue, systemImage: filterIcon(filter))
-                                }
-                            }
-                        } label: {
-                            Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .frame(width: 40, height: 40)
-                                .contentShape(Circle())
-                        }
-                        .glassEffect(selectedFilter != .all ? .regular.tint(AppTheme.accent) : .regular, in: .circle)
-
-                        // Current Range Menu
-                        Menu {
-                            Button {
-                                selectedRange = .progress
-                            } label: {
-                                Label("Current Progress", systemImage: "bookmark.fill")
-                            }
-                            Button {
-                                selectedRange = .first
-                            } label: {
-                                Label("First Chapters", systemImage: "arrow.up.circle.fill")
-                            }
-                            Button {
-                                selectedRange = .last
-                            } label: {
-                                Label("Last Chapters", systemImage: "arrow.down.circle.fill")
-                            }
-                        } label: {
-                            Image(systemName: rangeIcon(selectedRange))
-                                .font(.system(size: 16, weight: .bold))
-                                .frame(width: 40, height: 40)
-                                .contentShape(Circle())
-                        }
-                        .glassEffect(selectedRange != .progress ? .regular.tint(AppTheme.accent) : .regular, in: .circle)
+                Button {
+                    withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
+                        showSearchField.toggle()
+                        if !showSearchField { searchText = "" }
                     }
-                }
+                    searchFocused = showSearchField
+                } label: {
+                    Image(systemName: showSearchField ? "xmark" : "magnifyingglass").frame(width: 40, height: 40)
+                }.buttonStyle(.glass).accessibilityLabel(showSearchField ? "Close chapter search" : "Search chapters")
+                Menu {
+                    Picker("Filter chapters", selection: $selectedFilter) {
+                        ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                } label: {
+                    Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill").frame(width: 40, height: 40)
+                }.buttonStyle(.glass).accessibilityLabel("Filter chapters")
             }
-            .padding(.horizontal)
             .padding(.top, 8)
 
-            // Inline Search bar (expands when toggled)
             if showSearchField {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(Typography.caption)
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Chapter name or number", text: $searchText)
+                        .textFieldStyle(.plain).autocorrectionDisabled().focused($searchFocused)
+                }
+                .padding(12).background(.quaternary, in: .rect(cornerRadius: 14))
+                .transition(.opacity.combined(with: .offset(y: -4)))
+            }
 
-                    TextField("Search chapters…", text: $searchText)
-                        .font(Typography.body)
-                        .textFieldStyle(.plain)
-                        .autocorrectionDisabled()
+            if !isFiltered {
+                Picker("Chapter range", selection: $selectedRange) {
+                    Text("Continue").tag(ChapterRange.progress)
+                    Text("First").tag(ChapterRange.first)
+                    Text("Latest").tag(ChapterRange.last)
+                }.pickerStyle(.segmented)
+            }
 
-                    if !searchText.isEmpty {
-                        Button {
-                            withAnimation { searchText = "" }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
+            if chapters.isEmpty {
+                ContentUnavailableView(isFiltered ? "No matching chapters" : "No chapters yet", systemImage: "text.magnifyingglass")
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(chapters) { chapter in
+                        ChapterRow(chapter: chapter, novel: novel, pluginId: pluginId)
+                            .padding(.horizontal, 12)
+                        if chapter.id != chapters.last?.id { Divider().padding(.leading, 34) }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .glassEffect(.regular, in: .rect(cornerRadius: 20))
-                .contentShape(.rect(cornerRadius: 20))
-                .padding(.horizontal)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
             }
 
             Button { showDirectory = true } label: {
                 HStack {
-                    Image(systemName: "square.grid.2x2").foregroundStyle(AppTheme.accent)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Browse all chapters").font(.subheadline.bold())
-                        Text("Jump by number, search, or browse in groups of 50").font(.caption).foregroundStyle(.secondary)
-                    }
+                    Label(isFiltered && filteredCount > chapters.count ? "See all \(filteredCount) results" : "All \(totalCount) chapters", systemImage: "list.bullet.rectangle")
                     Spacer()
-                    Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
-                }.padding(14).background(AppTheme.cardBackground, in: .rect(cornerRadius: 16))
-            }.buttonStyle(.plain).padding(.horizontal)
-
-            // Chapter rows
-            if chapters.isEmpty {
-                Text(searchText.isEmpty ? "No chapters available." : "No results for \"\(searchText)\".")
-                    .font(Typography.body)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(chapters) { chapter in
-                        ChapterRow(
-                            chapter: chapter,
-                            novel: novel,
-                            pluginId: pluginId
-                        )
-                        Divider().padding(.leading, 40)
-                    }
-                }
-            }
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                }.font(.subheadline.weight(.medium)).padding(.vertical, 12)
+            }.buttonStyle(.plain)
         }
+        .padding(.horizontal)
+        .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showSearchField)
         .sheet(isPresented: $showDirectory) {
             ChapterDirectoryView(novel: novel, chapters: allChapters.isEmpty ? chapters : allChapters,
-                pluginId: pluginId, currentChapterPath: chapters.first(where: { $0.unread })?.path ?? chapters.first?.path)
+                pluginId: pluginId, currentChapterPath: chapters.first(where: { $0.unread })?.path ?? chapters.first?.path,
+                initialSearch: searchText, initialFilter: selectedFilter)
         }
-        .onAppear {
-            showSearchField = !searchText.isEmpty
-        }
-    }
-
-    private func filterIcon(_ filter: ChapterFilter) -> String {
-        switch filter {
-        case .all:        "line.3.horizontal"
-        case .unread:     "eye.slash"
-        case .downloaded: "arrow.down.circle"
-        case .bookmarked: "bookmark"
-        }
-    }
-
-    private func rangeLabel(_ range: ChapterRange) -> String {
-        switch range {
-        case .progress: return "Current"
-        case .first:    return "First 10"
-        case .last:     return "Last 10"
-        }
-    }
-
-    private func rangeIcon(_ range: ChapterRange) -> String {
-        switch range {
-        case .progress: return "bookmark"
-        case .first:    return "arrow.up.circle"
-        case .last:     return "arrow.down.circle"
-        }
+        .onAppear { showSearchField = !searchText.isEmpty }
     }
 }
 
@@ -254,6 +160,15 @@ struct ChapterDirectoryView: View {
     let currentChapterPath: String?
     var onSelect: ((ChapterDisplay) -> Void)? = nil
     var onClose: (() -> Void)? = nil
+    let initialSearch: String
+    let initialFilter: ChapterFilter
+
+    init(novel: Novel?, chapters: [ChapterDisplay], pluginId: String, currentChapterPath: String?, onSelect: ((ChapterDisplay) -> Void)? = nil, onClose: (() -> Void)? = nil, initialSearch: String = "", initialFilter: ChapterFilter = .all) {
+        self.novel = novel; self.chapters = chapters; self.pluginId = pluginId; self.currentChapterPath = currentChapterPath
+        self.onSelect = onSelect; self.onClose = onClose; self.initialSearch = initialSearch; self.initialFilter = initialFilter
+        self._search = State(initialValue: initialSearch); self._selectedFilter = State(initialValue: initialFilter)
+    }
+
     @State private var search = ""
     @State private var selectedFilter: ChapterFilter = .all
     @State private var page = 0
@@ -361,8 +276,8 @@ struct ChapterDirectoryView: View {
                     }.padding(.horizontal).padding(.vertical, 4).background(.bar)
                 }
             }
-            .onChange(of: chapters) { _, _ in if !initialized && !chapters.isEmpty { goToCurrent(); initialized = true } }
-            .onAppear { if !initialized && !chapters.isEmpty { goToCurrent(); initialized = true } }
+            .onChange(of: chapters) { _, _ in if !initialized && !chapters.isEmpty { if initialSearch.isEmpty && initialFilter == .all { goToCurrent() }; initialized = true } }
+            .onAppear { if !initialized && !chapters.isEmpty { if initialSearch.isEmpty && initialFilter == .all { goToCurrent() }; initialized = true } }
             .onChange(of: scrollRequest) { _, request in
                 Task { @MainActor in
                     await Task.yield()

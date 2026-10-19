@@ -113,12 +113,22 @@ struct ReaderSettings: View {
 
     private let presets: [PresetTheme] = [
         PresetTheme(name: "Original", bg: "", text: "", isBold: false, isSerif: false, isPremium: false),
-        PresetTheme(name: "Quiet", bg: "#0A0A0C", text: "#5D5D63", isBold: false, isSerif: false, isPremium: true),
+        PresetTheme(name: "Quiet", bg: "#0A0A0C", text: "#BDBBC5", isBold: false, isSerif: false, isPremium: false),
         PresetTheme(name: "Paper", bg: "#1C1C1E", text: "#E5E5EA", isBold: false, isSerif: false, isPremium: false),
         PresetTheme(name: "Bold", bg: "#000000", text: "#FFFFFF", isBold: true, isSerif: false, isPremium: false),
         PresetTheme(name: "Calm", bg: "#362E26", text: "#EADBCC", isBold: false, isSerif: true, isPremium: false),
-        PresetTheme(name: "Focus", bg: "#1C1B16", text: "#E6DEC9", isBold: false, isSerif: false, isPremium: false)
+        PresetTheme(name: "Focus", bg: "#1C1B16", text: "#E6DEC9", isBold: false, isSerif: false, isPremium: false),
+        PresetTheme(name: "Daylight", bg: "#FFFFFF", text: "#24282E", isBold: false, isSerif: false, isPremium: false),
+        PresetTheme(name: "Ivory", bg: "#F8F3E8", text: "#39352E", isBold: false, isSerif: true, isPremium: false),
+        PresetTheme(name: "Sepia", bg: "#F5E6CE", text: "#514030", isBold: false, isSerif: true, isPremium: false),
+        PresetTheme(name: "Sage", bg: "#E6EDE5", text: "#293C32", isBold: false, isSerif: true, isPremium: false),
+        PresetTheme(name: "Dusk", bg: "#242135", text: "#E0DAEA", isBold: false, isSerif: false, isPremium: false),
+        PresetTheme(name: "Midnight", bg: "#101827", text: "#D6E0EE", isBold: false, isSerif: false, isPremium: false),
+        PresetTheme(name: "Forest", bg: "#15241F", text: "#D6E6DD", isBold: false, isSerif: true, isPremium: false)
     ]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("reader.highlightColor") private var highlightColorHex = ""
+    @AppStorage("reader.highlightOpacity") private var highlightOpacity = 0.26
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -142,6 +152,7 @@ struct ReaderSettings: View {
                         }
                     }
             }
+            .onDisappear { commitChanges() }
         }
     }
 
@@ -154,7 +165,8 @@ struct ReaderSettings: View {
                 Section("Theme & Colors") {
                     themesGrid
                     
-                    if localBackgroundColorHex == "#1C1C1E" {
+                    Toggle("Paper texture", isOn: Binding(get: { localGrainIntensity > 0 }, set: { localGrainIntensity = $0 ? 10 : 0 }))
+                    if localGrainIntensity > 0 {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("GRAIN INTENSITY")
                                 .font(.system(size: 10, weight: .bold))
@@ -179,6 +191,17 @@ struct ReaderSettings: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                     
+                    ColorPicker("Word highlight", selection: Binding(
+                        get: { Color(hex: ReaderAppearance.highlightHex(background: localBackgroundColorHex, custom: highlightColorHex)) ?? .green },
+                        set: { if let hex = $0.toHex() { highlightColorHex = hex } }
+                    ), supportsOpacity: false)
+                    if !highlightColorHex.isEmpty {
+                        Button("Use theme highlight") { highlightColorHex = "" }
+                    }
+                    HStack {
+                        Text("Highlight strength")
+                        Slider(value: $highlightOpacity, in: 0.1...0.65, step: 0.05)
+                    }
                     VStack(alignment: .leading, spacing: 12) {
                         if !isCustomizing {
                             customizeButton
@@ -202,9 +225,8 @@ struct ReaderSettings: View {
                 lineFocusSection
                 focusSection
             }
-            .animation(.easeInOut(duration: 0.35), value: isCustomizing)
-            .animation(.easeInOut(duration: 0.35), value: localLineFocusEnabled)
-            .animation(.easeInOut(duration: 0.35), value: localBackgroundColorHex)
+            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isCustomizing)
+            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: localLineFocusEnabled)
         }
         .onChange(of: localFontSize) { _, _ in commitIfEmbedded() }
         .onChange(of: localLineHeight) { _, _ in commitIfEmbedded() }
@@ -223,7 +245,8 @@ struct ReaderSettings: View {
     }
 
     private var themesGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+        ScrollView(.horizontal) {
+          HStack(spacing: 12) {
             ForEach(presets) { preset in
                 ThemePickerCard(
                     preset: preset,
@@ -233,14 +256,21 @@ struct ReaderSettings: View {
                     localTextColorHex = preset.text
                     commitIfEmbedded()
                 }
+                .frame(width: 108)
+                .accessibilityAddTraits(isSelected(preset) ? .isSelected : [])
             }
+          }
+          .padding(.vertical, 4)
+          .scrollTargetLayout()
         }
-        .padding(.vertical, 8)
+        .scrollTargetBehavior(.viewAligned)
+        .scrollIndicators(.hidden)
+        .padding(.vertical, 4)
     }
 
     private var customizeButton: some View {
         Button(action: {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
                 isCustomizing = true
             }
         }) {
@@ -265,7 +295,7 @@ struct ReaderSettings: View {
             Text("Customize")
                 .font(.system(size: 15, weight: .semibold))
             Spacer()
-            Toggle("", isOn: $isCustomizing.animation(.spring(response: 0.35, dampingFraction: 0.8)))
+            Toggle("", isOn: $isCustomizing.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.accent)
                 .labelsHidden()
                 .tint(.green)
         }
@@ -455,7 +485,7 @@ struct ReaderSettings: View {
     private var lineFocusSection: some View {
         Section("Line Focus") {
             VStack(alignment: .leading, spacing: 12) {
-                Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(.spring(response: 0.35, dampingFraction: 0.8)))
+                Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.accent)
                 
                 if localLineFocusEnabled {
                     VStack(alignment: .leading, spacing: 12) {
@@ -499,12 +529,14 @@ struct ReaderSettings: View {
 
     private var pinnedPreview: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Preview")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+            HStack {
+                Text("Preview").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Text("Spoken word").font(.caption).foregroundStyle(resolvedLocalTextColor)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background((Color(hex: ReaderAppearance.highlightHex(background: localBackgroundColorHex, custom: highlightColorHex)) ?? .green).opacity(highlightOpacity), in: .rect(cornerRadius: 5))
+            }
+            .padding(.horizontal, 16).padding(.top, 12)
             
             Group {
                 if localBionicReading {
@@ -518,7 +550,7 @@ struct ReaderSettings: View {
                     )
                 }
             }
-            .font(.custom(localFontFamily, size: localFontSize))
+            .font(localFontFamily == "System" ? .system(size: localFontSize) : .custom(localFontFamily, size: localFontSize))
             .lineSpacing((localLineHeight - 1.0) * localFontSize)
             .tracking(localCharacterSpacing * 0.1)
             .padding(.horizontal, localHorizontalPadding)
@@ -528,7 +560,7 @@ struct ReaderSettings: View {
             .background(
                 resolvedLocalBackgroundColor
                     .overlay {
-                        if localBackgroundColorHex == "#1C1C1E" {
+                        if localGrainIntensity > 0 {
                             NoiseView(intensity: localGrainIntensity)
                                 .allowsHitTesting(false)
                         }
@@ -557,7 +589,10 @@ struct ReaderSettings: View {
                     .allowsHitTesting(false)
                 }
             }
+            .frame(height: 165, alignment: .topLeading)
+            .clipped()
             .cornerRadius(12)
+            .transaction { $0.animation = nil }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
             .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
@@ -682,7 +717,7 @@ struct ThemePickerCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white, lineWidth: isSelected ? 3 : 0)
+                    .stroke(Color(hex: ReaderAppearance.highlightHex(background: preset.bg)) ?? .primary, lineWidth: isSelected ? 3 : 0)
             )
             .overlay(
                 Group {
@@ -705,35 +740,14 @@ struct ThemePickerCard: View {
 
 struct NoiseView: View {
     let intensity: Double
-    
+
     var body: some View {
-        Canvas { context, size in
-            let width = Int(size.width)
-            let height = Int(size.height)
-            guard width > 0 && height > 0 else { return }
-            
-                        // Fixed LCG pseudo-random seed to keep the noise pattern static
-            var seed: UInt32 = 42
-            func nextRandom() -> Double {
-                seed = ((1103515245 &* seed) &+ 12345) & 0x7fffffff
-                return Double(seed) / Double(0x7fffffff)
-            }
-            
-            let dotSize: CGFloat = 1.0
-            let step = 2 // Dense but performant
-            
-            context.opacity = intensity / 100.0
-            context.blendMode = .overlay
-            
-            for x in stride(from: 0, to: width, by: step) {
-                for y in stride(from: 0, to: height, by: step) {
-                    if nextRandom() < 0.15 {
-                        let gray = nextRandom() * 0.4 + 0.3
-                        let rect = CGRect(x: CGFloat(x), y: CGFloat(y), width: dotSize, height: dotSize)
-                        context.fill(Path(rect), with: .color(Color(white: gray)))
-                    }
-                }
-            }
+        if let tile = ReaderAppearance.paperTile {
+            Image(decorative: tile, scale: 1)
+                .resizable(resizingMode: .tile)
+                .blendMode(.softLight)
+                .opacity(min(1, max(0, intensity / 100)))
+                .accessibilityHidden(true)
         }
     }
 }

@@ -120,7 +120,7 @@ struct LibraryView: View {
                 if isEditingLibrary {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
-                            withAnimation {
+                            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
                                 isEditingLibrary = false
                             }
                         }
@@ -275,7 +275,7 @@ struct LibraryView: View {
 
     private func startEditing() {
         let order = sortedNovels(novels).map(\.persistentModelID)
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
+        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
             editingOrder = order
             lastReorderTarget = nil
             sortOrder = .custom
@@ -288,7 +288,7 @@ struct LibraryView: View {
         guard lastReorderTarget != target.persistentModelID,
               dragged.persistentModelID != target.persistentModelID else { return }
         lastReorderTarget = target.persistentModelID
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) {
+        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
             editingOrder = LibraryReordering.move(dragged.persistentModelID, to: target.persistentModelID, in: editingOrder)
         }
     }

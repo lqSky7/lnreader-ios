@@ -1,4 +1,5 @@
 import Foundation
+import SwiftSoup
 
 /// Service for interacting with the NovelFire / NovelPhoenix comments API.
 ///
@@ -70,7 +71,7 @@ final class NovelFireCommentsService {
     /// Whether the user holds a login session cookie for the given site.
     func hasSession(for site: CommentSite = .novelFire) -> Bool {
         let cookies = HTTPCookieStorage.shared.cookies ?? []
-        return cookies.contains { $0.domain.contains(site.domain) && $0.name == site.sessionCookieName }
+        return UserDefaults.standard.bool(forKey: "comments.authenticated." + site.rawValue) && cookies.contains { site.matches(host: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) && $0.name == site.sessionCookieName && ($0.expiresDate.map { $0 > Date() } ?? true) }
     }
 
     // MARK: - Metadata
@@ -232,5 +233,70 @@ final class NovelFireCommentsService {
         }
         let cookieHeader = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
+    }
+}
+
+struct NativeChapterComment: Identifiable, Sendable {
+    let id: String
+    let parentID: String?
+    let author: String
+    let text: String
+    let date: String
+    var likes: Int
+    var dislikes: Int
+    let isSpoiler: Bool
+    var replies: [NativeChapterComment] = []
+}
+
+extension NovelFireCommentsService {
+    /// The provider returns HTML inside JSON. Parse it as data; never execute or
+    /// render the provider's scripts, ads, avatar resources, or page controls.
+    static func nativeComments(from html: String) throws -> [NativeChapterComment] {
+        guard html.utf8.count <= 2_000_000 else { throw URLError(.dataLengthExceedsMaximum) }
+        let document = try SwiftSoup.parseBodyFragment(html)
+        try document.select("script,style,iframe").remove()
+        let elements = try document.select("[id^=lnw-comment-]").array()
+        var comments: [NativeChapterComment] = []
+        var seen = Set<String>()
+        for element in elements.prefix(1000) {
+            let id = String(element.id().dropFirst("lnw-comment-".count))
+            guard !id.isEmpty, id.allSatisfy(\.isNumber), seen.insert(id).inserted else { continue }
+            let parent = try element.parents().array().first { $0.id().hasPrefix("lnw-comment-") }
+            let parentID = parent.map { String($0.id().dropFirst("lnw-comment-".count)) }
+            guard let content = try element.select(".comment-text, .comment-content").first() else { continue }
+            // A parent's content must never be borrowed from one of its replies.
+            guard try content.parents().array().first(where: { $0.id().hasPrefix("lnw-comment-") })?.id() == element.id() else { continue }
+            let body = try content.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            if body.isEmpty { continue }
+            let author = try element.select(".username, .user-name").first()?.text() ?? "Reader"
+            let date = try element.select("time, .comment-date, .date").first()?.text() ?? ""
+            func count(_ selector: String) throws -> Int {
+                guard let button = try element.select(selector).first() else { return 0 }
+                let raw = try button.text().replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let number = raw.filter { $0.isNumber || $0 == "." }
+                let multiplier: Double = raw.lowercased().hasSuffix("k") ? 1000 : raw.lowercased().hasSuffix("m") ? 1_000_000 : 1
+                return Int((Double(number) ?? 0) * multiplier)
+            }
+            comments.append(NativeChapterComment(id: id, parentID: parentID, author: author, text: body, date: date,
+                likes: try count(".like-button"), dislikes: try count(".dislike-button"),
+                isSpoiler: try !content.select(".spoiler, .spoiler-content").isEmpty() || content.hasClass("spoiler")))
+        }
+        let hasCommentMarkup = try !document.select(".comment-text, .comment-content").isEmpty()
+        if comments.isEmpty && !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && hasCommentMarkup {
+            throw NSError(domain: "NativeComments", code: 1, userInfo: [NSLocalizedDescriptionKey: "The site returned an unsupported comment format. Pull to refresh."])
+        }
+        let knownIDs = Set(comments.map(\.id))
+        let children = Dictionary(grouping: comments, by: { $0.parentID ?? "" })
+        func thread(_ comment: NativeChapterComment, depth: Int = 0) -> NativeChapterComment {
+            var result = comment
+            if depth < 20 { result.replies = (children[comment.id] ?? []).map { thread($0, depth: depth + 1) } }
+            return result
+        }
+        return comments.filter { $0.parentID == nil || !knownIDs.contains($0.parentID!) }.map { thread($0) }
+    }
+
+    static func isAuthenticatedPage(_ html: String) -> Bool {
+        guard html.utf8.count <= 2_000_000, let document = try? SwiftSoup.parse(html) else { return false }
+        return (try? !document.select("a[href*='/logout'], form[action*='/logout'], form#logout-form").isEmpty()) ?? false
     }
 }

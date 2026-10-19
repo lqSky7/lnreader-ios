@@ -11,6 +11,10 @@ struct ReaderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("reader.highlightColor") private var highlightColorHex = ""
+    @AppStorage("reader.highlightOpacity") private var highlightOpacity = 0.26
+
     @StateObject private var ttsBridge = ReaderContentBridge()
     @ObservedObject private var ttsManager = ReaderTTSManager.shared
     @ObservedObject private var audioLibrary = TTSOfflineLibrary.shared
@@ -89,16 +93,16 @@ struct ReaderView: View {
 
     }
 
+    private func toggleControls() {
+        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { showControls.toggle() }
+    }
+
     var body: some View {
         ZStack {
             // Background
             resolvedBackgroundColor.ignoresSafeArea()
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showControls.toggle()
-                    }
-                }
+                .onTapGesture { toggleControls() }
 
             // Content
             if isLoading {
@@ -129,20 +133,30 @@ struct ReaderView: View {
                     characterSpacing: characterSpacing,
                     wordSpacing: wordSpacing,
                     grainIntensity: grainIntensity,
+                    highlightColorHex: highlightColorHex,
+                    highlightOpacity: highlightOpacity,
                     commentsHtml: "",
                     hasMoreComments: false,
-                    onTap: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showControls.toggle()
-                        }
-                    },
+                    onTap: { toggleControls() },
                     onParagraphTap: { _ in },
                     onLoadMoreComments: nil,
                     onLikeComment: nil,
                     onDislikeComment: nil
                 )
                 .ignoresSafeArea(.all)
+                .opacity(ttsBridge.isReady ? 1 : 0)
             }
+
+            // Keep scrolled text clear of the toolbar without resizing the document.
+            VStack {
+                LinearGradient(stops: [.init(color: resolvedBackgroundColor, location: 0), .init(color: resolvedBackgroundColor, location: 0.88), .init(color: resolvedBackgroundColor.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 136)
+                Spacer()
+            }
+            .ignoresSafeArea()
+            .opacity(showControls ? 1 : 0)
+            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showControls)
+            .allowsHitTesting(false)
 
             // Reading and listening share the same top navigation.
             ReaderToolbar(
@@ -160,12 +174,15 @@ struct ReaderView: View {
                 isListening: isCurrentSpeech
             )
             .opacity(showControls ? 1.0 : 0.0)
+            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showControls)
             .allowsHitTesting(showControls)
             .accessibilityHidden(!showControls)
 
             // TTS Controls Overlay (visible when isCurrentSpeech is true)
             ttsControlsOverlay
                 .opacity(isCurrentSpeech && showControls ? 1.0 : 0.0)
+                .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showControls)
+                .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isCurrentSpeech)
                 .allowsHitTesting(isCurrentSpeech && showControls)
                 .accessibilityHidden(!isCurrentSpeech || !showControls)
 
@@ -186,7 +203,7 @@ struct ReaderView: View {
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(!showControls)
         .onChange(of: showControls) { _, visible in ttsBridge.setControlsVisible(visible) }
-        .fullScreenCover(isPresented: $showSettings) {
+        .sheet(isPresented: $showSettings) {
             ReaderSettings(
                 fontSize: $fontSize,
                 lineHeight: $lineHeight,
@@ -203,6 +220,9 @@ struct ReaderView: View {
                 wordSpacing: $wordSpacing,
                 grainIntensity: $grainIntensity
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(28)
         }
         .fullScreenCover(isPresented: $showChapterList) {
             ReaderChapterListSheet(

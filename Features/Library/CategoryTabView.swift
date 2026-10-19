@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct CategoryTabView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let categories: [Category]
     @Binding var selectedCategory: Category?
     @Namespace private var namespace
@@ -40,7 +41,7 @@ struct CategoryTabView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button {
-            withAnimation { action() }
+            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { action() }
         } label: {
             Text(title)
                 .font(Typography.caption)

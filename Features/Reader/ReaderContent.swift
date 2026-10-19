@@ -24,6 +24,8 @@ import WebKit
         let characterSpacing: Double
         let wordSpacing: Double
         let grainIntensity: Double
+        let highlightColorHex: String
+        let highlightOpacity: Double
         let commentsHtml: String
         let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
@@ -54,6 +56,8 @@ import WebKit
             var loadedCharacterSpacing: Double?
             var loadedWordSpacing: Double?
             var loadedGrainIntensity: Double?
+            var loadedHighlightColorHex: String?
+            var loadedHighlightOpacity: Double?
             var loadedCommentsHtml: String?
             var loadedHasMoreComments: Bool?
 
@@ -126,8 +130,9 @@ import WebKit
             config.userContentController = userContentController
 
             let webView = WKWebView(frame: .zero, configuration: config)
-            let uiColor = UIColor(hex: backgroundColorHex) ?? .systemBackground
-            webView.isOpaque = true
+            let uiColor = UIColor(hex: backgroundColorHex) ?? UIColor(AppTheme.readerBackground)
+            webView.isOpaque = false
+            webView.underPageBackgroundColor = uiColor
             webView.backgroundColor = uiColor
             webView.scrollView.backgroundColor = uiColor
             webView.scrollView.showsHorizontalScrollIndicator = false
@@ -145,7 +150,8 @@ import WebKit
             context.coordinator.bridge = bridge
             
             #if os(iOS)
-            let uiColor = UIColor(hex: backgroundColorHex) ?? .systemBackground
+            let uiColor = UIColor(hex: backgroundColorHex) ?? UIColor(AppTheme.readerBackground)
+            webView.underPageBackgroundColor = uiColor
             webView.backgroundColor = uiColor
             webView.scrollView.backgroundColor = uiColor
             webView.scrollView.isScrollEnabled = true
@@ -166,7 +172,9 @@ import WebKit
                                context.coordinator.loadedLineFocusDulling != lineFocusDulling ||
                                context.coordinator.loadedCharacterSpacing != characterSpacing ||
                                context.coordinator.loadedWordSpacing != wordSpacing ||
-                               context.coordinator.loadedGrainIntensity != grainIntensity
+                               context.coordinator.loadedGrainIntensity != grainIntensity ||
+                               context.coordinator.loadedHighlightColorHex != highlightColorHex ||
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity
             
             #if DEBUG
             print("🔊 [ReaderContent] updateUIView. loadedHtmlContentIsNil: \(context.coordinator.loadedHtmlContent == nil), contentChanged: \(contentChanged), styleChanged: \(styleChanged)")
@@ -221,7 +229,9 @@ import WebKit
                 if context.coordinator.loadedWordSpacing != wordSpacing {
                     print("🔊   -> wordSpacing changed! (\(String(describing: context.coordinator.loadedWordSpacing)) -> \(wordSpacing))")
                 }
-                if context.coordinator.loadedGrainIntensity != grainIntensity {
+                if context.coordinator.loadedGrainIntensity != grainIntensity ||
+                               context.coordinator.loadedHighlightColorHex != highlightColorHex ||
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity {
                     print("🔊   -> grainIntensity changed! (\(String(describing: context.coordinator.loadedGrainIntensity)) -> \(grainIntensity))")
                 }
                 #endif
@@ -249,6 +259,8 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
             } else if commentsChanged {
                 context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
@@ -259,8 +271,8 @@ import WebKit
                 let lineFocusHeight = resolvedLineFocusHeight(lines: lineFocusLines, fontSize: fontSize, lineHeight: lineHeight)
                 let lineFocusDisplay = lineFocusEnabled ? "block" : "none"
                 
-                let topOffset = 70.0 + verticalPadding
-                let bottomOffset = verticalPadding
+                let topOffset = 136.0 + verticalPadding
+                let bottomOffset = 120.0 + verticalPadding
                 
                 let js = """
                 document.body.style.fontFamily = "'\(fontFamily)', 'Georgia', serif";
@@ -274,6 +286,8 @@ import WebKit
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
+                document.documentElement.style.setProperty('--reader-highlight', '\(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity))');
+                if (window.__ttsWord) { requestAnimationFrame(function() { window.setTTSActiveWord(window.__ttsWord); }); }
                 var ruler = document.getElementById("line-focus-ruler");
                 if (ruler) {
                     ruler.style.display = '\(lineFocusDisplay)';
@@ -283,7 +297,7 @@ import WebKit
                 
                 var grain = document.getElementById("paper-grain-overlay");
                 if (grain) {
-                    grain.style.opacity = '\(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0)';
+                    grain.style.opacity = '\(grainIntensity / 100.0)';
                 }
                 """
                 webView.evaluateJavaScript(js)
@@ -302,6 +316,8 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
             }
         }
 
@@ -324,6 +340,8 @@ import WebKit
             lhs.characterSpacing == rhs.characterSpacing &&
             lhs.wordSpacing == rhs.wordSpacing &&
             lhs.grainIntensity == rhs.grainIntensity &&
+            lhs.highlightColorHex == rhs.highlightColorHex &&
+            lhs.highlightOpacity == rhs.highlightOpacity &&
             lhs.commentsHtml == rhs.commentsHtml &&
             lhs.hasMoreComments == rhs.hasMoreComments
         }
@@ -348,6 +366,8 @@ import WebKit
         let characterSpacing: Double
         let wordSpacing: Double
         let grainIntensity: Double
+        let highlightColorHex: String
+        let highlightOpacity: Double
         let commentsHtml: String
         let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
@@ -373,6 +393,8 @@ import WebKit
             var loadedCharacterSpacing: Double?
             var loadedWordSpacing: Double?
             var loadedGrainIntensity: Double?
+            var loadedHighlightColorHex: String?
+            var loadedHighlightOpacity: Double?
             var loadedCommentsHtml: String?
             var loadedHasMoreComments: Bool?
             weak var bridge: ReaderContentBridge?
@@ -467,7 +489,9 @@ import WebKit
                                context.coordinator.loadedLineFocusDulling != lineFocusDulling ||
                                context.coordinator.loadedCharacterSpacing != characterSpacing ||
                                context.coordinator.loadedWordSpacing != wordSpacing ||
-                               context.coordinator.loadedGrainIntensity != grainIntensity
+                               context.coordinator.loadedGrainIntensity != grainIntensity ||
+                               context.coordinator.loadedHighlightColorHex != highlightColorHex ||
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity
             
             if contentChanged || context.coordinator.loadedHtmlContent == nil || (commentsChanged && context.coordinator.loadedCommentsHtml == nil) {
                 bridge.contentDidChange()
@@ -491,6 +515,8 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
             } else if commentsChanged {
                 context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
@@ -501,8 +527,8 @@ import WebKit
                 let lineFocusHeight = resolvedLineFocusHeight(lines: lineFocusLines, fontSize: fontSize, lineHeight: lineHeight)
                 let lineFocusDisplay = lineFocusEnabled ? "block" : "none"
                 
-                let topOffset = 70.0 + verticalPadding
-                let bottomOffset = verticalPadding
+                let topOffset = 136.0 + verticalPadding
+                let bottomOffset = 120.0 + verticalPadding
                 
                 let js = """
                 document.body.style.fontFamily = "'\(fontFamily)', 'Georgia', serif";
@@ -516,6 +542,8 @@ import WebKit
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
+                document.documentElement.style.setProperty('--reader-highlight', '\(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity))');
+                if (window.__ttsWord) { requestAnimationFrame(function() { window.setTTSActiveWord(window.__ttsWord); }); }
                 var ruler = document.getElementById("line-focus-ruler");
                 if (ruler) {
                     ruler.style.display = '\(lineFocusDisplay)';
@@ -525,7 +553,7 @@ import WebKit
                 
                 var grain = document.getElementById("paper-grain-overlay");
                 if (grain) {
-                    grain.style.opacity = '\(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0)';
+                    grain.style.opacity = '\(grainIntensity / 100.0)';
                 }
                 """
                 webView.evaluateJavaScript(js)
@@ -544,6 +572,8 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
             }
         }
 
@@ -566,6 +596,8 @@ import WebKit
             lhs.characterSpacing == rhs.characterSpacing &&
             lhs.wordSpacing == rhs.wordSpacing &&
             lhs.grainIntensity == rhs.grainIntensity &&
+            lhs.highlightColorHex == rhs.highlightColorHex &&
+            lhs.highlightOpacity == rhs.highlightOpacity &&
             lhs.commentsHtml == rhs.commentsHtml &&
             lhs.hasMoreComments == rhs.hasMoreComments
         }
@@ -587,8 +619,8 @@ extension ReaderContent {
             }
             """ : ""
 
-        let topOffset = 70.0 + verticalPadding
-        let bottomOffset = verticalPadding
+        let topOffset = 136.0 + verticalPadding
+        let bottomOffset = 120.0 + verticalPadding
 
         var commentsSection = ""
         if !comments.isEmpty {
@@ -620,6 +652,8 @@ extension ReaderContent {
             :root {
                 color-scheme: light dark;
             }
+            :root { --reader-top-inset: \(topOffset)px; --reader-highlight: \(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity)); }
+            ::selection { background: var(--reader-highlight); }
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
                 font-family: '\(fontFamily)', 'Georgia', serif;
@@ -662,8 +696,7 @@ extension ReaderContent {
             em { font-style: italic; }
             strong { font-weight: bold; }
             \(ReaderTTSJavaScript.highlightStyle)
-            body.tts-speech-mode { padding-top: var(--tts-top, 120px) !important; padding-bottom: var(--tts-bottom, 190px) !important; }
-            body.tts-speech-mode #line-focus-ruler { display: none !important; }
+            \(ReaderTTSJavaScript.speechLayoutStyle)
             #tts-dot {
                 position: absolute;
                 width: 6px;
@@ -686,8 +719,8 @@ extension ReaderContent {
                 box-shadow: 0 0 0 9999px rgba(0, 0, 0, \(resolvedLineFocusOpacity(dulling: lineFocusDulling)));
                 pointer-events: none;
                 z-index: 9999;
-                border-top: 1px dashed rgba(250, 45, 72, 0.4);
-                border-bottom: 1px dashed rgba(250, 45, 72, 0.4);
+                border-top: 1px dashed var(--reader-highlight);
+                border-bottom: 1px dashed var(--reader-highlight);
                 display: \(lineFocusEnabled ? "block" : "none");
             }
             #paper-grain-overlay {
@@ -698,9 +731,12 @@ extension ReaderContent {
                 height: 100vh;
                 pointer-events: none;
                 z-index: 99999;
-                opacity: \(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0);
-                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-                mix-blend-mode: overlay;
+                opacity: \(grainIntensity / 100.0);
+                background-image: url("\(ReaderAppearance.paperDataURL)");
+                background-repeat: repeat;
+                background-size: 128px 128px;
+                contain: strict;
+                mix-blend-mode: soft-light;
             }
 
             /* Comments Section CSS */

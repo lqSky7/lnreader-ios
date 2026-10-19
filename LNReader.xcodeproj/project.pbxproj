@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DD1ED2CBFBA44AE1B6E75002 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = DD1ED2CBFBA44AE1B6E75003 /* SwiftSoup */; };
+		DD1ED2CBFBA44AE1B6E75000 /* ReaderAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1ED2CBFBA44AE1B6E75001 /* ReaderAppearance.swift */; };
 		EDC300000000000000000001 /* ReadingNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC300000000000000000002 /* ReadingNavigation.swift */; };
 		0518E7BC7FF5DA15E6F1CB52 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2B650856C28BA6DD64543A24 /* AppIcon.icon */; };
 		05D969D4F7888414872F4A1F /* Novel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B56B530299C57FD90A1E1FB3 /* Novel.swift */; };
@@ -100,6 +102,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		DD1ED2CBFBA44AE1B6E75001 /* ReaderAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderAppearance.swift; sourceTree = "<group>"; };
 		EDC300000000000000000002 /* ReadingNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../ReadingNavigation.swift; sourceTree = "<group>"; };
 		003CA6699D27A4A3DCAFD2EF /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
 		037C592FB524AD4F9A9F370F /* NovelFireLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireLoginView.swift; sourceTree = "<group>"; };
@@ -198,6 +201,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F058C4831CC3F14C9B5EDC9B /* Glur in Frameworks */,
+				DD1ED2CBFBA44AE1B6E75002 /* SwiftSoup in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,6 +255,7 @@
 				412E463FAEFE042C2A0891BD /* ReaderTTSJavaScript.swift */,
 				4C4CCC920C4381FB8A63F2AE /* NovelFireCommentsView.swift */,
 				8A3F4D29864B2CD889170153 /* ReaderChapterListSheet.swift */,
+				DD1ED2CBFBA44AE1B6E75001 /* ReaderAppearance.swift */,
 				89DF43235A3A3FF8323B318A /* ReaderContent.swift */,
 				44694161C716310552872C25 /* ReaderContentBridge.swift */,
 				174C8A293062CFE21B69CD54 /* ReaderSettings.swift */,
@@ -477,6 +482,7 @@
 			);
 			name = LNReader;
 			packageProductDependencies = (
+				DD1ED2CBFBA44AE1B6E75003 /* SwiftSoup */,
 				0D468E064E87EA8FE7747702 /* Glur */,
 			);
 			productName = LNReader;
@@ -507,6 +513,7 @@
 			mainGroup = 6A3F5AB528717E8414751190;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				DD1ED2CBFBA44AE1B6E75004 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -598,6 +605,7 @@
 				ABD443FA39C59BF556CA2100 /* PluginManager.swift in Sources */,
 				8C9407C6843D94D83BC3760D /* PluginShims.swift in Sources */,
 				C7DCD24BA48D3707D689052D /* ReaderChapterListSheet.swift in Sources */,
+				DD1ED2CBFBA44AE1B6E75000 /* ReaderAppearance.swift in Sources */,
 				939B509FC87B4E6546B04724 /* ReaderContent.swift in Sources */,
 				6663C20B34190DA7759BF147 /* ReaderContentBridge.swift in Sources */,
 				AC18996B8CB747D0257FB2DE /* ReaderSettings.swift in Sources */,
@@ -822,6 +830,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		DD1ED2CBFBA44AE1B6E75004 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/scinfu/SwiftSoup.git"; requirement = {kind = upToNextMajorVersion; minimumVersion = 2.6.0; }; };
 		ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/joogps/Glur";
@@ -833,6 +842,7 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		DD1ED2CBFBA44AE1B6E75003 /* SwiftSoup */ = {isa = XCSwiftPackageProductDependency; package = DD1ED2CBFBA44AE1B6E75004 /* XCRemoteSwiftPackageReference "SwiftSoup" */; productName = SwiftSoup; };
 		0D468E064E87EA8FE7747702 /* Glur */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */;
