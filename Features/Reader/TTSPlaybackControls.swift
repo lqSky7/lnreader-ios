@@ -9,7 +9,6 @@ struct TTSPlaybackControls: View {
     let rate: Double
     let voiceId: String
     let voiceName: String
-    let isDownloaded: Bool
     let isFollowing: Bool
     let sleepTimerLabel: String
     let onSettings: () -> Void
@@ -18,7 +17,6 @@ struct TTSPlaybackControls: View {
     let onSkipForward: () -> Void
     let onRate: () -> Void
     let onVoice: () -> Void
-    let onDownload: () -> Void
     let onBookmark: () -> Void
     let onSleep: () -> Void
     let onFollow: () -> Void
@@ -179,26 +177,26 @@ struct TTSPlaybackControls: View {
     }
 
     private var secondaryRow: some View {
-        HStack(spacing: 4) {
-            Button(action: onSettings) {
-                Image(systemName: "textformat.size")
-                    .font(.system(size: 18))
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Reader settings")
+        ZStack {
+            HStack {
+                Button(action: onSettings) {
+                    Image(systemName: "textformat.size")
+                        .font(.system(size: 18))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Reader settings")
 
-            Button(action: onDownload) {
-                Image(systemName: isDownloaded ? "arrow.down.circle.fill" : "arrow.down.circle")
-                    .font(.system(size: 18))
-                    .foregroundStyle(isDownloaded ? AppTheme.accent : .primary)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isDownloaded ? "Downloaded" : "Download chapter")
+                Spacer()
 
-            Spacer()
+                Button(action: onBookmark) {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 18))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Bookmark")
+            }
 
             Button(action: onVoice) {
                 TTSVoiceChip(voiceId: voiceId, name: voiceName)
@@ -207,19 +205,8 @@ struct TTSPlaybackControls: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Voice: \(voiceName)")
-
-            Spacer()
-
-            Button(action: onBookmark) {
-                Image(systemName: "bookmark")
-                    .font(.system(size: 18))
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Bookmark")
+            .padding(.horizontal, 52)
         }
-        .padding(.horizontal, 4)
     }
 
     private var safeDuration: Double {

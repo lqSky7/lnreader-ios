@@ -1,6 +1,12 @@
 import Foundation
 
 enum ReaderTTSJavaScript {
+    // The paragraph class is an anchor for following, never a visual highlight.
+    static let highlightStyle = """
+    .tts-active { background: transparent; box-shadow: none; }
+    ::highlight(tts-word) { background-color: rgba(250,45,72,0.48); color: inherit; }
+    """
+
     static let mapping = #"""
     window.ttsTextMap = function(element) {
         var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {

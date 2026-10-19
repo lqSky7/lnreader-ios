@@ -59,9 +59,17 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         webView.navigationDelegate = self
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
-            webView.loadHTMLString("<p style='margin:40px;font-size:24px'>Read this book.</p>", baseURL: nil)
+            webView.loadHTMLString("<style>" + ReaderTTSJavaScript.highlightStyle + "</style><p style='margin:40px;font-size:24px'>Read this book.</p>", baseURL: nil)
         }
         _ = try await webView.evaluateJavaScript(ReaderTTSJavaScript.mapping + ReaderTTSJavaScript.interaction + "window.ttsExtractBlocks(); window.setTTSSpeechMode(true); window.setTTSControlsVisible(false);")
+        _ = try await webView.evaluateJavaScript("window.setTTSActiveWord({paragraphIndex:0,sourceStart:5,sourceEnd:9,start:0.5,end:0.9});")
+        let wordHighlight = try await webView.evaluateJavaScript("({text:CSS.highlights.get('tts-word').values().next().value.toString(),count:CSS.highlights.get('tts-word').size,paragraphBackground:getComputedStyle(document.querySelector('p')).backgroundColor,paragraphShadow:getComputedStyle(document.querySelector('p')).boxShadow})") as! [String: Any]
+        precondition(wordHighlight["text"] as? String == "this" && wordHighlight["count"] as? Int == 1, "Only the current word should be highlighted")
+        precondition(wordHighlight["paragraphBackground"] as? String == "rgba(0, 0, 0, 0)" && wordHighlight["paragraphShadow"] as? String == "none", "The active paragraph must not have a highlight box")
+        _ = try await webView.evaluateJavaScript("window.setTTSActiveWord({paragraphIndex:0,sourceStart:10,sourceEnd:14,start:1,end:1.4});")
+        let movedWord = try await webView.evaluateJavaScript("CSS.highlights.get('tts-word').values().next().value.toString()") as? String
+        precondition(movedWord == "book", "Advancing narration must replace the previous word highlight")
+        print("PASS: exactly one spoken-word highlight, media-clock updates, and no paragraph background in real WKWebView")
         let hidden = try await webView.evaluateJavaScript("window.__ttsSpeechMode && !window.__ttsControlsVisible && document.body.style.getPropertyValue('--tts-bottom') === '32px'") as? Bool
         precondition(hidden == true, "Focused listening must retain speech mode and remove control insets")
         let tap = "var p=document.querySelector('p'); p.dispatchEvent(new PointerEvent('pointerdown',{isPrimary:true,clientX:55,clientY:55,bubbles:true})); p.dispatchEvent(new PointerEvent('pointerup',{isPrimary:true,clientX:55,clientY:55,bubbles:true}));"

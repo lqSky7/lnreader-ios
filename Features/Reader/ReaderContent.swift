@@ -661,13 +661,7 @@ extension ReaderContent {
             hr { border: none; border-top: 1px solid #3a3a3c; margin: 2em 0; }
             em { font-style: italic; }
             strong { font-weight: bold; }
-            .tts-active {
-                background: rgba(250, 45, 72, 0.18);
-                border-radius: 8px;
-                box-shadow: inset 0 0 0 1px rgba(250, 45, 72, 0.28);
-
-            }
-            ::highlight(tts-word) { background-color: rgba(250,45,72,0.65); color: inherit; }
+            \(ReaderTTSJavaScript.highlightStyle)
             body.tts-speech-mode { padding-top: var(--tts-top, 120px) !important; padding-bottom: var(--tts-bottom, 260px) !important; }
             body.tts-speech-mode #line-focus-ruler { display: none !important; }
             #tts-dot {
