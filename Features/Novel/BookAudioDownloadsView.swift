@@ -51,6 +51,53 @@ struct QwenVoicePicker: View {
                 }
             }
         }
+        NavigationLink {
+            VoiceReferencePassageView()
+        } label: {
+            Label("Voice recording passage", systemImage: "text.quote")
+        }
+    }
+}
+
+struct VoiceReferencePassageView: View {
+    // Public-domain opening paragraph of Grant Fairbanks' Rainbow Passage.
+    // Source: https://www.dialectsarchive.com/the-rainbow-passage
+    static let passage = """
+    When the sunlight strikes raindrops in the air, they act as a prism and form a rainbow. The rainbow is a division of white light into many beautiful colors. These take the shape of a long round arch, with its path high above, and its two ends apparently beyond the horizon. There is, according to legend, a boiling pot of gold at one end. People look, but no one ever finds it. When a man looks for something beyond his reach, his friends say he is looking for the pot of gold at the end of the rainbow.
+    """
+
+    @State private var copied = false
+
+    var body: some View {
+        List {
+            Section {
+                Text("Read at your usual pace, with natural pauses and a mostly neutral tone. Use gentle expression without acting out emotions.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Text(Self.passage)
+                    .lineSpacing(6)
+                    .textSelection(.enabled)
+                    .padding(.vertical, 8)
+                Button {
+                    UIPasteboard.general.string = Self.passage
+                    copied = true
+                } label: {
+                    Label(copied ? "Passage copied" : "Copy passage", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .accessibilityHint("Copies only the passage text")
+            } header: {
+                Text("The Rainbow Passage")
+            } footer: {
+                Text("A public-domain passage for sampling English speech sounds, by Grant Fairbanks.")
+            }
+            Section {
+                Link("Read the original at IDEA", destination: URL(string: "https://www.dialectsarchive.com/the-rainbow-passage")!)
+            }
+        }
+        .navigationTitle("Recording passage")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
