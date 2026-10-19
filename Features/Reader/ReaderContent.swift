@@ -26,6 +26,7 @@ import WebKit
         let grainIntensity: Double
         let highlightColorHex: String
         let highlightOpacity: Double
+        let justifyText: Bool
         let commentsHtml: String
         let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
@@ -58,6 +59,7 @@ import WebKit
             var loadedGrainIntensity: Double?
             var loadedHighlightColorHex: String?
             var loadedHighlightOpacity: Double?
+            var loadedJustifyText: Bool?
             var loadedCommentsHtml: String?
             var loadedHasMoreComments: Bool?
 
@@ -174,7 +176,8 @@ import WebKit
                                context.coordinator.loadedWordSpacing != wordSpacing ||
                                context.coordinator.loadedGrainIntensity != grainIntensity ||
                                context.coordinator.loadedHighlightColorHex != highlightColorHex ||
-                               context.coordinator.loadedHighlightOpacity != highlightOpacity
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity ||
+                               context.coordinator.loadedJustifyText != justifyText
             
             #if DEBUG
             print("🔊 [ReaderContent] updateUIView. loadedHtmlContentIsNil: \(context.coordinator.loadedHtmlContent == nil), contentChanged: \(contentChanged), styleChanged: \(styleChanged)")
@@ -261,6 +264,7 @@ import WebKit
                 context.coordinator.loadedGrainIntensity = grainIntensity
                 context.coordinator.loadedHighlightColorHex = highlightColorHex
                 context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             } else if commentsChanged {
                 context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
@@ -286,6 +290,7 @@ import WebKit
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
+                document.documentElement.style.setProperty('--reader-text-align', '\(justifyText ? "justify" : "start")');
                 document.documentElement.style.setProperty('--reader-highlight', '\(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity))');
                 if (window.__ttsWord) { requestAnimationFrame(function() { window.setTTSActiveWord(window.__ttsWord); }); }
                 var ruler = document.getElementById("line-focus-ruler");
@@ -318,6 +323,7 @@ import WebKit
                 context.coordinator.loadedGrainIntensity = grainIntensity
                 context.coordinator.loadedHighlightColorHex = highlightColorHex
                 context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             }
         }
 
@@ -342,6 +348,7 @@ import WebKit
             lhs.grainIntensity == rhs.grainIntensity &&
             lhs.highlightColorHex == rhs.highlightColorHex &&
             lhs.highlightOpacity == rhs.highlightOpacity &&
+            lhs.justifyText == rhs.justifyText &&
             lhs.commentsHtml == rhs.commentsHtml &&
             lhs.hasMoreComments == rhs.hasMoreComments
         }
@@ -368,6 +375,7 @@ import WebKit
         let grainIntensity: Double
         let highlightColorHex: String
         let highlightOpacity: Double
+        let justifyText: Bool
         let commentsHtml: String
         let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
@@ -395,6 +403,7 @@ import WebKit
             var loadedGrainIntensity: Double?
             var loadedHighlightColorHex: String?
             var loadedHighlightOpacity: Double?
+            var loadedJustifyText: Bool?
             var loadedCommentsHtml: String?
             var loadedHasMoreComments: Bool?
             weak var bridge: ReaderContentBridge?
@@ -491,7 +500,8 @@ import WebKit
                                context.coordinator.loadedWordSpacing != wordSpacing ||
                                context.coordinator.loadedGrainIntensity != grainIntensity ||
                                context.coordinator.loadedHighlightColorHex != highlightColorHex ||
-                               context.coordinator.loadedHighlightOpacity != highlightOpacity
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity ||
+                               context.coordinator.loadedJustifyText != justifyText
             
             if contentChanged || context.coordinator.loadedHtmlContent == nil || (commentsChanged && context.coordinator.loadedCommentsHtml == nil) {
                 bridge.contentDidChange()
@@ -517,6 +527,7 @@ import WebKit
                 context.coordinator.loadedGrainIntensity = grainIntensity
                 context.coordinator.loadedHighlightColorHex = highlightColorHex
                 context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             } else if commentsChanged {
                 context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
@@ -542,6 +553,7 @@ import WebKit
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
+                document.documentElement.style.setProperty('--reader-text-align', '\(justifyText ? "justify" : "start")');
                 document.documentElement.style.setProperty('--reader-highlight', '\(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity))');
                 if (window.__ttsWord) { requestAnimationFrame(function() { window.setTTSActiveWord(window.__ttsWord); }); }
                 var ruler = document.getElementById("line-focus-ruler");
@@ -574,6 +586,7 @@ import WebKit
                 context.coordinator.loadedGrainIntensity = grainIntensity
                 context.coordinator.loadedHighlightColorHex = highlightColorHex
                 context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             }
         }
 
@@ -598,6 +611,7 @@ import WebKit
             lhs.grainIntensity == rhs.grainIntensity &&
             lhs.highlightColorHex == rhs.highlightColorHex &&
             lhs.highlightOpacity == rhs.highlightOpacity &&
+            lhs.justifyText == rhs.justifyText &&
             lhs.commentsHtml == rhs.commentsHtml &&
             lhs.hasMoreComments == rhs.hasMoreComments
         }
@@ -652,7 +666,7 @@ extension ReaderContent {
             :root {
                 color-scheme: light dark;
             }
-            :root { --reader-top-inset: \(topOffset)px; --reader-highlight: \(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity)); }
+            :root { --reader-text-align: \(justifyText ? "justify" : "start"); --reader-top-inset: \(topOffset)px; --reader-highlight: \(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity)); }
             ::selection { background: var(--reader-highlight); }
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
@@ -674,7 +688,7 @@ extension ReaderContent {
             \(darkMediaQuery)
             p {
                 margin-bottom: 1em;
-                text-align: justify;
+                text-align: var(--reader-text-align) !important;
             }
             p:empty { display: none; }
             img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; }

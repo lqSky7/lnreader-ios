@@ -14,6 +14,7 @@ struct ReaderView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("reader.highlightColor") private var highlightColorHex = ""
     @AppStorage("reader.highlightOpacity") private var highlightOpacity = 0.26
+    @AppStorage("reader.justifyText") private var justifyText = true
 
     @StateObject private var ttsBridge = ReaderContentBridge()
     @ObservedObject private var ttsManager = ReaderTTSManager.shared
@@ -135,6 +136,7 @@ struct ReaderView: View {
                     grainIntensity: grainIntensity,
                     highlightColorHex: highlightColorHex,
                     highlightOpacity: highlightOpacity,
+                    justifyText: justifyText,
                     commentsHtml: "",
                     hasMoreComments: false,
                     onTap: { toggleControls() },
