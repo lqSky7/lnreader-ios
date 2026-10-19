@@ -32,7 +32,7 @@ struct TTSManifest: Codable, Identifiable, Sendable {
 
     func validate() throws {
         guard schema == 1, id.count == 64, id.allSatisfy(\.isHexDigit),
-              modelID == "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+              ["Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"].contains(modelID),
               duration.isFinite, duration > 0, audioBytes > 0,
               audioSHA256.count == 64, audioSHA256.allSatisfy(\.isHexDigit),
               !blocks.isEmpty, !words.isEmpty else { throw TTSError.invalidManifest }
@@ -80,6 +80,20 @@ struct TTSRendition: Codable, Identifiable, Sendable {
     let totalChunks: Int
     let error: String?
     let manifestURL: String?
+    var computeProvider: String? = nil
+}
+
+struct TTSComputeProvider: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let available: Bool
+}
+
+struct TTSAudioDeletion: Codable, Equatable {
+    let bookId: String
+    let chapterId: String
+    let voiceId: String
+    let backendURL: String
 }
 
 struct TTSVoice: Codable, Identifiable, Sendable {
@@ -89,6 +103,13 @@ struct TTSVoice: Codable, Identifiable, Sendable {
     let nativeLanguage: String
     let description: String
     var preview: TTSRendition?
+    var kind: String? = nil
+    var status: String? = nil
+    var sampleDuration: Double? = nil
+    var referenceText: String? = nil
+    var sampleSHA256: String? = nil
+    var sampleBytes: Int? = nil
+    var isCustom: Bool { kind == "custom" }
 
     static let presets: [TTSVoice] = [
         .init(id: "qwen-ryan", name: "Ryan", speaker: "Ryan", nativeLanguage: "English", description: "Dynamic, rhythmic male narrator"),

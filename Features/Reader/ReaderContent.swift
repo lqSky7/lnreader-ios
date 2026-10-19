@@ -668,7 +668,8 @@ extension ReaderContent {
 
             }
             ::highlight(tts-word) { background-color: rgba(250,45,72,0.65); color: inherit; }
-            body.tts-speech-mode { padding-top: 130px !important; padding-bottom: 340px !important; }
+            body.tts-speech-mode { padding-top: var(--tts-top, 120px) !important; padding-bottom: var(--tts-bottom, 260px) !important; }
+            body.tts-speech-mode #line-focus-ruler { display: none !important; }
             #tts-dot {
                 position: absolute;
                 width: 6px;
@@ -1261,45 +1262,6 @@ extension ReaderContent {
                     window.webkit.messageHandlers.scrollParagraph.postMessage(String(topIndex));
                 }
             }, 300);
-        });
-
-        // Gestures management using PointerEvents
-        var startX = 0;
-        var startY = 0;
-        var startTime = 0;
-
-        window.addEventListener("pointerdown", function(e) {
-            if (!e.isPrimary) return;
-            if (e.target.tagName === 'A' || e.target.closest('a') || e.target.tagName === 'BUTTON') return;
-            
-            startX = e.clientX;
-            startY = e.clientY;
-            startTime = Date.now();
-        });
-
-        window.addEventListener("pointerup", function(e) {
-            if (!e.isPrimary) return;
-            if (e.target.tagName === 'A' || e.target.closest('a') || e.target.tagName === 'BUTTON') return;
-
-            var diffX = e.clientX - startX;
-            var diffY = e.clientY - startY;
-            var elapsed = Date.now() - startTime;
-
-            // Check if there is active selection
-            var selection = window.getSelection().toString();
-            if (selection && selection.trim().length > 0) {
-                return;
-            }
-
-            // Tap detection
-            if (Math.abs(diffX) < 8 && Math.abs(diffY) < 8 && elapsed < 300) {
-                clearTimeout(window.__ttsSingleTap);
-                window.__ttsSingleTap = setTimeout(function() {
-                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
-                        window.webkit.messageHandlers.toggleControls.postMessage("");
-                    }
-                }, window.__ttsSpeechMode ? 260 : 0);
-            }
         });
 
         \(ReaderTTSJavaScript.interaction)

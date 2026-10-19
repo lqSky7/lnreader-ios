@@ -15,7 +15,7 @@ struct TTSAPIClient: Sendable {
     }
 
     private func request<T: Decodable>(_ path: String, method: String = "GET", body: Data? = nil) async throws -> T {
-        var request = URLRequest(url: try url(path))
+        var request = URLRequest(url: try url(path), cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = method
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -30,17 +30,48 @@ struct TTSAPIClient: Sendable {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    func engine() async throws -> TTSEngineState { try await request("/api/tts/engine") }
+    var selectedProvider: String { UserDefaults.standard.string(forKey: "tts.provider") == "colab" ? "colab" : "kaggle" }
+    func engine() async throws -> TTSEngineState { try await request("/api/tts/engine?provider=\(selectedProvider)") }
+    func providers() async throws -> [TTSComputeProvider] {
+        struct Envelope: Decodable { let providers: [TTSComputeProvider] }
+        let result: Envelope = try await request("/api/tts/providers")
+        return result.providers
+    }
 
     func voices() async throws -> [TTSVoice] {
         struct Envelope: Decodable { let voices: [TTSVoice] }
         let result: Envelope = try await request("/api/tts/voices")
         return result.voices
     }
+    func createVoice(name: String, audio: Data, transcript: String) async throws -> TTSVoice {
+        struct Body: Encodable { let name: String; let audioBase64: String; let transcript: String; let provider: String }
+        struct Response: Decodable { let voice: TTSVoice }
+        let result: Response = try await request("/api/tts/voices/custom", method: "POST", body: JSONEncoder().encode(Body(name: name, audioBase64: audio.base64EncodedString(), transcript: transcript, provider: selectedProvider)))
+        return result.voice
+    }
+    func deleteVoice(_ id: String) async throws {
+        struct Response: Decodable { let ok: Bool }
+        let _: Response = try await request("/api/tts/voices/\(id)", method: "DELETE")
+    }
+    func restoreVoice(_ id: String, audio: Data) async throws {
+        struct Body: Encodable { let audioBase64: String }
+        struct Response: Decodable { let ok: Bool }
+        let _: Response = try await request("/api/tts/voices/\(id)/reference", method: "PUT", body: JSONEncoder().encode(Body(audioBase64: audio.base64EncodedString())))
+    }
+    func deletePreparations(_ scopes: [TTSAudioDeletion]) async throws {
+        struct Body: Encodable { let scopes: [TTSAudioDeletion] }
+        struct Response: Decodable { let ok: Bool }
+        let _: Response = try await request("/api/tts/deletions", method: "POST", body: JSONEncoder().encode(Body(scopes: scopes)))
+    }
+    func voiceReference(_ id: String) async throws -> Data {
+        let (data, response) = try await URLSession.shared.data(from: url("/api/tts/voices/\(id)/reference"))
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200, data.count <= 6_000_000 else { throw TTSError.request("Could not save the voice reference on this phone. Try refreshing voices.") }
+        return data
+    }
     func prepare(chapter: TTSChapterRequest, voices: [String]) async throws -> [TTSRendition] {
-        struct Body: Encodable { let chapter: TTSChapterRequest; let voiceIds: [String] }
+        struct Body: Encodable { let chapter: TTSChapterRequest; let voiceIds: [String]; let provider: String }
         struct Envelope: Decodable { let renditions: [TTSRendition] }
-        let result: Envelope = try await request("/api/tts/preparations", method: "POST", body: JSONEncoder().encode(Body(chapter: chapter, voiceIds: voices)))
+        let result: Envelope = try await request("/api/tts/preparations", method: "POST", body: JSONEncoder().encode(Body(chapter: chapter, voiceIds: voices, provider: selectedProvider)))
         return result.renditions
     }
     func renditions(bookId: String, chapterId: String? = nil) async throws -> [TTSRendition] {
@@ -61,6 +92,7 @@ struct TTSAPIClient: Sendable {
     }
     func action(_ action: String, renditionId: String) async throws {
         struct Response: Decodable { let ok: Bool }
-        let _: Response = try await request("/api/tts/renditions/\(renditionId)/\(action)", method: "POST", body: Data("{}".utf8))
+        let body = action == "retry" ? try JSONSerialization.data(withJSONObject: ["provider": selectedProvider]) : Data("{}".utf8)
+        let _: Response = try await request("/api/tts/renditions/\(renditionId)/\(action)", method: "POST", body: body)
     }
 }

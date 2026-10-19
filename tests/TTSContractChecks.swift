@@ -1,6 +1,7 @@
 // Run on macOS with scripts/check-tts-contracts.sh
 import AppKit
 import Foundation
+import WebKit
 struct ChapterDisplay { let path: String; let name: String; let position: Int }
 @main struct Check {
     @MainActor static func main() {
@@ -20,6 +21,10 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
                 ]
                 let manifest = try JSONDecoder().decode(TTSManifest.self, from: JSONSerialization.data(withJSONObject: data))
                 try manifest.validate()
+                var cloned = data
+                cloned["modelID"] = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+                cloned["voiceId"] = "custom-fixture"
+                try JSONDecoder().decode(TTSManifest.self, from: JSONSerialization.data(withJSONObject: cloned)).validate()
                 precondition(manifest.time(paragraph: 0, offset: 16) == 1.2, "Number expansion must seek to its first spoken word")
                 precondition(manifest.word(at: 0.7)?.sourceStart == 9, "Use the media clock with UTF-16 offsets after emoji")
                 precondition(manifest.word(at: 1.7)?.sourceStart == 15)
@@ -32,10 +37,44 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
                 guard blocks == ["Hello 🌟 world 42.", "Second line."] else { fatalError(String(describing: blocks)) }
                 let fallback = try await extractor.extract("<div>Plain <em>chapter</em><br>with breaks.</div>")
                 guard fallback == ["Plain chapter with breaks."] else { fatalError(String(describing: fallback)) }
+                try await ReaderInteractionChecks().run()
                 print("PASS: media-clock word lookup, number expansion seeks, corrupt manifest rejection, real WKWebView UTF-16 extraction, notes, line breaks and plain div fallback")
                 exit(0)
             } catch { print("FAIL: \(error)"); exit(1) }
         }
         RunLoop.main.run()
+    }
+}
+
+@MainActor final class ReaderInteractionChecks: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    var continuation: CheckedContinuation<Void, Error>?
+    var messages: [String] = []
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) { messages.append(message.name) }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { continuation?.resume(); continuation = nil }
+    func run() async throws {
+        let config = WKWebViewConfiguration()
+        for name in ["toggleControls", "ttsWordTap", "ttsFollowChanged"] { config.userContentController.add(self, name: name) }
+        defer { config.userContentController.removeAllScriptMessageHandlers() }
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 393, height: 780), configuration: config)
+        webView.navigationDelegate = self
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            webView.loadHTMLString("<p style='margin:40px;font-size:24px'>Read this book.</p>", baseURL: nil)
+        }
+        _ = try await webView.evaluateJavaScript(ReaderTTSJavaScript.mapping + ReaderTTSJavaScript.interaction + "window.ttsExtractBlocks(); window.setTTSSpeechMode(true); window.setTTSControlsVisible(false);")
+        let hidden = try await webView.evaluateJavaScript("window.__ttsSpeechMode && !window.__ttsControlsVisible && document.body.style.getPropertyValue('--tts-bottom') === '32px'") as? Bool
+        precondition(hidden == true, "Focused listening must retain speech mode and remove control insets")
+        let tap = "var p=document.querySelector('p'); p.dispatchEvent(new PointerEvent('pointerdown',{isPrimary:true,clientX:55,clientY:55,bubbles:true})); p.dispatchEvent(new PointerEvent('pointerup',{isPrimary:true,clientX:55,clientY:55,bubbles:true}));"
+        _ = try await webView.evaluateJavaScript(tap)
+        try await Task.sleep(for: .milliseconds(400))
+        precondition(messages.filter { $0 == "toggleControls" }.count == 1, "A listening single tap must toggle focus")
+        _ = try await webView.evaluateJavaScript(tap + tap + "var r=document.createRange(); r.setStart(p.firstChild,0); r.setEnd(p.firstChild,4); var rect=r.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('dblclick',{clientX:rect.x+rect.width/2,clientY:rect.y+rect.height/2,bubbles:true,cancelable:true}));")
+        try await Task.sleep(for: .milliseconds(400))
+        precondition(messages.filter { $0 == "toggleControls" }.count == 1, "Double tap seeking must not toggle focus")
+        precondition(messages.filter { $0 == "ttsWordTap" }.count == 1, "Double tap must still seek the tapped word")
+        _ = try await webView.evaluateJavaScript("window.ttsSetFollowing(false); window.setTTSControlsVisible(true);")
+        let restored = try await webView.evaluateJavaScript("window.__ttsControlsVisible && !window.__ttsFollowing && document.body.style.getPropertyValue('--tts-bottom') === '260px'") as? Bool
+        precondition(restored == true, "Showing controls must preserve a manually detached reading position")
+        print("PASS: listening focus toggle, control insets, double-tap word seek, and detached follow state in real WKWebView")
     }
 }

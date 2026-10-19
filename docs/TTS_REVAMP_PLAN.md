@@ -18,9 +18,9 @@ flowchart LR
   A --> D[(Postgres: source text and durable job ledger)]
   A --> R[(Dedicated Redis: leased job queue)]
   R --> K[Private finite Kaggle Qwen GPU notebook]
-  K --> Q[Whisper fidelity check and forced alignment on Kaggle]
+  K --> Q[Qwen3-ASR fidelity check and Qwen forced alignment on Kaggle or Colab]
   Q --> F[Ubuntu: verified chunk storage and ffmpeg assembly]
-  F --> C[2 GB bounded backend TTS cache]
+  F --> C[5 GB bounded backend TTS cache]
   C --> L[iPhone: permanent chapter and voice downloads]
 ```
 
@@ -44,15 +44,15 @@ Kaggle availability and quota affect preparation time. A queued GPU notebook can
 
 Speech normalization retains the source span for every spoken word. For example, both “forty” and “two” point to the original `42`. Seeking the displayed number chooses its first spoken word. No duration-per-character estimate drives highlighting.
 
-On Kaggle, faster-whisper transcribes the delivered waveform for fidelity checking. Excessive word error rate, omitted words, and repeated phrases are rejected. WhisperX separately aligns the expected words and requires complete coverage and sufficient confidence. The backend validates source spans, monotonic timing, FLAC checksums, duration, sample rate, and channels.
+On the selected Kaggle or Colab CUDA worker, Qwen3-ASR transcribes the delivered waveform independently for fidelity checking. Excessive word error rate, omitted words, incorrect numbers and repeated phrases are rejected. Qwen3-ForcedAligner separately aligns the expected wording. Sound timings are kept; collapsed, missing or crossed timestamps are repaired from nearby measured anchors, with a monotonic proportional approximation if no usable anchors remain. This affects highlights and seeks only: independently detected missing speech is still rejected. A CPU repair avoids regenerating good audio or spending an extra GPU alignment pass. TTS and ASR use separate pinned Python environments to preserve their supported Transformers versions. The backend validates source spans, monotonic timing, FLAC checksums, duration, sample rate, and channels.
 
 Ubuntu adds explicit paragraph pauses, assembles PCM with ffmpeg, normalizes loudness, and produces mono 24 kHz AAC at approximately 64 kbps in a chapter M4A. Final duration and word timing are checked after encoding. One chapter per file supplies the chapter boundary; a whole-book M4B export has not been implemented.
 
 The phone verifies SHA-256, byte count, duration, and manifest bounds before committing a package. Background URLSession transfers support resume, Wi-Fi-only requests, independent transfer identities, and stale callback rejection. A launch scan recovers committed packages after an interrupted index write. Playback speed changes use the existing local file. Audio interruptions, headphones, lock-screen controls, sleep timers, listening positions, and downloaded next chapters are handled by the app-owned player.
 
-## The 2 GB backend budget
+## The 5 GB backend budget
 
-The configured ceiling is **2,000,000,000 bytes** across TTS payload files, measured TTS database relation storage, Redis memory, and 128 MB reserved for persistence rewrites, bounded logs, and database overhead. This is the TTS application-data budget; host software, Docker images, and unrelated applications are outside it.
+The configured ceiling is **5,000,000,000 bytes** across TTS payload files, measured TTS database relation storage, Redis memory, and 128 MB reserved for persistence rewrites, bounded logs, and database overhead. This is the TTS application-data budget; host software, Docker images, and unrelated applications are outside it.
 
 Before uploads and assembly, the API reserves enough space for concurrent writes and temporary PCM/AAC files. It evicts least recently used completed, failed, or cancelled renditions, excluding active HTTP readers and the current preparation. Voice previews receive retention preference but can also be evicted. After final commit, disposable FLAC and PCM intermediates are removed. Stale uploads and orphaned directories are collected. Redis uses a 32 MB `noeviction` ceiling so cache pressure does not silently remove live job locks. Completed and failed queue records, tombstones, notebook launch files, and logs have bounded retention.
 
@@ -74,7 +74,7 @@ The dispatcher now publishes an authenticated engine status with a heartbeat, ex
 
 The offline audio sheet uses horizontal SF Symbol action cards, direct chapter-number range entry, chapter-title/number search, state and voice filters, and lazy List rows. Only one chapter expands into per-voice actions at a time. Bulk deletion applies to the selected range and voice filter; phone copies remain persistent. The shared app theme, asset accent, root tint, reader highlights and remaining action/link accents use Apple Music inspired #FA2D48.
 
-The pinned 4.52 GB Qwen checkpoint was transferred from Hugging Face through bounded production RAM directly into the private Kaggle Model ca5qee1/lnreader-qwen3-tts/pyTorch/customvoice-pinned/1, without storing weights on Ubuntu disk or downloading them through the Mac. A metadata-only publisher waits for Kaggle's extracted files before making the attachment available to future batches. Mounted checkpoints are verified against pinned provenance and every file checksum before Qwen loads. The transfer and extraction completed, and validation v3 loaded the verified attached checkpoint. Model storage is on Kaggle and is separate from the Ubuntu audio cache.
+The pinned 4.55 GB Qwen checkpoint was transferred from Hugging Face through bounded production RAM directly into the private Kaggle Model ca5qee1/lnreader-qwen3-tts/pyTorch/customvoice-pinned/1, without storing weights on Ubuntu disk or downloading them through the Mac. A metadata-only publisher waits for Kaggle's extracted files before making the attachment available to future batches. Mounted checkpoints are verified against pinned provenance and every file checksum before Qwen loads. The transfer and extraction completed, and validation v3 loaded the verified attached checkpoint. Model storage is on Kaggle and is separate from the Ubuntu audio cache.
 
 All nine previews passed automatic fidelity/alignment and real download/Apple offline-decoding checks. Listening review on the target iPhone, full physical-phone playback, and measured timing accuracy remain pending. No synthesis speed, GPU capacity, word-accuracy, or zero-gap playback benchmark is claimed.
 
@@ -97,3 +97,20 @@ Every `/api/tts` endpoint requires an authenticated account whose database usern
 The maintenance pause is cleared and the ordinary dispatcher is running. The download sheet initially selects only the current chapter and preferred voice. A separate This chapter action resets that choice; Next 10 and range selection require explicit action. Preparation status occupies its own grouped section, separated from the quick-action cards. The header uses the book cover from all entry points. Chapter rows inherit their grouped background, eliminating dark title rectangles; books with a single directory page omit pagination.
 
 Sanitized live validation evidence is recorded in the backend's `deploy/tts-e2e-report.json`. Builds and contract checks pass. A physical iPhone was unavailable to the Mac, so device layout, interactive transitions, lock-screen playback and the stated latency targets remain unverified.
+
+
+## Custom voice and provider controls
+
+Add your own voice from Settings → Narration or the chapter download voice picker. Record or import 3–60 seconds (6 MB maximum), preview the recording locally, name it and optionally supply the exact transcript. The Rainbow Passage is selectable and has a Copy passage action. A blank transcript is filled by Qwen3-ASR on the remote worker. The custom narrator uses pinned Qwen3-TTS-12Hz-1.7B-Base, while presets use CustomVoice. The generated preview downloads automatically; chapter packages follow the same checksum/timing and offline playback path as presets. Voice references persist in Application Support and restore an evicted backend reference using its original checksum and ID.
+
+The preparation provider picker selects Kaggle or Google Colab for new jobs and retries. Server credentials remain on Ubuntu. Model inference runs only on the selected remote CUDA provider. Provider-specific queues prevent one provider from claiming the other's jobs. A connected Colab account does not guarantee GPU availability. Current runtime status is polled rather than claiming audio is generating before a GPU is allocated.
+
+Deleting chapter audio now deletes the phone files and all matching server generations, including every source revision, failed ledger, queue entries, chunks and cache. A durable deletion outbox handles offline deletion and must finish before preparing new audio. A fresh generation gets a new ID and cannot reuse old leases or corrupt resume data. Deletion keeps original book content, other chapters/voices and unrelated accounts. Deleting a voice profile removes its reference and cancels unfinished jobs, while already downloaded book audio remains playable.
+
+## Listening presentation
+
+Reading and listening share one top toolbar. Single-tapping the text switches between focused listening (text and highlights only, including no status bar or follow button) and visible controls. Double-tapping still seeks to a word without toggling focus. Focus changes also adjust the text viewport's reserved insets. Showing controls never overrides a manually detached scroll position; Back to current resumes following explicitly.
+
+The player uses an inset rounded panel, with transport, progress, settings, downloads, bookmark, and a gradient voice chip. Presets have distinct colors; new custom voices receive a random color that persists in UserDefaults. Download rows share the chip and show concise automatic retry status separately from final failures.
+
+Final checks: listening single-tap focus, double-tap source seeking, viewport insets and detached following pass in real WKWebView. Five small real-Qwen packages passed offline Apple decoding, checksums and source timing checks. The final GPU synthesis was limited to the phone's 36-word failing section, which passed on attempt 1 with the number-homophone repair. Failed server preparations are reconciled after a server/device retry, while user-paused transfers remain paused.

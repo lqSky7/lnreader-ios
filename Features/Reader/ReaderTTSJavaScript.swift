@@ -52,6 +52,7 @@ enum ReaderTTSJavaScript {
     static let interaction = #"""
     window.__ttsFollowing = true;
     window.__ttsSpeechMode = false;
+    window.__ttsControlsVisible = true;
     window.__ttsWord = null;
     window.ttsSetFollowing = function(value) {
         if (window.__ttsFollowing === value) return;
@@ -61,6 +62,12 @@ enum ReaderTTSJavaScript {
     window.setTTSSpeechMode = function(value) {
         window.__ttsSpeechMode = value;
         document.body.classList.toggle('tts-speech-mode', value);
+    };
+    window.setTTSControlsVisible = function(value) {
+        window.__ttsControlsVisible = value;
+        document.body.style.setProperty('--tts-top', value ? '120px' : '24px');
+        document.body.style.setProperty('--tts-bottom', value ? '260px' : '32px');
+        if (window.__ttsSpeechMode && window.__ttsWord) window.setTTSActiveWord(window.__ttsWord);
     };
     window.ttsRange = function(word) {
         var target = document.querySelector('[data-tts-index="' + word.paragraphIndex + '"]');
@@ -81,10 +88,11 @@ enum ReaderTTSJavaScript {
         mapped.target.classList.add('tts-active');
         if (window.CSS && CSS.highlights && window.Highlight) CSS.highlights.set('tts-word', new Highlight(mapped.range));
         var rect = mapped.range.getBoundingClientRect();
-        var bottomInset = window.__ttsSpeechMode ? 315 : 120;
-        if (window.__ttsFollowing && (rect.top < 120 || rect.bottom > window.innerHeight - bottomInset)) {
+        var topInset = window.__ttsControlsVisible ? 120 : 32;
+        var bottomInset = window.__ttsSpeechMode ? (window.__ttsControlsVisible ? 260 : 32) : 120;
+        if (window.__ttsFollowing && (rect.top < topInset || rect.bottom > window.innerHeight - bottomInset)) {
             var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            window.scrollBy({top: rect.top - Math.max(135, (window.innerHeight - bottomInset) * 0.42), behavior: reduceMotion ? 'instant' : 'smooth'});
+            window.scrollBy({top: rect.top - Math.max(topInset, (window.innerHeight - bottomInset) * 0.42), behavior: reduceMotion ? 'instant' : 'smooth'});
         }
     };
     window.resumeTTSFollow = function() {
@@ -131,5 +139,44 @@ enum ReaderTTSJavaScript {
         // Keep native long-press selection; following remains suspended until explicitly resumed.
         window.ttsSetFollowing(false);
     });
+        // Gestures management using PointerEvents
+        var startX = 0;
+        var startY = 0;
+        var startTime = 0;
+
+        window.addEventListener("pointerdown", function(e) {
+            if (!e.isPrimary) return;
+            if (e.target.tagName === 'A' || e.target.closest('a') || e.target.tagName === 'BUTTON') return;
+
+            startX = e.clientX;
+            startY = e.clientY;
+            startTime = Date.now();
+        });
+
+        window.addEventListener("pointerup", function(e) {
+            if (!e.isPrimary) return;
+            if (e.target.tagName === 'A' || e.target.closest('a') || e.target.tagName === 'BUTTON') return;
+
+            var diffX = e.clientX - startX;
+            var diffY = e.clientY - startY;
+            var elapsed = Date.now() - startTime;
+
+            // Check if there is active selection
+            var selection = window.getSelection().toString();
+            if (selection && selection.trim().length > 0) {
+                return;
+            }
+
+            // Tap detection
+            if (Math.abs(diffX) < 8 && Math.abs(diffY) < 8 && elapsed < 300) {
+                clearTimeout(window.__ttsSingleTap);
+                window.__ttsSingleTap = setTimeout(function() {
+                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
+                        window.webkit.messageHandlers.toggleControls.postMessage("");
+                    }
+                }, window.__ttsSpeechMode ? 320 : 0);
+            }
+        });
+
     """#
 }

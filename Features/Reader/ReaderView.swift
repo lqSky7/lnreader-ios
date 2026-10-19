@@ -131,7 +131,6 @@ struct ReaderView: View {
                     commentsHtml: "",
                     hasMoreComments: false,
                     onTap: {
-                        guard !isCurrentSpeech else { return }
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showControls.toggle()
                         }
@@ -144,7 +143,7 @@ struct ReaderView: View {
                 .ignoresSafeArea(.all)
             }
 
-            // Normal Toolbar (visible when showControls is true AND isCurrentSpeech is false)
+            // Reading and listening share the same top navigation.
             ReaderToolbar(
                 chapterName: currentChapterName,
                 hasPrevious: hasPreviousChapter,
@@ -152,23 +151,22 @@ struct ReaderView: View {
                 isPreparingTTS: isPreparingTTS,
                 onDismiss: { dismiss() },
                 onSettings: { showSettings = true },
-                onTTSStart: { startTTSPlayback() },
+                onTTSStart: { isCurrentSpeech ? stopTTSPlayback() : startTTSPlayback() },
                 onPreviousChapter: navigateToPreviousChapter,
                 onNextChapter: navigateToNextChapter,
                 onChapterClick: { showChapterList = true },
-                onComments: commentSite != nil ? { showCommentsSheet = true } : nil
+                onComments: commentSite != nil ? { showCommentsSheet = true } : nil,
+                isListening: isCurrentSpeech
             )
-            .opacity((showControls && !isCurrentSpeech) ? 1.0 : 0.0)
-            .blur(radius: (showControls && !isCurrentSpeech) ? 0.0 : 8.0)
-            .scaleEffect((showControls && !isCurrentSpeech) ? 1.0 : 0.96)
-            .allowsHitTesting(showControls && !isCurrentSpeech)
+            .opacity(showControls ? 1.0 : 0.0)
+            .allowsHitTesting(showControls)
+            .accessibilityHidden(!showControls)
 
             // TTS Controls Overlay (visible when isCurrentSpeech is true)
             ttsControlsOverlay
-                .opacity(isCurrentSpeech ? 1.0 : 0.0)
-                .blur(radius: isCurrentSpeech ? 0.0 : 8.0)
-                .scaleEffect(isCurrentSpeech ? 1.0 : 0.96)
-                .allowsHitTesting(isCurrentSpeech)
+                .opacity(isCurrentSpeech && showControls ? 1.0 : 0.0)
+                .allowsHitTesting(isCurrentSpeech && showControls)
+                .accessibilityHidden(!isCurrentSpeech || !showControls)
 
             // Focus Status Indicator Overlay (visible when controls and TTS speaking overlay are hidden, and Line Focus mode is active)
             VStack {
@@ -185,7 +183,8 @@ struct ReaderView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .statusBarHidden(!showControls || isCurrentSpeech)
+        .statusBarHidden(!showControls)
+        .onChange(of: showControls) { _, visible in ttsBridge.setControlsVisible(visible) }
         .fullScreenCover(isPresented: $showSettings) {
             ReaderSettings(
                 fontSize: $fontSize,
@@ -654,17 +653,17 @@ struct ReaderView: View {
     private func updateSpeed(_ newSpeed: Double) { ttsSpeed = newSpeed; ttsManager.setRate(newSpeed) }
     private var ttsControlsOverlay: some View {
         TTSPlaybackControls(
-            title: fetchNovel()?.name ?? currentChapterName, chapterName: currentChapterName,
             isPlaying: !ttsManager.isPaused, isBuffering: ttsManager.isBuffering,
             elapsed: ttsManager.elapsed, duration: ttsManager.duration, rate: ttsManager.rate,
+            voiceId: ttsManager.manifest?.voiceId ?? ttsVoiceId,
             voiceName: ttsManager.manifest?.voiceName ?? "Qwen", isDownloaded: true,
             isFollowing: ttsBridge.isFollowing, sleepTimerLabel: ttsManager.sleepTimerLabel,
-            onBack: { stopTTSPlayback() }, onMore: { showSettings = true },
+            onSettings: { showSettings = true },
             onPlayPause: { ttsManager.togglePause() }, onSkipBack: { ttsManager.skip(-15) },
             onSkipForward: { ttsManager.skip(30) }, onRate: { showSpeedPicker = true },
             onVoice: { showVoicePicker = true }, onDownload: { showAudioDownloads = true },
             onBookmark: { if let chapter = currentChapter { chapter.bookmark.toggle(); try? modelContext.save() } },
-            onChapters: { showChapterList = true }, onSleep: { showSleepPicker = true },
+            onSleep: { showSleepPicker = true },
             onFollow: { ttsBridge.resumeFollowing() }, onSeek: { ttsManager.seek(to: $0) }
         )
     }

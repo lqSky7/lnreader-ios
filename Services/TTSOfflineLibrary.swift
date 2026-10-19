@@ -9,6 +9,12 @@ enum TTSStorage {
     static func directory(_ id: String) -> URL { root.appendingPathComponent(id, isDirectory: true) }
     static func audio(_ id: String) -> URL { directory(id).appendingPathComponent("audio.m4a") }
     static func validID(_ id: String) -> Bool { id.count == 64 && id.allSatisfy(\.isHexDigit) }
+    static func voiceDirectory(_ id: String) -> URL {
+        // Never use a server-supplied path component directly.
+        let key = SHA256.hash(data: Data(id.utf8)).map { String(format: "%02x", $0) }.joined()
+        let backend = SHA256.hash(data: Data(TTSAPIClient().baseURL.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
+        return root.appendingPathComponent("voice-samples").appendingPathComponent(backend).appendingPathComponent(key)
+    }
     static func chapterText(bookId: String, chapterId: String) -> URL {
         let id = SHA256.hash(data: Data((bookId + "\u{0}" + chapterId).utf8)).map { String(format: "%02x", $0) }.joined()
         return root.appendingPathComponent("chapters", isDirectory: true).appendingPathComponent(id + ".json")
@@ -66,6 +72,9 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var lastProgressSave = Date.distantPast
     private var lastVoiceRefresh = Date.distantPast
+    private var pendingDeletions: [TTSAudioDeletion] = []
+    private var deletionTask: Task<Void, Error>?
+    private var deletionURL: URL { TTSStorage.root.appendingPathComponent("pending-deletions.json") }
     private lazy var session: URLSession = {
         #if os(iOS)
         let config = URLSessionConfiguration.background(withIdentifier: "com.lnreader.audio.downloads.v1")
@@ -81,7 +90,9 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
         super.init()
         do {
             try FileManager.default.createDirectory(at: TTSStorage.root, withIntermediateDirectories: true)
+            if let data = try? Data(contentsOf: deletionURL) { pendingDeletions = try JSONDecoder().decode([TTSAudioDeletion].self, from: data) }
             if let data = try? Data(contentsOf: indexURL), let saved = try? JSONDecoder().decode([TTSDownloadRecord].self, from: data) { records = saved }
+            records.removeAll { record in pendingDeletions.contains { $0.backendURL == record.backendURL && $0.bookId == record.rendition.bookId && $0.chapterId == record.rendition.chapterId && $0.voiceId == record.rendition.voiceId } }
             if let data = try? Data(contentsOf: TTSStorage.root.appendingPathComponent("voices.json")), let saved = try? JSONDecoder().decode([TTSVoice].self, from: data) { voices = saved }
             // Recover a completed atomic package if iOS terminated us before the index commit.
             for directory in try FileManager.default.contentsOfDirectory(at: TTSStorage.root, includingPropertiesForKeys: nil) where TTSStorage.validID(directory.lastPathComponent) {
@@ -91,12 +102,13 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
                       manifest.id == id, (try? manifest.validate()) != nil,
                       let attributes = try? FileManager.default.attributesOfItem(atPath: TTSStorage.audio(id).path),
                       (attributes[.size] as? NSNumber)?.int64Value == manifest.audioBytes else { continue }
+                if pendingDeletions.contains(where: { $0.bookId == manifest.bookId && $0.chapterId == manifest.chapterId && $0.voiceId == manifest.voiceId }) { try? FileManager.default.removeItem(at: directory); continue }
                 let rendition = TTSRendition(id: id, voiceId: manifest.voiceId, status: "ready", bookId: manifest.bookId, chapterId: manifest.chapterId, bookTitle: manifest.bookTitle, title: manifest.title, position: manifest.position, contentRevision: manifest.contentRevision, completedChunks: 0, totalChunks: 0, error: nil, manifestURL: nil)
                 if let index = records.firstIndex(where: { $0.id == id }) {
                     records[index].state = "downloaded"; records[index].manifest = manifest; records[index].error = nil
                     records[index].bytesExpected = manifest.audioBytes; records[index].bytesReceived = manifest.audioBytes
                 } else {
-                    records.append(.init(id: id, rendition: rendition, state: "downloaded", bytesReceived: manifest.audioBytes, bytesExpected: manifest.audioBytes, isPreview: manifest.bookId == "qwen-previews", backendURL: TTSAPIClient().baseURL.absoluteString, manifest: manifest))
+                    records.append(.init(id: id, rendition: rendition, state: "downloaded", bytesReceived: manifest.audioBytes, bytesExpected: manifest.audioBytes, isPreview: ["qwen-previews", "custom-voice-previews"].contains(manifest.bookId), backendURL: TTSAPIClient().baseURL.absoluteString, manifest: manifest))
                 }
             }
             for index in records.indices where records[index].isAvailable {
@@ -134,7 +146,7 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
     }
     var migratedDefaultVoice: String {
         let value = UserDefaults.standard.string(forKey: "tts.voice") ?? "qwen-ryan"
-        return TTSVoice.presets.contains { $0.id == value } ? value : "qwen-ryan"
+        return voices.contains { $0.id == value } || records.contains { $0.rendition.voiceId == value && $0.isAvailable } ? value : "qwen-ryan"
     }
     private func selectionKey(_ bookId: String, _ chapterId: String) -> String {
         "tts.selection." + SHA256.hash(data: Data((bookId + "\u{0}" + chapterId).utf8)).map { String(format: "%02x", $0) }.joined()
@@ -150,14 +162,68 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
             let client = TTSAPIClient(); voices = try await client.voices()
             try JSONEncoder().encode(voices).write(to: TTSStorage.root.appendingPathComponent("voices.json"), options: .atomic)
             for voice in voices {
-                if let preview = voice.preview, preview.status == "ready", !records.contains(where: { $0.id == preview.id && ($0.isAvailable || $0.state == "downloading") }) { track(preview, client: client, preview: true) }
+                if voice.isCustom && voice.status == "ready" { try await saveReferenceIfMissing(voice, client: client) }
+                if let preview = voice.preview, voice.isCustom || preview.status == "ready", !records.contains(where: { $0.id == preview.id && ($0.isAvailable || $0.state == "downloading") }) { track(preview, client: client, preview: true) }
             }
             errorMessage = nil
             await refresh()
         } catch { errorMessage = error.localizedDescription }
     }
-    func prepare(chapter: TTSChapterRequest, voiceIds: [String]) async throws {
+    private func saveReferenceIfMissing(_ voice: TTSVoice, client: TTSAPIClient) async throws {
+        let folder = TTSStorage.voiceDirectory(voice.id), path = folder.appendingPathComponent("reference.flac")
+        if FileManager.default.fileExists(atPath: path.path) { return }
+        let data = try await client.voiceReference(voice.id)
+        guard data.count == voice.sampleBytes, SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == voice.sampleSHA256 else { throw TTSError.corruptDownload }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try data.write(to: path, options: .atomic)
+    }
+    func addCustomVoice(name: String, sample: URL, transcript: String) async throws -> TTSVoice {
+        let data = try Data(contentsOf: sample)
+        guard data.count <= 6_000_000 else { throw TTSError.request("Choose an audio sample smaller than 6 MB.") }
+        let draft = TTSStorage.root.appendingPathComponent("voice-draft-" + UUID().uuidString)
+        try data.write(to: draft, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: draft) }
         let client = TTSAPIClient()
+        let voice = try await client.createVoice(name: name, audio: data, transcript: transcript)
+        let folder = TTSStorage.voiceDirectory(voice.id)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: draft, to: folder.appendingPathComponent("original.audio"))
+            voices.append(voice)
+            try JSONEncoder().encode(voices).write(to: TTSStorage.root.appendingPathComponent("voices.json"), options: .atomic)
+        } catch {
+            voices.removeAll { $0.id == voice.id }
+            try? await client.deleteVoice(voice.id)
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+        if let preview = voice.preview { track(preview, client: client, preview: true) }
+        do { try await saveReferenceIfMissing(voice, client: client) }
+        catch { errorMessage = error.localizedDescription }
+        return voice
+    }
+    func deleteCustomVoice(_ voice: TTSVoice) async throws {
+        try await TTSAPIClient().deleteVoice(voice.id)
+        if TTSVoicePreviewPlayer.shared.voiceId == voice.id { TTSVoicePreviewPlayer.shared.stop() }
+        // Only the reference and generated preview are removed. Book downloads stay.
+        for record in records.filter({ $0.isPreview && $0.rendition.voiceId == voice.id }) { await delete(record.id) }
+        voices.removeAll { $0.id == voice.id }
+        try JSONEncoder().encode(voices).write(to: TTSStorage.root.appendingPathComponent("voices.json"), options: .atomic)
+        try? FileManager.default.removeItem(at: TTSStorage.voiceDirectory(voice.id))
+    }
+    private func restoreReferences(_ ids: [String], client: TTSAPIClient) async throws {
+        guard ids.contains(where: { $0.hasPrefix("custom-") }) else { return }
+        let current = try await client.voices()
+        for voice in current where ids.contains(voice.id) && voice.isCustom && voice.status == "evicted" {
+            let path = TTSStorage.voiceDirectory(voice.id).appendingPathComponent("reference.flac")
+            guard let data = try? Data(contentsOf: path) else { throw TTSError.request("The sample for \(voice.name) is missing. Add the voice again to prepare new chapters. Downloaded chapters still play.") }
+            try await client.restoreVoice(voice.id, audio: data)
+        }
+    }
+    func prepare(chapter: TTSChapterRequest, voiceIds: [String]) async throws {
+        try await flushDeletions()
+        let client = TTSAPIClient()
+        try await restoreReferences(voiceIds, client: client)
         let renditions = try await client.prepare(chapter: chapter, voices: voiceIds)
         if let revision = renditions.first?.contentRevision {
             let blocks = chapter.blocks.map { $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -186,10 +252,14 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
     }
     func refresh() async {
         guard !isRefreshing else { return }; isRefreshing = true; defer { isRefreshing = false }
+        do { try await flushDeletions() }
+        catch { errorMessage = "Server deletion is pending. Reconnect and sign in before preparing deleted chapters again." }
         if Date().timeIntervalSince(lastVoiceRefresh) > 30 && voices.contains(where: { $0.preview?.status != "ready" }) { await refreshVoices() }
         do { engineState = try await TTSAPIClient().engine() }
         catch { engineState = TTSEngineState(status: "unavailable", message: error.localizedDescription, updatedAt: "", retryAt: nil) }
-        let waiting = records.filter { $0.state == "waiting" }
+        // A server repair or retry from another device can revive a failed job.
+        // Keep user-paused transfers and local file failures under user control.
+        let waiting = records.filter { $0.state == "waiting" || ($0.state == "failed" && ["failed", "cancelled", "evicted"].contains($0.rendition.status)) }
         var snapshots: [String: [TTSRendition]] = [:]
         for record in waiting {
             do {
@@ -201,7 +271,7 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
                     if snapshots[key] == nil { snapshots[key] = try await client.renditions(bookId: record.rendition.bookId) }
                     current = snapshots[key]?.first { $0.id == record.id }
                 }
-                guard let index = records.firstIndex(where: { $0.id == record.id && $0.state == "waiting" }) else { continue }
+                guard let index = records.firstIndex(where: { $0.id == record.id && ["waiting", "failed"].contains($0.state) }) else { continue }
                 guard let current else {
                     records[index].state = "failed"
                     records[index].error = "This preparation was removed from the server queue. Retry to prepare it again."
@@ -210,7 +280,10 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
                 records[index].rendition = current
                 records[index].error = current.error
                 if ["failed", "cancelled", "evicted"].contains(current.status) { records[index].state = "failed"; records[index].error = current.error ?? "Preparation stopped" }
-                else if current.status == "ready" { try await beginDownload(current, client: client) }
+                else {
+                    records[index].state = "waiting"
+                    if current.status == "ready" { try await beginDownload(current, client: client) }
+                }
             } catch {
                 if let index = records.firstIndex(where: { $0.id == record.id }) { records[index].error = error.localizedDescription }
             }
@@ -242,7 +315,9 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
     func retry(_ id: String) async {
         guard let record = records.first(where: { $0.id == id }), record.state != "downloading", !record.isAvailable else { return }
         do {
+            try await flushDeletions()
             let client = TTSAPIClient(backendURL: record.backendURL)
+            try await restoreReferences([record.rendition.voiceId], client: client)
             let current = try await client.renditions(bookId: record.rendition.bookId, chapterId: record.rendition.chapterId).first { $0.id == id }
             if current == nil {
                 guard let text = localText(bookId: record.rendition.bookId, chapterId: record.rendition.chapterId) else { throw TTSError.request("The server queue was reset. Open this chapter's audio downloads and prepare it again.") }
@@ -270,19 +345,58 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
             }
         }
     }
-    func delete(_ id: String) async {
-        guard TTSStorage.validID(id) else { return }
-        let oldTransfer = records.first(where: { $0.id == id })?.transferID
-        if ReaderTTSManager.shared.manifest?.id == id { ReaderTTSManager.shared.stop() }
-        records.removeAll { $0.id == id }; save()
-        try? FileManager.default.removeItem(at: TTSStorage.root.appendingPathComponent(id + ".resume"))
-        do { if FileManager.default.fileExists(atPath: TTSStorage.directory(id).path) { try FileManager.default.removeItem(at: TTSStorage.directory(id)) } }
-        catch { errorMessage = error.localizedDescription }
+    func deleteMany(_ ids: [String]) async {
+        for id in ids { await delete(id, deferServer: true) }
+        do { try await flushDeletions() }
+        catch { errorMessage = "Removed from this phone. Server deletion is pending until you reconnect and sign in." }
+    }
+    func delete(_ id: String, deferServer: Bool = false) async {
+        guard TTSStorage.validID(id), let record = records.first(where: { $0.id == id }) else { return }
+        let scope = TTSAudioDeletion(bookId: record.rendition.bookId, chapterId: record.rendition.chapterId, voiceId: record.rendition.voiceId, backendURL: record.backendURL)
+        if record.rendition.bookId != "qwen-previews", !pendingDeletions.contains(scope) {
+            pendingDeletions.append(scope)
+            do { try JSONEncoder().encode(pendingDeletions).write(to: deletionURL, options: .atomic) }
+            catch { pendingDeletions.removeAll { $0 == scope }; errorMessage = "Could not save the deletion. Please try again."; return }
+        }
+        let removed = records.filter { $0.backendURL == scope.backendURL && $0.rendition.bookId == scope.bookId && $0.rendition.chapterId == scope.chapterId && $0.rendition.voiceId == scope.voiceId }
+        let ids = Set(removed.map(\.id)), transfers = Set(removed.compactMap(\.transferID))
+        if let playingID = ReaderTTSManager.shared.manifest?.id, ids.contains(playingID) { ReaderTTSManager.shared.stop() }
+        records.removeAll { ids.contains($0.id) }; save()
+        for id in ids {
+            try? FileManager.default.removeItem(at: TTSStorage.root.appendingPathComponent(id + ".resume"))
+            do { if FileManager.default.fileExists(atPath: TTSStorage.directory(id).path) { try FileManager.default.removeItem(at: TTSStorage.directory(id)) } }
+            catch { errorMessage = error.localizedDescription }
+        }
+        if !records.contains(where: { $0.rendition.bookId == scope.bookId && $0.rendition.chapterId == scope.chapterId }) { try? FileManager.default.removeItem(at: TTSStorage.chapterText(bookId: scope.bookId, chapterId: scope.chapterId)) }
+        if let position = ReaderTTSManager.shared.position(for: scope.bookId), ids.contains(position.renditionId) { UserDefaults.standard.removeObject(forKey: "tts.listeningPosition." + scope.bookId) }
         let tasks = await session.allTasks
-        tasks.filter { $0.taskDescription == oldTransfer && oldTransfer != nil || $0.taskDescription == id }.forEach { $0.cancel() }
+        tasks.filter { task in task.taskDescription.map { transfers.contains($0) || ids.contains($0) } ?? false }.forEach { $0.cancel() }
+        if !deferServer {
+            do { try await flushDeletions() }
+            catch { errorMessage = "Removed from this phone. Server deletion is pending until you reconnect and sign in." }
+        }
+    }
+    private func flushDeletions() async throws {
+        if let task = deletionTask { return try await task.value }
+        guard !pendingDeletions.isEmpty else { return }
+        let task = Task { @MainActor in
+            while let first = pendingDeletions.first {
+                let batch = Array(pendingDeletions.filter { $0.backendURL == first.backendURL }.prefix(100))
+                try await TTSAPIClient(backendURL: first.backendURL).deletePreparations(batch)
+                let remaining = pendingDeletions.filter { !batch.contains($0) }
+                try JSONEncoder().encode(remaining).write(to: deletionURL, options: .atomic)
+                pendingDeletions = remaining
+            }
+        }
+        deletionTask = task
+        do { try await task.value; deletionTask = nil }
+        catch { deletionTask = nil; throw error }
     }
     private func reconcileTransfers() async {
-        let active = Set(await session.allTasks.compactMap(\.taskDescription))
+        let tasks = await session.allTasks
+        let known = Set(records.compactMap(\.transferID))
+        tasks.filter { task in task.taskDescription.map { !known.contains($0) } ?? true }.forEach { $0.cancel() }
+        let active = Set(tasks.compactMap(\.taskDescription))
         for index in records.indices where records[index].state == "downloading" && !active.contains(records[index].transferID ?? records[index].id) { records[index].state = "waiting" }
         save()
     }

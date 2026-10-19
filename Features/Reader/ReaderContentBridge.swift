@@ -17,12 +17,14 @@ final class ReaderContentBridge: ObservableObject {
     private var activeWord: TTSWordTiming?
     private var activeIndex: Int?
     private var speechMode = false
+    private var controlsVisible = true
 
     func setWebView(_ webView: WKWebView) { self.webView = webView; isReady = false }
     func contentDidChange() { isReady = false }
     func contentDidFinishLoad() {
         isReady = true
         setSpeechMode(speechMode)
+        setControlsVisible(controlsVisible)
         if let activeWord { setActiveWord(activeWord) }
         else if let activeIndex { setActiveIndex(activeIndex) }
     }
@@ -42,6 +44,7 @@ final class ReaderContentBridge: ObservableObject {
         return (try? await webView.evaluateJavaScript("window.getTTSBlocks && window.getTTSBlocks()")) as? [String] ?? []
     }
     func setSpeechMode(_ active: Bool) { speechMode = active; evaluate("window.setTTSSpeechMode && window.setTTSSpeechMode(\(active ? "true" : "false"))") }
+    func setControlsVisible(_ visible: Bool) { controlsVisible = visible; evaluate("window.setTTSControlsVisible && window.setTTSControlsVisible(\(visible ? "true" : "false"))") }
     func setActiveWord(_ word: TTSWordTiming?) {
         activeWord = word
         guard isReady, let word, let data = try? JSONEncoder().encode(word), let json = String(data: data, encoding: .utf8) else { return }

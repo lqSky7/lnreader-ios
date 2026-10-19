@@ -2,19 +2,17 @@ import Foundation
 import SwiftUI
 
 struct TTSPlaybackControls: View {
-    let title: String
-    let chapterName: String
     let isPlaying: Bool
     let isBuffering: Bool
     let elapsed: Double
     let duration: Double
     let rate: Double
+    let voiceId: String
     let voiceName: String
     let isDownloaded: Bool
     let isFollowing: Bool
     let sleepTimerLabel: String
-    let onBack: () -> Void
-    let onMore: () -> Void
+    let onSettings: () -> Void
     let onPlayPause: () -> Void
     let onSkipBack: () -> Void
     let onSkipForward: () -> Void
@@ -22,7 +20,6 @@ struct TTSPlaybackControls: View {
     let onVoice: () -> Void
     let onDownload: () -> Void
     let onBookmark: () -> Void
-    let onChapters: () -> Void
     let onSleep: () -> Void
     let onFollow: () -> Void
     let onSeek: (Double) -> Void
@@ -32,8 +29,6 @@ struct TTSPlaybackControls: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            topBar
-
             if !isFollowing {
                 followBanner
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -44,38 +39,6 @@ struct TTSPlaybackControls: View {
             bottomControlsPanel
         }
         .animation(.easeInOut(duration: 0.25), value: isFollowing)
-    }
-
-    private var topBar: some View {
-        HStack(spacing: 12) {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Back")
-
-            Text(title)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity)
-
-            Button(action: onMore) {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("More options")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .glassEffect()
     }
 
     private var followBanner: some View {
@@ -96,41 +59,23 @@ struct TTSPlaybackControls: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Back to current reading position")
-        .padding(.top, 12)
+        .padding(.top, 72)
     }
 
     private var bottomControlsPanel: some View {
-        VStack(spacing: 14) {
-            chapterSelector
+        VStack(spacing: 8) {
             scrubberSection
             transportRow
             secondaryRow
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 20)
-        .glassEffect()
-    }
-
-    private var chapterSelector: some View {
-        Button(action: onChapters) {
-            HStack(spacing: 6) {
-                Text(chapterName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Chapter selection: \(chapterName)")
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: .rect(cornerRadius: 28))
+        .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.primary.opacity(0.08), lineWidth: 0.5))
+        .frame(maxWidth: 500)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
     }
 
     private var scrubberSection: some View {
@@ -234,7 +179,15 @@ struct TTSPlaybackControls: View {
     }
 
     private var secondaryRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
+            Button(action: onSettings) {
+                Image(systemName: "textformat.size")
+                    .font(.system(size: 18))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Reader settings")
+
             Button(action: onDownload) {
                 Image(systemName: isDownloaded ? "arrow.down.circle.fill" : "arrow.down.circle")
                     .font(.system(size: 18))
@@ -248,18 +201,9 @@ struct TTSPlaybackControls: View {
             Spacer()
 
             Button(action: onVoice) {
-                HStack(spacing: 6) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 14))
-                    Text(voiceName)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .padding(.horizontal, 12)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
+                TTSVoiceChip(voiceId: voiceId, name: voiceName)
+                    .frame(minHeight: 44)
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Voice: \(voiceName)")
@@ -334,3 +278,50 @@ struct TTSPlaybackControls: View {
     }
 }
 
+
+/// A voice keeps its color across chapters, offline playback, and app launches.
+struct TTSVoiceChip: View {
+    let voiceId: String
+    let name: String
+    private let colors: [Color]
+
+    init(voiceId: String, name: String) {
+        self.voiceId = voiceId
+        self.name = name
+        let presets = ["qwen-ryan", "qwen-aiden", "qwen-vivian", "qwen-serena", "qwen-uncle-fu", "qwen-dylan", "qwen-eric", "qwen-anna", "qwen-sohee"]
+        let defaults = UserDefaults.standard
+        let key = "tts.voice-gradient-hues"
+        var assigned = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
+        let hue: Double
+        if let preset = presets.firstIndex(of: voiceId) {
+            hue = Double(preset) / 12
+        } else if let saved = assigned[voiceId], saved.isFinite, (0..<1).contains(saved) {
+            hue = saved
+        } else {
+            let used = Array(assigned.values) + presets.indices.map { Double($0) / 12 }
+            func separation(_ candidate: Double) -> Double {
+                used.map { min(abs(candidate - $0), 1 - abs(candidate - $0)) }.min() ?? 1
+            }
+            // Pick a random unused color with room from existing voices. This
+            // continues to work beyond a small fixed palette of custom voices.
+            hue = (0..<64).map { _ in Double.random(in: 0..<1) }.max { separation($0) < separation($1) } ?? 0.75
+            assigned[voiceId] = hue
+            defaults.set(assigned, forKey: key)
+        }
+        colors = [Color(hue: hue, saturation: 0.72, brightness: 0.53), Color(hue: (hue + 0.10).truncatingRemainder(dividingBy: 1), saturation: 0.68, brightness: 0.64)]
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "waveform").font(.caption.weight(.semibold))
+            Text(name).font(.subheadline.weight(.semibold)).lineLimit(1)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .background(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.16), lineWidth: 0.5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Voice: \(name)")
+    }
+}

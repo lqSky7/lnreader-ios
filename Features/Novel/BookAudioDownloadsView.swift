@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class TTSVoicePreviewPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
@@ -27,6 +28,8 @@ struct QwenVoicePicker: View {
     @ObservedObject private var library = TTSOfflineLibrary.shared
     @ObservedObject private var preview = TTSVoicePreviewPlayer.shared
     @Binding var selected: Set<String>
+    @State private var showCreateVoice = false
+    @State private var deletingVoice: TTSVoice?
     var body: some View {
         ForEach(library.voices) { voice in
             HStack(spacing: 12) {
@@ -36,9 +39,10 @@ struct QwenVoicePicker: View {
                     HStack {
                         Image(systemName: selected.contains(voice.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(AppTheme.accent)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(voice.name).foregroundStyle(.primary)
+                            TTSVoiceChip(voiceId: voice.id, name: voice.name)
                             Text(voice.description).font(.caption).foregroundStyle(.secondary)
-                            Text("Native voice: \(voice.nativeLanguage) · English narration").font(.caption2).foregroundStyle(.secondary)
+                            Text(voice.isCustom ? "Your voice · English narration" : "Native voice: \(voice.nativeLanguage) · English narration").font(.caption2).foregroundStyle(.secondary)
+                            if voice.isCustom, let error = voice.preview?.error { Text(error).font(.caption2).foregroundStyle(.orange) }
                         }
                         Spacer()
                     }.frame(minHeight: 48)
@@ -50,11 +54,53 @@ struct QwenVoicePicker: View {
                     Image(systemName: "arrow.down.circle").foregroundStyle(.tertiary).frame(width: 44, height: 44).accessibilityLabel("Preview is being prepared")
                 }
             }
+            .contextMenu {
+                if voice.isCustom {
+                    Button("Delete voice", systemImage: "trash", role: .destructive) { deletingVoice = voice }
+                }
+            }
         }
+        Button { showCreateVoice = true } label: { Label("Add your own voice", systemImage: "waveform.badge.plus") }
+            .sheet(isPresented: $showCreateVoice) {
+                CustomVoiceCreationView { voice in selected = [voice.id] }
+            }
+            .confirmationDialog("Delete \(deletingVoice?.name ?? "voice")?", isPresented: Binding(get: { deletingVoice != nil }, set: { if !$0 { deletingVoice = nil } }), titleVisibility: .visible) {
+                Button("Delete voice", role: .destructive) {
+                    guard let voice = deletingVoice else { return }
+                    Task {
+                        do { try await library.deleteCustomVoice(voice); selected.remove(voice.id) }
+                        catch { library.errorMessage = error.localizedDescription }
+                    }
+                    deletingVoice = nil
+                }
+            } message: { Text("This removes the reference and cancels unfinished preparations in this voice. Downloaded book chapters stay on your phone.") }
         NavigationLink {
             VoiceReferencePassageView()
         } label: {
             Label("Voice recording passage", systemImage: "text.quote")
+        }
+    }
+}
+
+struct QwenComputePicker: View {
+    @AppStorage("tts.provider") private var provider = "kaggle"
+    @State private var providers: [TTSComputeProvider] = []
+    @State private var error: String?
+    var body: some View {
+        Picker("Prepare audio with", selection: $provider) {
+            Text("Kaggle").tag("kaggle")
+            Text(providers.first(where: { $0.id == "colab" })?.available == true ? "Google Colab" : "Google Colab · not connected").tag("colab")
+        }
+        .task {
+            while !Task.isCancelled {
+                do { providers = try await TTSAPIClient().providers(); error = nil }
+                catch { self.error = error.localizedDescription }
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            }
+        }
+        .onChange(of: provider) { _, _ in Task { await TTSOfflineLibrary.shared.refresh() } }
+        if provider == "colab", providers.first(where: { $0.id == "colab" })?.available != true {
+            Text(error ?? "Connect Colab on the server before preparing new audio. Downloaded chapters play with either selection.").font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -168,7 +214,7 @@ struct BookAudioDownloadsView: View {
                         if let engine = library.engineState, bookRecords.contains(where: { $0.state == "waiting" }) {
                             Label {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(engine.status == "queued" ? "Waiting for Kaggle" : engine.needsAttention ? "Preparation needs attention" : "Preparing audio").font(.subheadline.bold())
+                                    Text(engine.status == "queued" ? "Waiting for a GPU" : engine.needsAttention ? "Preparation needs attention" : engine.status == "starting" ? "Loading Qwen models" : "Preparing audio").font(.subheadline.bold())
                                     Text(["starting", "generating"].contains(engine.status) ? "Your audio is being prepared. Chapter progress updates as each part is ready." : engine.message).font(.caption).foregroundStyle(.secondary)
                                     if let retry = engine.retryAt, let date = ISO8601DateFormatter().date(from: retry) {
                                         Text("Next check: \(date.formatted(date: .omitted, time: .shortened))").font(.caption)
@@ -234,7 +280,7 @@ struct BookAudioDownloadsView: View {
             }
             .sheet(isPresented: $showVoices) {
                 NavigationStack {
-                    List { QwenVoicePicker(selected: $selectedVoices) }
+                    List { Section { QwenComputePicker() }; Section("Narrator") { QwenVoicePicker(selected: $selectedVoices) } }
                         .navigationTitle("Choose voices").navigationBarTitleDisplayMode(.inline)
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showVoices = false } } }
                 }
@@ -247,16 +293,20 @@ struct BookAudioDownloadsView: View {
                     selectedVoices = [library.selectedVoice(bookId: bookId, chapterId: initialChapter ?? chapters.first?.path ?? "")]
                     initialized = true
                 }
-                await library.refreshVoices(); await library.refresh()
+                await library.refreshVoices()
+                while !Task.isCancelled {
+                    await library.refresh()
+                    do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                }
             }
             .refreshable { await library.refreshVoices(); await library.refresh() }
-            .confirmationDialog("Delete this voice from this phone?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })) {
+            .confirmationDialog("Delete this chapter audio everywhere?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })) {
                 if let record = deleteTarget { Button("Delete \(voiceName(record))", role: .destructive) { Task { await library.delete(record.id) }; deleteTarget = nil } }
             } message: { Text("Other voices and chapter text remain available.") }
-            .confirmationDialog("Delete \(deleteIDs.count) voice downloads from this phone?", isPresented: Binding(get: { !deleteIDs.isEmpty }, set: { if !$0 { deleteIDs = [] } })) {
-                Button("Delete selected downloads", role: .destructive) {
+            .confirmationDialog("Delete \(deleteIDs.count) chapter voice downloads everywhere?", isPresented: Binding(get: { !deleteIDs.isEmpty }, set: { if !$0 { deleteIDs = [] } })) {
+                Button("Delete selected audio everywhere", role: .destructive) {
                     let ids = deleteIDs; deleteIDs = []
-                    Task { for id in ids { await library.delete(id) } }
+                    Task { await library.deleteMany(ids) }
                 }
             } message: { Text("Chapter text stays on this phone. You can prepare the voices again later.") }
         }.tint(AppTheme.accent)
@@ -333,10 +383,10 @@ struct BookAudioDownloadsView: View {
         }
     }
     @ViewBuilder private func audioRow(_ record: TTSDownloadRecord) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(voiceName(record)).font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    TTSVoiceChip(voiceId: record.rendition.voiceId, name: voiceName(record))
                     Text(status(record)).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -351,17 +401,29 @@ struct BookAudioDownloadsView: View {
                 } else if record.state == "failed" || record.state == "paused" {
                     Button("Retry") { Task { await library.retry(record.id) } }
                 } else { Button { library.pause(record.id) } label: { Image(systemName: "pause.fill").frame(width: 44, height: 44) } }
-                Button(role: .destructive) { deleteTarget = record } label: { Image(systemName: "trash").frame(width: 44, height: 44) }.accessibilityLabel("Delete \(voiceName(record)) from phone")
+                Button(role: .destructive) { deleteTarget = record } label: { Image(systemName: "trash").frame(width: 44, height: 44) }.accessibilityLabel("Delete \(voiceName(record)) from phone and server")
             }.buttonStyle(.borderless)
             if record.state == "waiting" || record.state == "downloading" { ProgressView(value: min(max(record.progress, 0), 1)) }
-            if let message = record.error { Text(message).font(.caption2).foregroundStyle(.secondary) }
+            if let message = record.error {
+                if record.state == "waiting" {
+                    Label("Retrying a part automatically…", systemImage: "arrow.clockwise")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .accessibilityHint(message)
+                } else {
+                    Label(message, systemImage: "exclamationmark.circle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            }
         }
     }
-    private func voiceName(_ record: TTSDownloadRecord) -> String { library.voices.first { $0.id == record.rendition.voiceId }?.name ?? record.rendition.voiceId }
+    private func voiceName(_ record: TTSDownloadRecord) -> String { library.voices.first { $0.id == record.rendition.voiceId }?.name ?? record.manifest?.voiceName ?? record.rendition.voiceId }
     private func status(_ record: TTSDownloadRecord) -> String {
         switch record.state {
         case "downloaded": return "Available offline · " + ByteCountFormatter.string(fromByteCount: record.bytesExpected, countStyle: .file)
-        case "waiting": return record.rendition.status == "ready" ? "Ready on server · waiting for transfer" : "\(record.rendition.status.capitalized) · \(record.rendition.completedChunks)/\(record.rendition.totalChunks) parts"
+        case "waiting":
+            if record.rendition.status == "ready" { return "Ready on server · waiting for transfer" }
+            let label = record.rendition.status == "loading" ? "Loading Qwen models" : record.rendition.status == "generating" ? "Generating speech" : record.rendition.status == "assembling" ? "Assembling audio" : record.rendition.status.capitalized
+            return "\(label) · \(record.rendition.completedChunks)/\(record.rendition.totalChunks) parts"
         case "downloading": return "Downloading to this phone"
         default: return record.state.capitalized
         }
@@ -441,5 +503,170 @@ struct AudioQuickActionCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+}
+
+@MainActor
+private final class VoiceSampleRecorder: NSObject, ObservableObject, AVAudioPlayerDelegate, AVAudioRecorderDelegate {
+    @Published var file: URL?
+    @Published var duration = 0.0
+    @Published var recording = false
+    @Published var requestingPermission = false
+    @Published var playing = false
+    @Published var error: String?
+    private var recorder: AVAudioRecorder?
+    private var player: AVAudioPlayer?
+    private var timer: Timer?
+    private var disposed = false
+    private let folder = FileManager.default.temporaryDirectory.appendingPathComponent("voice-draft-" + UUID().uuidString)
+
+    func record() async {
+        guard !disposed && !recording && !requestingPermission else { return }
+        requestingPermission = true
+        defer { requestingPermission = false }
+        guard await AVAudioApplication.requestRecordPermission() else {
+            error = "Allow microphone access in iPhone Settings to record a voice sample. You can also import an audio file."
+            return
+        }
+        guard !disposed else { return }
+        stopPlayback()
+        if ReaderTTSManager.shared.isSpeaking { ReaderTTSManager.shared.pause() }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let path = folder.appendingPathComponent(UUID().uuidString + ".m4a")
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            try session.setActive(true)
+            let next = try AVAudioRecorder(url: path, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 24000, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 64000])
+            next.delegate = self
+            guard next.record(forDuration: 60) else { throw TTSError.request("Could not start recording.") }
+            recorder = next; file = path; duration = 0; recording = true; error = nil
+            timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.duration = self?.recorder?.currentTime ?? self?.duration ?? 0 }
+            }
+        } catch { self.error = error.localizedDescription; stopRecording() }
+    }
+    func stopRecording() {
+        if let recorder, recorder.isRecording { duration = recorder.currentTime }
+        recorder?.stop(); recorder = nil; timer?.invalidate(); timer = nil; recording = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+    func importSample(_ url: URL) async {
+        stopRecording(); stopPlayback()
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size > 0, size <= 6_000_000 else { throw TTSError.request("Choose an audio file smaller than 6 MB.") }
+            let seconds = try await AVURLAsset(url: url).load(.duration).seconds
+            guard !disposed else { return }
+            guard seconds.isFinite, seconds >= 3, seconds <= 60 else { throw TTSError.request("Choose between 3 and 60 seconds of speech.") }
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let copy = folder.appendingPathComponent(UUID().uuidString).appendingPathExtension(url.pathExtension)
+            try FileManager.default.copyItem(at: url, to: copy)
+            file = copy; duration = seconds; error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+    func togglePlayback() {
+        if playing { stopPlayback(); return }
+        guard let file else { return }
+        do {
+            if ReaderTTSManager.shared.isSpeaking { ReaderTTSManager.shared.pause() }
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+            try AVAudioSession.sharedInstance().setActive(true)
+            player = try AVAudioPlayer(contentsOf: file); player?.delegate = self
+            playing = player?.play() == true
+        } catch { self.error = error.localizedDescription }
+    }
+    func stopPlayback() { player?.stop(); player = nil; playing = false }
+    func cleanUp() { disposed = true; stopRecording(); stopPlayback(); try? FileManager.default.removeItem(at: folder) }
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) { Task { @MainActor [weak self] in self?.stopPlayback() } }
+    nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+        Task { @MainActor [weak self] in
+            guard let self, self.recording, self.recorder === recorder else { return }
+            self.stopRecording()
+            if flag, let file = self.file { self.duration = (try? await AVURLAsset(url: file).load(.duration).seconds) ?? self.duration }
+            else if !flag { self.error = "Recording was interrupted. Record a new sample."; self.file = nil }
+        }
+    }
+}
+
+private struct CustomVoiceCreationView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var sample = VoiceSampleRecorder()
+    @State private var name = ""
+    @State private var transcript = ""
+    @State private var importing = false
+    @State private var saving = false
+    @State private var error: String?
+    let onCreated: (TTSVoice) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section { QwenComputePicker() }
+                Section {
+                    TextField("Voice name", text: $name).textInputAutocapitalization(.words)
+                }
+                Section {
+                    HStack {
+                        Button {
+                            if sample.recording { sample.stopRecording() } else { Task { await sample.record() } }
+                        } label: { Label(sample.recording ? "Stop recording" : "Record sample", systemImage: sample.recording ? "stop.circle.fill" : "mic.fill") }
+                        .buttonStyle(.borderless)
+                        .disabled(sample.requestingPermission)
+                        Spacer()
+                        Text("\(Int(sample.duration))s / 60s").monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    Button { importing = true } label: { Label("Import audio", systemImage: "square.and.arrow.down") }.disabled(sample.recording)
+                    if sample.file != nil && !sample.recording {
+                        Button { sample.togglePlayback() } label: { Label(sample.playing ? "Stop sample" : "Listen to sample", systemImage: sample.playing ? "stop.fill" : "play.fill") }
+                    }
+                } header: { Text("Voice sample") } footer: {
+                    Text("Record 3–60 seconds of clear speech without music or other speakers. Speak naturally with a mostly neutral tone. Longer recordings do not guarantee a better clone.")
+                }
+                Section {
+                    NavigationLink { VoiceReferencePassageView() } label: { Label("Read or copy the sample passage", systemImage: "text.quote") }
+                    Button("I read the full passage exactly") { transcript = VoiceReferencePassageView.passage }
+                        .disabled(sample.recording || sample.file == nil)
+                }
+                Section {
+                    TextEditor(text: $transcript).frame(minHeight: 100).accessibilityLabel("Recording transcript, optional")
+                } header: { Text("Transcript · optional") } footer: {
+                    Text("Enter exactly what was spoken. Leave blank to transcribe the sample automatically during preparation.")
+                }
+                if let message = error ?? sample.error { Section { Text(message).foregroundStyle(.red).textSelection(.enabled) } }
+                Section {
+                    Button {
+                        guard let file = sample.file else { return }
+                        sample.stopPlayback(); saving = true; error = nil
+                        Task {
+                            do {
+                                let voice = try await TTSOfflineLibrary.shared.addCustomVoice(name: name.trimmingCharacters(in: .whitespacesAndNewlines), sample: file, transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines))
+                                onCreated(voice); dismiss()
+                            } catch { self.error = error.localizedDescription }
+                            saving = false
+                        }
+                    } label: {
+                        HStack { if saving { ProgressView() }; Text(saving ? "Saving voice…" : "Add voice and prepare preview") }
+                    }
+                    .disabled(saving || sample.recording || sample.file == nil || sample.duration < 3 || sample.duration > 60 || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.count > 60 || transcript.count > 6000)
+                } footer: { Text("Your sample stays on this phone. Chapter audio and the voice preview are prepared remotely, then downloaded for offline listening.") }
+            }
+            .disabled(saving)
+            .navigationTitle("Your voice")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) } }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.audio]) { result in
+                switch result {
+                case .success(let url): Task { await sample.importSample(url) }
+                case .failure(let error): self.error = error.localizedDescription
+                }
+            }
+            .onChange(of: sample.file) { _, _ in transcript = "" }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in if sample.recording { sample.stopRecording() } }
+        }
+        .interactiveDismissDisabled(saving || sample.recording || sample.requestingPermission)
+        .onDisappear { sample.cleanUp() }
     }
 }

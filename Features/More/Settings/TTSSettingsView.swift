@@ -8,11 +8,11 @@ struct TTSSettingsView: View {
     @State private var showStorage = false
     var body: some View {
         Form {
-            Section { Toggle("Enable narration", isOn: $enabled) }
+            Section { Toggle("Enable narration", isOn: $enabled); QwenComputePicker() }
             Section {
                 QwenVoicePicker(selected: $selected)
             } header: { Text("Default narrator") }
-              footer: { Text("Qwen narration is prepared on Kaggle. Download chapters and voices ahead of time to listen offline. Native language describes the voice's original accent.") }
+              footer: { Text("Qwen narration is prepared with your selected provider. Download chapters and voices ahead of time to listen offline. Native language describes the voice's original accent.") }
             Section {
                 if let engine = library.engineState, engine.needsAttention {
                     Label(engine.message, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.secondary)
@@ -24,7 +24,7 @@ struct TTSSettingsView: View {
                                 VStack(alignment: .leading) {
                                     Text(record.rendition.bookTitle).font(.headline)
                                     Text(record.rendition.title).font(.caption)
-                                    Text("\(library.voices.first { $0.id == record.rendition.voiceId }?.name ?? record.rendition.voiceId) · \(record.isAvailable ? "Available offline" : record.state)").font(.caption).foregroundStyle(.secondary)
+                                    Text("\(library.voices.first { $0.id == record.rendition.voiceId }?.name ?? record.manifest?.voiceName ?? record.rendition.voiceId) · \(record.isAvailable ? "Available offline" : record.state)").font(.caption).foregroundStyle(.secondary)
                                 }
                                 if let message = record.error { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange).accessibilityLabel(message) }
                                 Spacer()
@@ -33,7 +33,7 @@ struct TTSSettingsView: View {
                         }
                     }.navigationTitle("Audio storage")
                 }
-                Text("Downloaded voices stay until you delete them. Voice previews are saved on this phone too.").font(.caption).foregroundStyle(.secondary)
+                Text("Audio stays until you delete it. Deleting chapter audio also clears its server preparation and cache. Offline deletions sync when you reconnect.").font(.caption).foregroundStyle(.secondary)
                 Button("Refresh voices and download previews") { Task { await library.refreshVoices() } }
                 if let error = library.errorMessage { Text(error).font(.caption).foregroundStyle(.secondary) }
             }
