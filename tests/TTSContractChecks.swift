@@ -28,7 +28,7 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
                 precondition(manifest.time(paragraph: 0, offset: 16) == 1.2, "Number expansion must seek to its first spoken word")
                 precondition(manifest.word(at: 0.7)?.sourceStart == 9, "Use the media clock with UTF-16 offsets after emoji")
                 precondition(manifest.word(at: 1.7)?.sourceStart == 15)
-                precondition(manifest.word(at: 0.45) == nil, "Silence between words must clear highlighting")
+                precondition(manifest.word(at: 0.46)?.sourceStart == 9, "Short recognition gaps predict the next word from known timestamps")
                 precondition(manifest.word(at: 2.5) == nil, "The last word must not stick through chapter trailing silence")
                 precondition(manifest.word(at: -1) == nil && manifest.word(at: .nan) == nil)
                 var corrupt = data
@@ -74,12 +74,14 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         _ = try await webView.evaluateJavaScript("window.setTTSActiveWord({paragraphIndex:0,sourceStart:10,sourceEnd:14,start:1,end:1.4});")
         let movedWord = try await webView.evaluateJavaScript("CSS.highlights.get('tts-word').values().next().value.toString()") as? String
         precondition(movedWord == "book", "Advancing narration must replace the previous word highlight")
+        let marker = try await webView.evaluateJavaScript("({visible:document.getElementById('tts-word-marker').style.opacity,width:parseFloat(document.getElementById('tts-word-marker').style.width)})") as! [String: Any]
+        precondition(marker["visible"] as? String == "1" && (marker["width"] as? Double ?? 0) > 0)
         print("PASS: exactly one spoken-word highlight, media-clock updates, and no paragraph background in real WKWebView")
         let bridge = ReaderContentBridge()
         bridge.setWebView(webView); bridge.contentDidFinishLoad(); bridge.setSpeechMode(true)
         bridge.setActiveWord(.init(paragraphIndex: 0, sourceStart: 5, sourceEnd: 9, start: 0.5, end: 0.9))
         bridge.setActiveWord(nil); bridge.resumeFollowing(); bridge.setControlsVisible(true)
-        let cleared = try await webView.evaluateJavaScript("!CSS.highlights.has('tts-word') && window.__ttsWord === null && !document.querySelector('.tts-active')") as? Bool
+        let cleared = try await webView.evaluateJavaScript("!CSS.highlights.has('tts-word') && window.__ttsWord === null && !document.querySelector('.tts-active') && document.getElementById('tts-word-marker').style.opacity === '0'") as? Bool
         precondition(cleared == true, "Clearing a timed gap must remove native and JS saved highlights; follow/focus cannot restore it")
         bridge.setActiveWord(.init(paragraphIndex: 0, sourceStart: 5, sourceEnd: 9, start: 0.5, end: 0.9))
         bridge.setActiveWord(.init(paragraphIndex: 99, sourceStart: 0, sourceEnd: 4, start: 1, end: 2))
@@ -102,7 +104,7 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         precondition(messages.filter { $0 == "toggleControls" }.count == 1, "Double tap seeking must not toggle focus")
         precondition(messages.filter { $0 == "ttsWordTap" }.count == 1, "Double tap must still seek the tapped word")
         _ = try await webView.evaluateJavaScript("window.ttsSetFollowing(false); window.setTTSControlsVisible(true);")
-        let restored = try await webView.evaluateJavaScript("window.__ttsControlsVisible && !window.__ttsFollowing && document.body.style.getPropertyValue('--tts-bottom') === '260px'") as? Bool
+        let restored = try await webView.evaluateJavaScript("window.__ttsControlsVisible && !window.__ttsFollowing && document.body.style.getPropertyValue('--tts-bottom') === '190px'") as? Bool
         precondition(restored == true, "Showing controls must preserve a manually detached reading position")
         print("PASS: listening focus toggle, control insets, double-tap word seek, and detached follow state in real WKWebView")
     }

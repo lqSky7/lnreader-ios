@@ -662,7 +662,7 @@ extension ReaderContent {
             em { font-style: italic; }
             strong { font-weight: bold; }
             \(ReaderTTSJavaScript.highlightStyle)
-            body.tts-speech-mode { padding-top: var(--tts-top, 120px) !important; padding-bottom: var(--tts-bottom, 260px) !important; }
+            body.tts-speech-mode { padding-top: var(--tts-top, 120px) !important; padding-bottom: var(--tts-bottom, 190px) !important; }
             body.tts-speech-mode #line-focus-ruler { display: none !important; }
             #tts-dot {
                 position: absolute;

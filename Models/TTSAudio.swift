@@ -75,7 +75,13 @@ extension TTSPlaybackManifest {
         }
         guard low > 0 else { return nil }
         let word = words[low - 1]
-        return time < word.end ? word : nil
+        if time < word.end { return word }
+        // Bridge short recognition gaps using the next known timestamp. Long
+        // paragraph pauses and the end of the chapter still clear immediately.
+        guard low < words.count else { return nil }
+        let next = words[low]
+        guard next.paragraphIndex == word.paragraphIndex, next.start - word.end <= 0.8 else { return nil }
+        return time < (word.end + next.start) / 2 ? word : next
     }
 
     func time(paragraph: Int, offset: Int) -> Double? {

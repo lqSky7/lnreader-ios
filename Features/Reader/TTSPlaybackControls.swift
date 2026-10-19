@@ -63,24 +63,27 @@ struct TTSPlaybackControls: View {
     }
 
     private var bottomControlsPanel: some View {
-        VStack(spacing: 8) {
-            if let playbackStatus { Text(playbackStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth: .infinity) }
+        VStack(spacing: 2) {
             scrubberSection
             transportRow
             secondaryRow
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(.regularMaterial, in: .rect(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.primary.opacity(0.08), lineWidth: 0.5))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(alignment: .bottom) {
+            LinearGradient(colors: TTSVoicePalette.colors(for: voiceId).map { $0.opacity(0.30) } + [.clear], startPoint: .bottomLeading, endPoint: .topTrailing)
+                .mask(LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom))
+                .clipShape(.rect(cornerRadius: 26))
+        }
+        .glassEffect(.clear, in: .rect(cornerRadius: 26))
         .frame(maxWidth: 500)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 2)
         .frame(maxWidth: .infinity)
     }
 
     private var scrubberSection: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 0) {
             Slider(
                 value: scrubberBinding,
                 in: 0...safeRangeUpper,
@@ -96,7 +99,9 @@ struct TTSPlaybackControls: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
 
-                Spacer()
+                Spacer(minLength: 8)
+                if let playbackStatus { Text(playbackStatus).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1) }
+                Spacer(minLength: 8)
 
                 Text("-" + formatTime(max(0, safeDuration - displayedTime)))
                     .font(.caption2.monospacedDigit())
@@ -126,7 +131,7 @@ struct TTSPlaybackControls: View {
 
             Button(action: onSkipBack) {
                 Image(systemName: "gobackward.15")
-                    .font(.system(size: 22))
+                    .font(.system(size: 20))
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
@@ -138,7 +143,7 @@ struct TTSPlaybackControls: View {
                 ZStack {
                     Circle()
                         .fill(AppTheme.accent)
-                        .frame(width: 54, height: 54)
+                        .frame(width: 44, height: 44)
 
                     if isBuffering {
                         ProgressView()
@@ -146,7 +151,7 @@ struct TTSPlaybackControls: View {
                             .tint(.white)
                     } else {
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(.system(size: 19, weight: .bold))
                             .foregroundStyle(.white)
                             .offset(x: isPlaying ? 0 : 2)
                     }
@@ -159,7 +164,7 @@ struct TTSPlaybackControls: View {
 
             Button(action: onSkipForward) {
                 Image(systemName: "goforward.30")
-                    .font(.system(size: 22))
+                    .font(.system(size: 20))
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
@@ -280,27 +285,7 @@ struct TTSVoiceChip: View {
     init(voiceId: String, name: String) {
         self.voiceId = voiceId
         self.name = name
-        let presets = ["qwen-ryan", "qwen-aiden", "qwen-vivian", "qwen-serena", "qwen-uncle-fu", "qwen-dylan", "qwen-eric", "qwen-anna", "qwen-sohee"]
-        let defaults = UserDefaults.standard
-        let key = "tts.voice-gradient-hues"
-        var assigned = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
-        let hue: Double
-        if let preset = presets.firstIndex(of: voiceId) {
-            hue = Double(preset) / 12
-        } else if let saved = assigned[voiceId], saved.isFinite, (0..<1).contains(saved) {
-            hue = saved
-        } else {
-            let used = Array(assigned.values) + presets.indices.map { Double($0) / 12 }
-            func separation(_ candidate: Double) -> Double {
-                used.map { min(abs(candidate - $0), 1 - abs(candidate - $0)) }.min() ?? 1
-            }
-            // Pick a random unused color with room from existing voices. This
-            // continues to work beyond a small fixed palette of custom voices.
-            hue = (0..<64).map { _ in Double.random(in: 0..<1) }.max { separation($0) < separation($1) } ?? 0.75
-            assigned[voiceId] = hue
-            defaults.set(assigned, forKey: key)
-        }
-        colors = [Color(hue: hue, saturation: 0.72, brightness: 0.53), Color(hue: (hue + 0.10).truncatingRemainder(dividingBy: 1), saturation: 0.68, brightness: 0.64)]
+        colors = TTSVoicePalette.colors(for: voiceId)
     }
 
     var body: some View {
@@ -315,5 +300,24 @@ struct TTSVoiceChip: View {
         .overlay(Capsule().strokeBorder(.white.opacity(0.16), lineWidth: 0.5))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Voice: \(name)")
+    }
+}
+
+/// Base hue plus its two split-complementary accents; stable after random assignment.
+enum TTSVoicePalette {
+    static func colors(for voiceId: String) -> [Color] {
+        let defaults = UserDefaults.standard, key = "tts.voice-palette.v2"
+        var assigned = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
+        let hue: Double
+        if let saved = assigned[voiceId], saved.isFinite, (0..<1).contains(saved) { hue = saved }
+        else {
+            let candidates = (0..<32).map { _ in Double.random(in: 0..<1) }
+            func distance(_ h: Double) -> Double { assigned.values.map { min(abs(h - $0), 1 - abs(h - $0)) }.min() ?? 1 }
+            hue = candidates.max { distance($0) < distance($1) } ?? 0.94
+            assigned[voiceId] = hue; defaults.set(assigned, forKey: key)
+        }
+        return [Color(hue: hue, saturation: 0.65, brightness: 0.56),
+                Color(hue: (hue + 0.42).truncatingRemainder(dividingBy: 1), saturation: 0.58, brightness: 0.48),
+                Color(hue: (hue + 0.58).truncatingRemainder(dividingBy: 1), saturation: 0.62, brightness: 0.60)]
     }
 }

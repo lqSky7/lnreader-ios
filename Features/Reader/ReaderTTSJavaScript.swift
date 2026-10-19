@@ -4,7 +4,9 @@ enum ReaderTTSJavaScript {
     // The paragraph class is an anchor for following, never a visual highlight.
     static let highlightStyle = """
     .tts-active { background: transparent; box-shadow: none; }
-    ::highlight(tts-word) { background-color: rgba(250,45,72,0.48); color: inherit; }
+    ::highlight(tts-word) { background-color: transparent; color: inherit; }
+    #tts-word-marker { position: absolute; top: 0; left: 0; pointer-events: none; border-radius: 5px; background: rgba(250,45,72,0.26); opacity: 0; z-index: 1; transition: transform 180ms cubic-bezier(.22,1.25,.36,1), width 180ms ease-out, height 180ms ease-out; will-change: transform; }
+    @media (prefers-reduced-motion: reduce) { #tts-word-marker { transition: none !important; } }
     """
 
     static let mapping = #"""
@@ -79,6 +81,8 @@ enum ReaderTTSJavaScript {
     window.clearTTSActive = function() {
         window.__ttsWord = null;
         if (window.CSS && CSS.highlights) CSS.highlights.delete('tts-word');
+        var marker = document.getElementById('tts-word-marker');
+        if (marker) { marker.style.opacity = 0; marker.getAnimations().forEach(function(animation) { animation.cancel(); }); }
         document.querySelectorAll('.tts-active').forEach(function(node) { node.classList.remove('tts-active'); });
         var dot = document.getElementById('tts-dot');
         if (dot) dot.style.opacity = 0;
@@ -91,7 +95,7 @@ enum ReaderTTSJavaScript {
     window.setTTSControlsVisible = function(value) {
         window.__ttsControlsVisible = value;
         document.body.style.setProperty('--tts-top', value ? '120px' : '24px');
-        document.body.style.setProperty('--tts-bottom', value ? '260px' : '32px');
+        document.body.style.setProperty('--tts-bottom', value ? '190px' : '32px');
         if (window.__ttsSpeechMode && window.__ttsWord) window.setTTSActiveWord(window.__ttsWord);
     };
     window.ttsRange = function(word) {
@@ -114,8 +118,21 @@ enum ReaderTTSJavaScript {
         mapped.target.classList.add('tts-active');
         if (window.CSS && CSS.highlights && window.Highlight) CSS.highlights.set('tts-word', new Highlight(mapped.range));
         var rect = mapped.range.getBoundingClientRect();
+        var marker = document.getElementById('tts-word-marker');
+        if (!marker) { marker = document.createElement('span'); marker.id = 'tts-word-marker'; marker.setAttribute('aria-hidden', 'true'); document.body.appendChild(marker); }
+        var body = document.body.getBoundingClientRect();
+        var previous = marker.getBoundingClientRect();
+        var jump = marker.style.opacity !== '1' || Math.abs(previous.top - rect.top) > rect.height * 1.5 || Math.abs(previous.left - rect.left) > 200;
+        marker.style.transitionProperty = jump ? 'none' : '';
+        marker.style.width = (rect.width + 4) + 'px'; marker.style.height = rect.height + 'px';
+        marker.style.transform = 'translate(' + (rect.left - body.left - 2) + 'px,' + (rect.top - body.top) + 'px)';
+        marker.style.opacity = 1;
+        if (jump && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            marker.getAnimations().forEach(function(animation) { animation.cancel(); });
+            marker.animate([{opacity: 0.25, scale: '0.96'}, {opacity: 1, scale: '1'}], {duration: 170, easing: 'cubic-bezier(.22,1.25,.36,1)'});
+        }
         var topInset = window.__ttsControlsVisible ? 120 : 32;
-        var bottomInset = window.__ttsSpeechMode ? (window.__ttsControlsVisible ? 260 : 32) : 120;
+        var bottomInset = window.__ttsSpeechMode ? (window.__ttsControlsVisible ? 190 : 32) : 120;
         if (window.__ttsFollowing && (rect.top < topInset || rect.bottom > window.innerHeight - bottomInset)) {
             var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             window.scrollBy({top: rect.top - Math.max(topInset, (window.innerHeight - bottomInset) * 0.42), behavior: reduceMotion ? 'instant' : 'smooth'});
