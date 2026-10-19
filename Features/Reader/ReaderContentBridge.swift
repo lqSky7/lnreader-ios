@@ -43,11 +43,13 @@ final class ReaderContentBridge: ObservableObject {
         guard isReady, let webView else { return [] }
         return (try? await webView.evaluateJavaScript("window.getTTSBlocks && window.getTTSBlocks()")) as? [String] ?? []
     }
-    func setSpeechMode(_ active: Bool) { speechMode = active; evaluate("window.setTTSSpeechMode && window.setTTSSpeechMode(\(active ? "true" : "false"))") }
+    func setSpeechMode(_ active: Bool) { speechMode = active; if !active { activeWord = nil; activeIndex = nil }; evaluate("window.setTTSSpeechMode && window.setTTSSpeechMode(\(active ? "true" : "false"))") }
     func setControlsVisible(_ visible: Bool) { controlsVisible = visible; evaluate("window.setTTSControlsVisible && window.setTTSControlsVisible(\(visible ? "true" : "false"))") }
     func setActiveWord(_ word: TTSWordTiming?) {
+        guard speechMode else { clearActive(); return }
         activeWord = word
-        guard isReady, let word, let data = try? JSONEncoder().encode(word), let json = String(data: data, encoding: .utf8) else { return }
+        guard let word else { clearActive(); return }
+        guard isReady, let data = try? JSONEncoder().encode(word), let json = String(data: data, encoding: .utf8) else { return }
         evaluate("window.setTTSActiveWord && window.setTTSActiveWord(\(json))")
     }
     func resumeFollowing() {

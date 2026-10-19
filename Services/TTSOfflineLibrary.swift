@@ -48,6 +48,37 @@ enum TTSStorage {
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
         #endif
     }
+    static func streamManifest(_ id: String) -> URL { directory(id).appendingPathComponent("stream.json") }
+    static func streamPart(_ id: String, _ part: TTSStreamPart) -> URL {
+        directory(id).appendingPathComponent("parts").appendingPathComponent(part.sha256 + "." + part.format)
+    }
+    static func cacheStream(_ manifest: TTSStreamingManifest) throws {
+        var local = manifest
+        for i in local.parts.indices { local.parts[i].audioURL = nil }
+        try FileManager.default.createDirectory(at: directory(manifest.id), withIntermediateDirectories: true)
+        try JSONEncoder().encode(local).write(to: streamManifest(manifest.id), options: .atomic)
+    }
+    static func loadStreamPart(_ id: String, part: TTSStreamPart, client: TTSAPIClient) async throws -> URL {
+        let target = streamPart(id, part)
+        if FileManager.default.fileExists(atPath: target.path) { return target }
+        guard let path = part.audioURL else { throw TTSError.request("Connect to load the next audio part.") }
+        let (temporary, response) = try await URLSession.shared.download(for: URLRequest(url: try client.url(path)))
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw TTSError.request("This audio part is not available. Reconnecting…") }
+        let valid = try await Task.detached(priority: .utility) {
+            let data = try Data(contentsOf: temporary)
+            return data.count == part.bytes && SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() == part.sha256
+        }.value
+        guard valid else { throw TTSError.corruptDownload }
+        try Task.checkCancellation()
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: target.path) { try FileManager.default.moveItem(at: temporary, to: target) }
+        #if os(iOS)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: target.path)
+        #endif
+        return target
+    }
+
 }
 
 private final class TTSInstallEvents: @unchecked Sendable {

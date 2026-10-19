@@ -90,6 +90,13 @@ struct TTSAPIClient: Sendable {
               result.contentRevision == rendition.contentRevision else { throw TTSError.invalidManifest }
         return result
     }
+    func stream(_ rendition: TTSRendition) async throws -> TTSStreamingManifest {
+        let result: TTSStreamingManifest = try await request("/api/tts/renditions/\(rendition.id)/stream")
+        try result.validate()
+        guard result.id == rendition.id, result.voiceId == rendition.voiceId,
+              result.contentRevision == rendition.contentRevision else { throw TTSError.invalidManifest }
+        return result
+    }
     func action(_ action: String, renditionId: String) async throws {
         struct Response: Decodable { let ok: Bool }
         let body = action == "retry" ? try JSONSerialization.data(withJSONObject: ["provider": selectedProvider]) : Data("{}".utf8)

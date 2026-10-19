@@ -8,7 +8,22 @@ struct TTSWordTiming: Codable, Equatable, Sendable {
     let end: Double
 }
 
-struct TTSManifest: Codable, Identifiable, Sendable {
+protocol TTSPlaybackManifest: Sendable {
+    var id: String { get }
+    var bookId: String { get }
+    var chapterId: String { get }
+    var bookTitle: String { get }
+    var title: String { get }
+    var position: Int { get }
+    var contentRevision: String { get }
+    var voiceId: String { get }
+    var voiceName: String { get }
+    var blocks: [String] { get }
+    var words: [TTSWordTiming] { get }
+    var duration: Double { get }
+}
+
+struct TTSManifest: Codable, Identifiable, TTSPlaybackManifest {
     let schema: Int
     let id: String
     let bookId: String
@@ -48,14 +63,19 @@ struct TTSManifest: Codable, Identifiable, Sendable {
         }
     }
 
+}
+
+extension TTSPlaybackManifest {
     func word(at time: Double) -> TTSWordTiming? {
-        guard !words.isEmpty else { return nil }
+        guard time.isFinite, !words.isEmpty else { return nil }
         var low = 0, high = words.count
         while low < high {
             let middle = (low + high) / 2
             if words[middle].start <= time { low = middle + 1 } else { high = middle }
         }
-        return words[max(0, low - 1)]
+        guard low > 0 else { return nil }
+        let word = words[low - 1]
+        return time < word.end ? word : nil
     }
 
     func time(paragraph: Int, offset: Int) -> Double? {
@@ -188,4 +208,60 @@ struct TTSEngineState: Decodable, Sendable {
     let updatedAt: String
     let retryAt: String?
     var needsAttention: Bool { ["paused", "unavailable", "retrying"].contains(status) }
+}
+
+struct TTSStreamPart: Codable, Sendable {
+    let index: Int
+    let start: Double
+    let audioDuration: Double
+    let pauseAfter: Double
+    let bytes: Int64
+    let sha256: String
+    var audioURL: String?
+    let format: String
+    var end: Double { start + audioDuration + pauseAfter }
+}
+
+struct TTSStreamingManifest: Codable, TTSPlaybackManifest {
+    let schema: Int
+    let id: String
+    let bookId: String
+    let chapterId: String
+    let bookTitle: String
+    let title: String
+    let position: Int
+    let contentRevision: String
+    let voiceId: String
+    let voiceName: String
+    let blocks: [String]
+    let words: [TTSWordTiming]
+    let duration: Double
+    var parts: [TTSStreamPart]
+    let totalChunks: Int
+    let completedChunks: Int
+    let complete: Bool
+    let status: String
+    let error: String?
+
+    func validate() throws {
+        guard schema == 1, id.count == 64, id.allSatisfy(\.isHexDigit), !blocks.isEmpty,
+              duration.isFinite, duration >= 0, totalChunks > 0, completedChunks <= totalChunks else { throw TTSError.invalidManifest }
+        var end = 0.0
+        for (index, part) in parts.enumerated() {
+            guard part.index == index, part.start.isFinite, abs(part.start - end) < 0.01,
+                  part.audioDuration.isFinite, part.audioDuration > 0,
+                  part.pauseAfter.isFinite, (0...2).contains(part.pauseAfter), part.bytes > 0,
+                  ["flac", "m4a"].contains(part.format), part.sha256.count == 64, part.sha256.allSatisfy(\.isHexDigit) else { throw TTSError.invalidManifest }
+            end = part.end
+        }
+        guard abs(end - duration) < 0.01 else { throw TTSError.invalidManifest }
+        var previous = 0.0
+        for word in words {
+            guard blocks.indices.contains(word.paragraphIndex), word.sourceStart >= 0,
+                  word.sourceEnd > word.sourceStart, word.sourceEnd <= blocks[word.paragraphIndex].utf16.count,
+                  word.start.isFinite, word.end.isFinite, word.start >= previous, word.end > word.start,
+                  word.end <= duration + 0.05 else { throw TTSError.invalidManifest }
+            previous = word.start
+        }
+    }
 }

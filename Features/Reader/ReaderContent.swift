@@ -1219,18 +1219,6 @@ extension ReaderContent {
             }
         };
 
-        window.clearTTSActive = function() {
-            if (window.CSS && CSS.highlights) CSS.highlights.delete("tts-word");
-            var active = document.querySelector(".tts-active");
-            if (active) {
-                active.classList.remove("tts-active");
-            }
-            var dot = document.getElementById("tts-dot");
-            if (dot) {
-                dot.style.opacity = 0;
-            }
-        };
-
         window.addEventListener("scroll", function() {
             if (window.__scrollTimeout) {
                 clearTimeout(window.__scrollTimeout);

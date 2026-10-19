@@ -11,6 +11,7 @@ struct TTSPlaybackControls: View {
     let voiceName: String
     let isFollowing: Bool
     let sleepTimerLabel: String
+    let playbackStatus: String?
     let onSettings: () -> Void
     let onPlayPause: () -> Void
     let onSkipBack: () -> Void
@@ -21,6 +22,7 @@ struct TTSPlaybackControls: View {
     let onSleep: () -> Void
     let onFollow: () -> Void
     let onSeek: (Double) -> Void
+    let onScrub: (Double?) -> Void
 
     @State private var scrubValue: Double = 0.0
     @State private var isScrubbing: Bool = false
@@ -62,6 +64,7 @@ struct TTSPlaybackControls: View {
 
     private var bottomControlsPanel: some View {
         VStack(spacing: 8) {
+            if let playbackStatus { Text(playbackStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth: .infinity) }
             scrubberSection
             transportRow
             secondaryRow
@@ -230,7 +233,7 @@ struct TTSPlaybackControls: View {
     private var scrubberBinding: Binding<Double> {
         Binding(
             get: { displayedTime },
-            set: { scrubValue = $0 }
+            set: { scrubValue = $0; if isScrubbing { onScrub($0) } }
         )
     }
 
@@ -238,10 +241,12 @@ struct TTSPlaybackControls: View {
         if isEditing {
             isScrubbing = true
             scrubValue = clampedElapsed
+            onScrub(scrubValue)
         } else {
             isScrubbing = false
             let clampedTarget = min(max(scrubValue, 0), safeDuration)
             onSeek(clampedTarget)
+            onScrub(nil)
         }
     }
 

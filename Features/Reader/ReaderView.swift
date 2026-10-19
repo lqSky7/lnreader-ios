@@ -18,6 +18,7 @@ struct ReaderView: View {
     @State private var showVoicePicker = false
     @State private var showSleepPicker = false
     @State private var showSpeedPicker = false
+    @State private var speechScrubTime: Double?
 
     @State private var currentChapterPath: String
     @State private var currentChapterName: String
@@ -239,7 +240,7 @@ struct ReaderView: View {
         .onChange(of: ttsBridge.isReady) { _, ready in
             if ready {
                 ttsBridge.setSpeechMode(isCurrentSpeech)
-                if isCurrentSpeech { ttsBridge.setActiveWord(ttsManager.currentWord) }
+                if isCurrentSpeech { ttsBridge.setActiveWord(displayedSpeechWord) }
                 if !isCurrentSpeech, let lastIndex = currentChapter?.lastReadParagraphIndex, lastIndex > 0 {
                     ttsBridge.scrollToParagraph(lastIndex)
                 }
@@ -252,7 +253,7 @@ struct ReaderView: View {
         .onChange(of: ttsManager.currentBlockIndex) { _, newIndex in
             guard isCurrentSpeech else { return }
             if let newIndex = newIndex {
-                if let word = ttsManager.currentWord { ttsBridge.setActiveWord(word) }
+                if speechScrubTime == nil { ttsBridge.setActiveWord(ttsManager.currentWord) }
                 
                 // Save reading progress to database
                 if let chapter = currentChapter {
@@ -271,7 +272,9 @@ struct ReaderView: View {
             ttsBridge.setSpeechMode(isSpeaking)
             if isSpeaking {
                 isPreparingTTS = false
+                ttsBridge.setActiveWord(displayedSpeechWord)
             } else {
+                speechScrubTime = nil
                 ttsBridge.clearActive()
             }
         }
@@ -301,7 +304,7 @@ struct ReaderView: View {
             ttsBridge.resumeFollowing()
         }
         .onChange(of: ttsManager.currentWord) { _, word in
-            guard isCurrentSpeech else { return }
+            guard isCurrentSpeech, speechScrubTime == nil else { return }
             ttsBridge.setActiveWord(word)
         }
         .onChange(of: ttsManager.manifest?.id) { _, _ in
@@ -638,11 +641,12 @@ struct ReaderView: View {
     }
     private func startTTSPlayback(from startIndex: Int? = nil) {
         let voice = audioLibrary.selectedVoice(bookId: audioBookId, chapterId: currentChapterPath)
-        guard let record = audioLibrary.downloaded(bookId: audioBookId, chapterId: currentChapterPath, voiceId: voice) else {
+        guard let record = audioLibrary.downloaded(bookId: audioBookId, chapterId: currentChapterPath, voiceId: voice) ?? audioLibrary.downloads(bookId: audioBookId, chapterId: currentChapterPath).first(where: { $0.rendition.voiceId == voice && $0.rendition.completedChunks > 0 }) else {
             showAudioDownloads = true
             return
         }
-        ttsManager.play(renditionID: record.id, paragraph: startIndex)
+        if record.isAvailable { ttsManager.play(renditionID: record.id, paragraph: startIndex) }
+        else { ttsManager.playAvailable(record) }
         ttsBridge.setSpeechMode(true)
         ttsBridge.resumeFollowing()
         isPreparingTTS = false
@@ -651,20 +655,31 @@ struct ReaderView: View {
         ttsManager.stop(); ttsBridge.setSpeechMode(false); ttsBridge.clearActive()
     }
     private func updateSpeed(_ newSpeed: Double) { ttsSpeed = newSpeed; ttsManager.setRate(newSpeed) }
+    private var displayedSpeechWord: TTSWordTiming? {
+        if let speechScrubTime { return ttsManager.manifest?.word(at: speechScrubTime) }
+        return ttsManager.currentWord
+    }
     private var ttsControlsOverlay: some View {
         TTSPlaybackControls(
             isPlaying: !ttsManager.isPaused, isBuffering: ttsManager.isBuffering,
             elapsed: ttsManager.elapsed, duration: ttsManager.duration, rate: ttsManager.rate,
             voiceId: ttsManager.manifest?.voiceId ?? ttsVoiceId,
             voiceName: ttsManager.manifest?.voiceName ?? "Qwen",
-            isFollowing: ttsBridge.isFollowing, sleepTimerLabel: ttsManager.sleepTimerLabel,
+            isFollowing: ttsBridge.isFollowing, sleepTimerLabel: ttsManager.sleepTimerLabel, playbackStatus: ttsManager.playbackStatus,
             onSettings: { showSettings = true },
             onPlayPause: { ttsManager.togglePause() }, onSkipBack: { ttsManager.skip(-15) },
             onSkipForward: { ttsManager.skip(30) }, onRate: { showSpeedPicker = true },
             onVoice: { showVoicePicker = true },
             onBookmark: { if let chapter = currentChapter { chapter.bookmark.toggle(); try? modelContext.save() } },
             onSleep: { showSleepPicker = true },
-            onFollow: { ttsBridge.resumeFollowing() }, onSeek: { ttsManager.seek(to: $0) }
+            onFollow: { ttsBridge.resumeFollowing() },
+            onSeek: { ttsManager.seek(to: $0); ttsBridge.resumeFollowing() },
+            onScrub: { time in
+                let wasScrubbing = speechScrubTime != nil
+                speechScrubTime = time
+                if time != nil && !wasScrubbing { ttsBridge.resumeFollowing() }
+                ttsBridge.setActiveWord(displayedSpeechWord)
+            }
         )
     }
 

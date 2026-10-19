@@ -3,8 +3,8 @@ import Combine
 import Foundation
 import MediaPlayer
 
-/// The app-owned player only opens verified local Qwen chapter files.
-/// Generation, networking, and download management never happen in this player.
+/// Plays verified local chapters or verified cached parts of a preparing chapter.
+/// Model inference always stays on the selected remote Qwen worker.
 @MainActor
 final class ReaderTTSManager: ObservableObject {
     static let shared = ReaderTTSManager()
@@ -12,7 +12,8 @@ final class ReaderTTSManager: ObservableObject {
     @Published private(set) var isPaused = false
     @Published private(set) var currentBlockIndex: Int?
     @Published private(set) var currentWord: TTSWordTiming?
-    @Published private(set) var manifest: TTSManifest?
+    @Published private(set) var manifest: (any TTSPlaybackManifest)?
+    @Published private(set) var playbackStatus: String?
     @Published private(set) var elapsed = 0.0
     @Published private(set) var duration = 0.0
     @Published private(set) var isBuffering = false
@@ -29,14 +30,28 @@ final class ReaderTTSManager: ObservableObject {
     private var sleepAtChapterEnd = false
     private var wasPlayingBeforeInterruption = false
     private var epoch = UUID()
+    private var seekID: UUID?
+    private var streamRecord: TTSDownloadRecord?
+    private var streamSnapshot: TTSStreamingManifest?
+    private var streamIndex: Int?
+    private var streamWaitingIndex: Int?
+    private var streamPollTask: Task<Void, Never>?
+    private var streamLoadTask: Task<Void, Never>?
+    private var streamPrefetch: Task<URL, Error>?
+    private var streamPrefetchIndex: Int?
+    private var streamOffset: Double { streamIndex.flatMap { streamSnapshot?.parts.indices.contains($0) == true ? streamSnapshot?.parts[$0].start : nil } ?? 0 }
     private var lastPositionSave = Date.distantPast
     private var lastNowPlaying = Date.distantPast
 
     private init() {
         let saved = UserDefaults.standard.double(forKey: "tts.speed")
         rate = saved > 0 ? min(max(saved, 0.5), 3) : 1
-        observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.05, preferredTimescale: 600), queue: .main) { [weak self] time in
-            Task { @MainActor in self?.update(time.seconds) }
+        observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.05, preferredTimescale: 600), queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.isBuffering, self.seekID == nil else { return }
+                // Read the current clock after queued seeks, not an old callback's time.
+                self.update(self.streamOffset + self.player.currentTime().seconds)
+            }
         }
         notificationTokens.append(NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] note in
             Task { @MainActor in
@@ -60,13 +75,14 @@ final class ReaderTTSManager: ObservableObject {
     func play(renditionID: String, paragraph: Int? = nil, offset: Int = 0, resume: Bool = true) {
         do {
             let next = try TTSOfflineLibrary.shared.localManifest(renditionID)
+            cancelStream()
             TTSVoicePreviewPlayer.shared.stop()
             let saved = position(for: next.bookId)
             let start: Double
             if let paragraph { start = next.time(paragraph: paragraph, offset: offset) ?? 0 }
             else if resume, let saved, saved.renditionId == next.id { start = saved.time }
             else { start = 0 }
-            epoch = UUID()
+            epoch = UUID(); seekID = nil
             player.pause()
             persistPosition()
             manifest = next; duration = next.duration; elapsed = start
@@ -85,14 +101,7 @@ final class ReaderTTSManager: ObservableObject {
                     guard let self, self.epoch == activeEpoch else { return }
                     if item.status == .readyToPlay {
                         self.itemObservation?.invalidate(); self.itemObservation = nil
-                        self.player.seek(to: CMTime(seconds: min(self.elapsed, max(0, next.duration - 0.02)), preferredTimescale: 24000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
-                            Task { @MainActor in
-                                guard let self, self.epoch == activeEpoch, finished else { return }
-                                self.isBuffering = false
-                                if !self.isPaused { self.player.playImmediately(atRate: Float(self.rate)) }
-                                self.updateNowPlaying()
-                            }
-                        }
+                        self.performSeek(to: min(self.elapsed, max(0, next.duration - 0.02)))
                     } else if item.status == .failed {
                         self.errorMessage = item.error?.localizedDescription ?? "This local audio could not be opened."
                         self.isBuffering = false; self.isPaused = true
@@ -103,6 +112,115 @@ final class ReaderTTSManager: ObservableObject {
         } catch { errorMessage = error.localizedDescription; isBuffering = false }
     }
 
+    private func cancelStream() {
+        streamPollTask?.cancel(); streamLoadTask?.cancel(); streamPrefetch?.cancel()
+        streamPollTask = nil; streamLoadTask = nil; streamPrefetch = nil; streamPrefetchIndex = nil
+        streamRecord = nil; streamSnapshot = nil; streamIndex = nil; streamWaitingIndex = nil; playbackStatus = nil
+    }
+    func playAvailable(_ record: TTSDownloadRecord) {
+        if record.isAvailable { play(renditionID: record.id); return }
+        stop(); TTSVoicePreviewPlayer.shared.stop()
+        streamRecord = record; isBuffering = true; isPaused = false
+        playbackStatus = "Loading ready audio…"
+        if let text = TTSOfflineLibrary.shared.localText(bookId: record.rendition.bookId, chapterId: record.rendition.chapterId), text.contentRevision == record.rendition.contentRevision {
+            let row = record.rendition
+            manifest = TTSStreamingManifest(schema: 1, id: row.id, bookId: row.bookId, chapterId: row.chapterId, bookTitle: row.bookTitle, title: row.title, position: row.position, contentRevision: row.contentRevision, voiceId: row.voiceId, voiceName: TTSOfflineLibrary.shared.voices.first { $0.id == row.voiceId }?.name ?? "Narrator", blocks: text.blocks, words: [], duration: 0, parts: [], totalChunks: row.totalChunks, completedChunks: row.completedChunks, complete: false, status: row.status, error: nil)
+            isSpeaking = true
+        }
+        let session = epoch
+        streamPollTask = Task { [weak self] in
+            guard let self else { return }
+            let client = TTSAPIClient(backendURL: record.backendURL)
+            while !Task.isCancelled && self.epoch == session {
+                do {
+                    let next = try await client.stream(record.rendition)
+                    try Task.checkCancellation()
+                    guard self.epoch == session else { return }
+                    try TTSStorage.cacheStream(next)
+                    self.applyStream(next, session: session)
+                } catch {
+                    guard !Task.isCancelled, self.epoch == session else { return }
+                    if self.streamSnapshot == nil, let data = try? Data(contentsOf: TTSStorage.streamManifest(record.id)), let cached = try? JSONDecoder().decode(TTSStreamingManifest.self, from: data) {
+                        if (try? cached.validate()) != nil { self.applyStream(cached, session: session) }
+                    }
+                    self.playbackStatus = error.localizedDescription
+                    if self.manifest == nil { self.errorMessage = error.localizedDescription }
+                }
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            }
+        }
+    }
+    private func applyStream(_ next: TTSStreamingManifest, session: UUID) {
+        guard epoch == session else { return }
+        let first = streamSnapshot == nil
+        streamSnapshot = next; manifest = next; duration = next.duration; isSpeaking = true
+        playbackStatus = next.error ?? (next.complete ? nil : "\(next.completedChunks)/\(next.totalChunks) parts ready · listening as prepared")
+        if first {
+            let saved = position(for: next.bookId)
+            let target = saved?.renditionId == next.id ? min(saved?.time ?? 0, max(0, next.duration - 0.01)) : 0
+            let index = next.parts.last(where: { $0.start <= target })?.index ?? 0
+            streamWaitingIndex = index
+            if next.parts.indices.contains(index) { loadStreamPart(index, target: target); return }
+        }
+        if let index = streamWaitingIndex, next.parts.indices.contains(index), streamLoadTask == nil { loadStreamPart(index) }
+        prefetchNextStreamPart()
+    }
+    private func prefetchNextStreamPart() {
+        guard let index = streamIndex.map({ $0 + 1 }), let snapshot = streamSnapshot,
+              snapshot.parts.indices.contains(index), let record = streamRecord, streamPrefetchIndex != index else { return }
+        streamPrefetch?.cancel(); streamPrefetchIndex = index
+        let part = snapshot.parts[index]
+        streamPrefetch = Task { try await TTSStorage.loadStreamPart(snapshot.id, part: part, client: TTSAPIClient(backendURL: record.backendURL)) }
+    }
+    private func loadStreamPart(_ index: Int, target: Double? = nil, delay: Double = 0) {
+        guard let snapshot = streamSnapshot, snapshot.parts.indices.contains(index), let record = streamRecord else { return }
+        streamLoadTask?.cancel(); streamWaitingIndex = index
+        let part = snapshot.parts[index], session = epoch
+        isBuffering = true; player.pause(); seekID = nil
+        currentWord = nil; currentBlockIndex = nil
+        streamLoadTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+                let file: URL
+                if self.streamPrefetchIndex == index, let prefetch = self.streamPrefetch { file = try await prefetch.value }
+                else { file = try await TTSStorage.loadStreamPart(snapshot.id, part: part, client: TTSAPIClient(backendURL: record.backendURL)) }
+                try Task.checkCancellation()
+                guard self.epoch == session else { return }
+                #if os(iOS)
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+                try AVAudioSession.sharedInstance().setActive(true)
+                #endif
+                self.streamIndex = index; self.streamWaitingIndex = nil
+                if self.streamPrefetchIndex == index { self.streamPrefetch = nil; self.streamPrefetchIndex = nil }
+                self.prefetchNextStreamPart()
+                self.elapsed = min(target ?? part.start, part.start + part.audioDuration)
+                self.currentWord = snapshot.word(at: self.elapsed)
+                self.currentBlockIndex = self.currentWord?.paragraphIndex
+                let item = AVPlayerItem(url: file)
+                self.itemObservation?.invalidate()
+                self.player.replaceCurrentItem(with: item)
+                self.itemObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+                    Task { @MainActor in
+                        guard let self, self.epoch == session, self.player.currentItem === item else { return }
+                        if item.status == .readyToPlay {
+                            self.itemObservation?.invalidate(); self.itemObservation = nil
+                            self.performSeek(to: self.elapsed)
+                        } else if item.status == .failed {
+                            self.playbackStatus = item.error?.localizedDescription ?? "This part could not be opened."
+                            self.isBuffering = false; self.isPaused = true
+                        }
+                    }
+                }
+                self.streamLoadTask = nil
+            } catch {
+                guard !Task.isCancelled, self.epoch == session else { return }
+                self.playbackStatus = error.localizedDescription
+                if self.streamPrefetchIndex == index { self.streamPrefetch = nil; self.streamPrefetchIndex = nil }
+                self.streamLoadTask = nil
+            }
+        }
+    }
     func switchVoice(to record: TTSDownloadRecord) {
         guard let source = currentWord, manifest?.bookId == record.rendition.bookId, manifest?.chapterId == record.rendition.chapterId else {
             play(renditionID: record.id); return
@@ -112,18 +230,38 @@ final class ReaderTTSManager: ObservableObject {
         if wasPaused { pause() }
     }
     func seek(paragraph: Int, offset: Int) {
-        guard let time = manifest?.time(paragraph: paragraph, offset: offset) else { return }
+        guard let time = manifest?.time(paragraph: paragraph, offset: offset) else {
+            if streamSnapshot != nil { playbackStatus = "That part is still being prepared." }
+            return
+        }
         seek(to: time)
     }
     func seek(to seconds: Double) {
         guard seconds.isFinite, manifest != nil else { return }
         let target = min(max(0, seconds), max(0, duration - 0.01))
-        player.seek(to: CMTime(seconds: target, preferredTimescale: 24000), toleranceBefore: .zero, toleranceAfter: .zero)
         update(target); persistPosition(); updateNowPlaying()
+        if let snapshot = streamSnapshot {
+            guard let part = snapshot.parts.last(where: { $0.start <= target }) else { return }
+            loadStreamPart(part.index, target: target)
+        } else if player.currentItem?.status == .readyToPlay { performSeek(to: target) }
+    }
+    private func performSeek(to target: Double) {
+        let request = UUID(), activeEpoch = epoch
+        seekID = request; isBuffering = true
+        player.pause()
+        player.seek(to: CMTime(seconds: max(0, target - streamOffset), preferredTimescale: 24000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            Task { @MainActor in
+                guard let self, self.epoch == activeEpoch, self.seekID == request else { return }
+                self.seekID = nil; self.isBuffering = false
+                self.update(self.streamOffset + self.player.currentTime().seconds)
+                if finished && !self.isPaused { self.player.playImmediately(atRate: Float(self.rate)) }
+                self.persistPosition(); self.updateNowPlaying()
+            }
+        }
     }
     func skip(_ seconds: Double) { seek(to: elapsed + seconds) }
     func togglePause() { isPaused ? resume() : pause() }
-    func pause() { guard isSpeaking else { return }; player.pause(); isPaused = true; persistPosition(); updateNowPlaying() }
+    func pause() { guard isSpeaking || streamRecord != nil else { return }; player.pause(); isPaused = true; persistPosition(); updateNowPlaying() }
     func resume() { guard isSpeaking else { return }; isPaused = false; if !isBuffering { player.playImmediately(atRate: Float(rate)) }; updateNowPlaying() }
     func setRate(_ value: Double) {
         guard value.isFinite else { return }
@@ -138,7 +276,7 @@ final class ReaderTTSManager: ObservableObject {
     }
     func sleepAfterChapter() { sleepDeadline = nil; sleepAtChapterEnd = true; sleepTimerLabel = "Chapter" }
     func stop() {
-        persistPosition(); epoch = UUID(); itemObservation?.invalidate(); itemObservation = nil
+        persistPosition(); cancelStream(); epoch = UUID(); seekID = nil; itemObservation?.invalidate(); itemObservation = nil
         player.pause(); player.replaceCurrentItem(with: nil)
         isSpeaking = false; isPaused = false; isBuffering = false; currentWord = nil; currentBlockIndex = nil
         manifest = nil; elapsed = 0; duration = 0
@@ -162,13 +300,24 @@ final class ReaderTTSManager: ObservableObject {
         return try? JSONDecoder().decode(TTSListeningPosition.self, from: data)
     }
     private func persistPosition() {
-        guard let manifest, let word = currentWord else { return }
+        guard let manifest, let word = currentWord ?? manifest.words.last(where: { $0.start <= elapsed }) ?? manifest.words.first else { return }
         let value = TTSListeningPosition(renditionId: manifest.id, paragraph: word.paragraphIndex, offset: word.sourceStart, time: elapsed)
         if let data = try? JSONEncoder().encode(value) { UserDefaults.standard.set(data, forKey: positionKey(manifest.bookId)) }
         lastPositionSave = Date()
     }
     private func finishChapter() {
         persistPosition()
+        if let snapshot = streamSnapshot, let index = streamIndex {
+            let part = snapshot.parts[index]
+            elapsed = part.end; currentWord = nil; currentBlockIndex = nil
+            if index + 1 < snapshot.parts.count || !snapshot.complete {
+                streamWaitingIndex = index + 1; isBuffering = true
+                playbackStatus = "Waiting for the next part · \(snapshot.completedChunks)/\(snapshot.totalChunks) ready"
+                if index + 1 < snapshot.parts.count { loadStreamPart(index + 1, delay: part.pauseAfter / rate) }
+                return
+            }
+        }
+        update(duration)
         if sleepAtChapterEnd { sleepAtChapterEnd = false; sleepTimerLabel = "Off"; pause(); return }
         guard let current = manifest else { return }
         let library = TTSOfflineLibrary.shared

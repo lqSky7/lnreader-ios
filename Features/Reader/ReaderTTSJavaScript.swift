@@ -8,11 +8,22 @@ enum ReaderTTSJavaScript {
     """
 
     static let mapping = #"""
+    window.ttsIsAnnotation = function(node) {
+        for (var element = node.nodeType === 1 ? node : node.parentElement; element; element = element.parentElement) {
+            var type = element.getAttribute('epub:type') || '';
+            if (/(?:^|\s)(?:noteref|footnote|endnote|pagebreak)(?:\s|$)/.test(type)) return true;
+            if (element.matches('[role="doc-noteref"],[role="doc-footnote"],[role="doc-endnote"],[role="doc-pagebreak"]')) return true;
+            if (element.tagName === 'A' && /#(?:fn|footnote|endnote|note|ref)[-_:\d]/i.test(element.getAttribute('href') || '')) return true;
+            if (element.tagName === 'SUP' && /^\[?\d{1,4}\]?$/.test(element.textContent.trim()) && element.querySelector('a[href]')) return true;
+        }
+        return false;
+    };
     window.ttsTextMap = function(element) {
         var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
             acceptNode: function(node) {
                 if (node.nodeType === 1) return node.tagName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
                 var parent = node.parentElement;
+                if (window.ttsIsAnnotation(node)) return NodeFilter.FILTER_REJECT;
                 if (parent && parent.closest('script,style,[role="doc-noteref"],[role="doc-pagebreak"],a[href^="#fn"],#lnw-comments-section')) return NodeFilter.FILTER_REJECT;
                 return NodeFilter.FILTER_ACCEPT;
             }
@@ -34,7 +45,7 @@ enum ReaderTTSJavaScript {
     };
     window.ttsParagraphNodes = function() {
         var nodes = Array.from(document.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li')).filter(function(node) {
-            return !node.closest('#lnw-comments-section,nav,script,style,[role="doc-footnote"]') &&
+            return !window.ttsIsAnnotation(node) && !node.closest('#lnw-comments-section,nav,script,style,[role="doc-footnote"]') &&
                 !(node.tagName === 'LI' && node.querySelector('p,li'));
         });
         if (nodes.length) return nodes;
@@ -65,9 +76,17 @@ enum ReaderTTSJavaScript {
         window.__ttsFollowing = value;
         window.webkit.messageHandlers.ttsFollowChanged.postMessage(value);
     };
+    window.clearTTSActive = function() {
+        window.__ttsWord = null;
+        if (window.CSS && CSS.highlights) CSS.highlights.delete('tts-word');
+        document.querySelectorAll('.tts-active').forEach(function(node) { node.classList.remove('tts-active'); });
+        var dot = document.getElementById('tts-dot');
+        if (dot) dot.style.opacity = 0;
+    };
     window.setTTSSpeechMode = function(value) {
         window.__ttsSpeechMode = value;
         document.body.classList.toggle('tts-speech-mode', value);
+        if (!value) window.clearTTSActive();
     };
     window.setTTSControlsVisible = function(value) {
         window.__ttsControlsVisible = value;
@@ -86,9 +105,10 @@ enum ReaderTTSJavaScript {
         return {range: range, target: target};
     };
     window.setTTSActiveWord = function(word) {
-        window.__ttsWord = word;
+        if (!window.__ttsSpeechMode || !word) { window.clearTTSActive(); return; }
         var mapped = window.ttsRange(word);
-        if (!mapped) return;
+        if (!mapped) { window.clearTTSActive(); return; }
+        window.__ttsWord = word;
         var active = document.querySelector('.tts-active');
         if (active && active !== mapped.target) active.classList.remove('tts-active');
         mapped.target.classList.add('tts-active');

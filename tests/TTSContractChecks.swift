@@ -28,6 +28,9 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
                 precondition(manifest.time(paragraph: 0, offset: 16) == 1.2, "Number expansion must seek to its first spoken word")
                 precondition(manifest.word(at: 0.7)?.sourceStart == 9, "Use the media clock with UTF-16 offsets after emoji")
                 precondition(manifest.word(at: 1.7)?.sourceStart == 15)
+                precondition(manifest.word(at: 0.45) == nil, "Silence between words must clear highlighting")
+                precondition(manifest.word(at: 2.5) == nil, "The last word must not stick through chapter trailing silence")
+                precondition(manifest.word(at: -1) == nil && manifest.word(at: .nan) == nil)
                 var corrupt = data
                 corrupt["words"] = [["paragraphIndex": 0, "sourceStart": 500, "sourceEnd": 510, "start": 0.0, "end": 1.0]]
                 let invalid = try JSONDecoder().decode(TTSManifest.self, from: JSONSerialization.data(withJSONObject: corrupt))
@@ -35,6 +38,8 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
                 let extractor = TTSChapterTextExtractor()
                 let blocks = try await extractor.extract("<article><p> Hello <em>🌟 world</em> <a role=\"doc-noteref\" href=\"#fn1\">1</a> 42.</p><p>Second<br>line.</p></article>")
                 guard blocks == ["Hello 🌟 world 42.", "Second line."] else { fatalError(String(describing: blocks)) }
+                let citations = try await extractor.extract("<p>Read this sentence.<sup><a href='notes.xhtml#note-10'>10</a></sup></p><p>Another<a epub:type='noteref' href='notes.xhtml#x'>11</a> sentence with 10 books.</p><aside epub:type='footnote'><p>Annotation body.</p></aside>")
+                precondition(citations == ["Read this sentence.", "Another sentence with 10 books."], "EPUB references and annotation bodies must be excluded while real quantities stay")
                 let fallback = try await extractor.extract("<div>Plain <em>chapter</em><br>with breaks.</div>")
                 guard fallback == ["Plain chapter with breaks."] else { fatalError(String(describing: fallback)) }
                 try await ReaderInteractionChecks().run()
@@ -70,6 +75,22 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
         let movedWord = try await webView.evaluateJavaScript("CSS.highlights.get('tts-word').values().next().value.toString()") as? String
         precondition(movedWord == "book", "Advancing narration must replace the previous word highlight")
         print("PASS: exactly one spoken-word highlight, media-clock updates, and no paragraph background in real WKWebView")
+        let bridge = ReaderContentBridge()
+        bridge.setWebView(webView); bridge.contentDidFinishLoad(); bridge.setSpeechMode(true)
+        bridge.setActiveWord(.init(paragraphIndex: 0, sourceStart: 5, sourceEnd: 9, start: 0.5, end: 0.9))
+        bridge.setActiveWord(nil); bridge.resumeFollowing(); bridge.setControlsVisible(true)
+        let cleared = try await webView.evaluateJavaScript("!CSS.highlights.has('tts-word') && window.__ttsWord === null && !document.querySelector('.tts-active')") as? Bool
+        precondition(cleared == true, "Clearing a timed gap must remove native and JS saved highlights; follow/focus cannot restore it")
+        bridge.setActiveWord(.init(paragraphIndex: 0, sourceStart: 5, sourceEnd: 9, start: 0.5, end: 0.9))
+        bridge.setActiveWord(.init(paragraphIndex: 99, sourceStart: 0, sourceEnd: 4, start: 1, end: 2))
+        let invalidCleared = try await webView.evaluateJavaScript("!CSS.highlights.has('tts-word')") as? Bool
+        precondition(invalidCleared == true, "An invalid source position must clear an older highlight")
+        bridge.setSpeechMode(false)
+        bridge.setActiveWord(.init(paragraphIndex: 0, sourceStart: 5, sourceEnd: 9, start: 0.5, end: 0.9))
+        let stoppedCleared = try await webView.evaluateJavaScript("!CSS.highlights.has('tts-word') && window.__ttsWord === null") as? Bool
+        precondition(stoppedCleared == true, "Late word updates after stopping must not paint highlights")
+        bridge.setSpeechMode(true); bridge.setControlsVisible(false)
+        print("PASS: bridge clears silence, invalid mappings and stop; follow/focus cannot resurrect highlights")
         let hidden = try await webView.evaluateJavaScript("window.__ttsSpeechMode && !window.__ttsControlsVisible && document.body.style.getPropertyValue('--tts-bottom') === '32px'") as? Bool
         precondition(hidden == true, "Focused listening must retain speech mode and remove control insets")
         let tap = "var p=document.querySelector('p'); p.dispatchEvent(new PointerEvent('pointerdown',{isPrimary:true,clientX:55,clientY:55,bubbles:true})); p.dispatchEvent(new PointerEvent('pointerup',{isPrimary:true,clientX:55,clientY:55,bubbles:true}));"
