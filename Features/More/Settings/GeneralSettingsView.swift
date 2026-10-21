@@ -36,17 +36,17 @@ struct GeneralSettingsView: View {
             }
 
             Section("Library") {
-                Toggle("Show unread badges", isOn: $showUnreadBadges)
-                Toggle("Confirm before remove", isOn: $confirmRemove)
+                Toggle("Show unread badges", isOn: $showUnreadBadges).tint(AppTheme.controlFill)
+                Toggle("Confirm before remove", isOn: $confirmRemove).tint(AppTheme.controlFill)
             }
 
             Section("Updates") {
-                Toggle("Auto update on launch", isOn: $autoUpdateOnLaunch)
-                Toggle("Update on Wi-Fi only", isOn: $updateOnWifiOnly)
+                Toggle("Auto update on launch", isOn: $autoUpdateOnLaunch).tint(AppTheme.controlFill)
+                Toggle("Update on Wi-Fi only", isOn: $updateOnWifiOnly).tint(AppTheme.controlFill)
             }
         }
         .navigationTitle("General")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
     }
 
     private var defaultSortOrder: Binding<SortOrder> {

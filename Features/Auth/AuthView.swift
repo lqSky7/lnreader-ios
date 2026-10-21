@@ -83,7 +83,7 @@ struct AuthView: View {
                 }
             }
             .navigationTitle("Account")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
@@ -99,7 +99,7 @@ struct AuthView: View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 42, weight: .semibold))
-                .foregroundStyle(AppTheme.accent)
+                .foregroundStyle(.primary)
 
             Text("Sync your reader")
                 .font(.title2.weight(.bold))

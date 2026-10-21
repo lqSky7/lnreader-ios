@@ -71,7 +71,7 @@ struct MoreView: View {
                         .overlay(Circle().stroke(Color.gray.opacity(0.2), lineWidth: 1))
                 } else {
                     ZStack {
-                        Color(UIColor.systemGray5)
+                        Color(UIColor.systemGray6)
                         Image(systemName: "person.fill")
                             .font(.system(size: 28))
                             .foregroundStyle(.gray.opacity(0.6))
@@ -143,6 +143,8 @@ struct MoreView: View {
                         showingAuth = true
                     }
                     .buttonStyle(.borderedProminent)
+                    .foregroundStyle(AppTheme.onPrimaryFill)
+                    .tint(AppTheme.primaryFill)
                     .controlSize(.small)
                 } else {
                     HStack(spacing: 12) {
@@ -162,6 +164,8 @@ struct MoreView: View {
                                 Image(systemName: "arrow.triangle.2.circlepath")
                             }
                             .buttonStyle(.borderedProminent)
+                            .foregroundStyle(AppTheme.onPrimaryFill)
+                            .tint(AppTheme.primaryFill)
                             .controlSize(.small)
                         }
                         
@@ -322,7 +326,7 @@ struct MoreView: View {
                         .font(.system(size: 24))
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
-                        .background(Color(UIColor.systemGray5), in: .circle)
+                        .background(Color(UIColor.systemGray6), in: .circle)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Statistics")
@@ -362,7 +366,7 @@ struct MoreView: View {
                         .font(.system(size: 24))
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
-                        .background(Color(UIColor.systemGray5), in: .circle)
+                        .background(Color(UIColor.systemGray6), in: .circle)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("About")
@@ -465,7 +469,7 @@ struct ProfileEditSheet: View {
                             PhotosPicker(selection: $selectedItem, matching: .images) {
                                 Text("Choose Photo")
                                     .font(.subheadline)
-                                    .foregroundStyle(AppTheme.accent)
+                                    .foregroundStyle(.primary)
                             }
                             .onChange(of: selectedItem) { _, newItem in
                                 Task {
@@ -485,7 +489,7 @@ struct ProfileEditSheet: View {
                 }
             }
             .navigationTitle("Edit Profile")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

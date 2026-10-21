@@ -55,6 +55,8 @@ struct NovelFireLoginView: View {
                         retryID = UUID()
                     }
                     .buttonStyle(.borderedProminent)
+                    .foregroundStyle(AppTheme.onPrimaryFill)
+                    .tint(AppTheme.primaryFill)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 #if os(iOS)

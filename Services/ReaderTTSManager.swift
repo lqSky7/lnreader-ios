@@ -3,6 +3,14 @@ import Combine
 import Foundation
 import MediaPlayer
 
+#if os(iOS)
+import UIKit
+private typealias CoverImage = UIImage
+#elseif os(macOS)
+import AppKit
+private typealias CoverImage = NSImage
+#endif
+
 /// Plays verified local chapters or verified cached parts of a preparing chapter.
 /// Model inference always stays on the selected remote Qwen worker.
 @MainActor
@@ -42,6 +50,9 @@ final class ReaderTTSManager: ObservableObject {
     private var streamOffset: Double { streamIndex.flatMap { streamSnapshot?.parts.indices.contains($0) == true ? streamSnapshot?.parts[$0].start : nil } ?? 0 }
     private var lastPositionSave = Date.distantPast
     private var lastNowPlaying = Date.distantPast
+    private var artworkBookId: String?
+    private var artwork: MPMediaItemArtwork?
+    private var artworkTask: Task<Void, Never>?
 
     private init() {
         let saved = UserDefaults.standard.double(forKey: "tts.speed")
@@ -280,6 +291,7 @@ final class ReaderTTSManager: ObservableObject {
         player.pause(); player.replaceCurrentItem(with: nil)
         isSpeaking = false; isPaused = false; isBuffering = false; currentWord = nil; currentBlockIndex = nil
         manifest = nil; elapsed = 0; duration = 0
+        artworkTask?.cancel(); artworkTask = nil; artwork = nil; artworkBookId = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -332,7 +344,7 @@ final class ReaderTTSManager: ObservableObject {
     }
     private func updateNowPlaying() {
         guard let manifest else { return }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: manifest.title,
             MPMediaItemPropertyAlbumTitle: manifest.bookTitle,
             MPMediaItemPropertyArtist: manifest.voiceName,
@@ -341,7 +353,51 @@ final class ReaderTTSManager: ObservableObject {
             MPNowPlayingInfoPropertyPlaybackRate: isPaused ? 0 : rate,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: 1
         ]
+        // The system now-playing card (lock screen, Dynamic Island, Control Center)
+        // is rendered outside the app and cannot read SwiftData, so the cover has to
+        // be handed over explicitly.
+        if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         lastNowPlaying = Date()
+    }
+
+    /// Attach the book cover to the system now-playing card for the playing book.
+    /// Safe to call on every playback start; the image is fetched once per book.
+    func attachCover(url: String?, bookId: String) {
+        guard artworkBookId != bookId else { return }
+        artworkBookId = bookId
+        artwork = nil
+        artworkTask?.cancel()
+        guard let url, !url.isEmpty else { return }
+        artworkTask = Task { [weak self] in
+            guard let image = await Self.loadCoverImage(url) else { return }
+            guard let self, !Task.isCancelled, self.artworkBookId == bookId else { return }
+            self.artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.updateNowPlaying()
+        }
+    }
+
+    private static func loadCoverImage(_ value: String) async -> CoverImage? {
+        let url: URL?
+        if let parsed = URL(string: value), parsed.scheme != nil { url = parsed }
+        else { url = URL(fileURLWithPath: value) }
+        guard let url else { return nil }
+        #if os(iOS)
+        if url.isFileURL { return UIImage(contentsOfFile: url.path) }
+        #elseif os(macOS)
+        if url.isFileURL { return NSImage(contentsOf: url) }
+        #else
+        return nil
+        #endif
+        guard let (data, response) = try? await URLSession.shared.data(from: url),
+              (response as? HTTPURLResponse)?.statusCode ?? 200 < 400 else { return nil }
+        #if os(iOS)
+        return UIImage(data: data)
+        #elseif os(macOS)
+        return NSImage(data: data)
+        #else
+        return nil
+        #endif
     }
     private func configureRemoteCommands() {
         let commands = MPRemoteCommandCenter.shared()

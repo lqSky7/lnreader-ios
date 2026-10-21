@@ -28,7 +28,7 @@ struct ChapterRow: View {
             HStack(spacing: 12) {
                 // Unread indicator dot
                 Circle()
-                    .fill(chapter.unread ? AppTheme.accent : .clear)
+                    .fill(chapter.unread ? Color.primary : .clear)
                     .frame(width: 8, height: 8)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -47,7 +47,7 @@ struct ChapterRow: View {
                         if let progress = chapter.progress, progress > 0 {
                             Text("\(progress)%")
                                 .font(Typography.small)
-                                .foregroundStyle(AppTheme.accent)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -57,12 +57,12 @@ struct ChapterRow: View {
                 // Status icons
                 HStack(spacing: 8) {
                     if audioCount > 0 {
-                        Label("\(audioCount)", systemImage: "headphones").font(Typography.small).foregroundStyle(AppTheme.accent)
+                        Label("\(audioCount)", systemImage: "headphones").font(Typography.small).foregroundStyle(.secondary)
                             .accessibilityLabel("\(audioCount) voices available offline")
                     }
                     if chapter.bookmarked {
                         Image(systemName: "bookmark.fill")
-                            .foregroundStyle(AppTheme.accent)
+                            .foregroundStyle(.primary)
                             .font(Typography.small)
                     }
                     if chapter.downloaded {

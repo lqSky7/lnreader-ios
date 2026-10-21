@@ -179,7 +179,7 @@ struct ReaderSettings: View {
                                     .frame(width: 24)
                                 
                                 Slider(value: $localGrainIntensity, in: 0...100, step: 5)
-                                    .tint(AppTheme.accent)
+                                    .tint(.primary)
                                 
                                 Text("\(Int(localGrainIntensity))%")
                                     .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -295,7 +295,7 @@ struct ReaderSettings: View {
             Text("Customize")
                 .font(.system(size: 15, weight: .semibold))
             Spacer()
-            Toggle("", isOn: $isCustomizing.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.accent)
+            Toggle("", isOn: $isCustomizing.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.controlFill)
                 .labelsHidden()
                 .tint(.green)
         }
@@ -317,7 +317,7 @@ struct ReaderSettings: View {
                         .frame(width: 24)
                     
                     Slider(value: $localLineHeight, in: 1.0...2.5, step: 0.05)
-                        .tint(AppTheme.accent)
+                        .tint(.primary)
                     
                     Text(String(format: "%.2f", localLineHeight))
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -342,7 +342,7 @@ struct ReaderSettings: View {
                         .frame(width: 24)
                     
                     Slider(value: $localCharacterSpacing, in: -5...30, step: 1)
-                        .tint(AppTheme.accent)
+                        .tint(.primary)
                     
                     Text("\(Int(localCharacterSpacing))%")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -367,7 +367,7 @@ struct ReaderSettings: View {
                         .frame(width: 24)
                     
                     Slider(value: $localWordSpacing, in: 0...50, step: 2)
-                        .tint(AppTheme.accent)
+                        .tint(.primary)
                     
                     Text("\(Int(localWordSpacing))%")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -392,7 +392,7 @@ struct ReaderSettings: View {
                         .frame(width: 24)
                     
                     Slider(value: $localMargins, in: 0...100, step: 5)
-                        .tint(AppTheme.accent)
+                        .tint(.primary)
                         .onChange(of: localMargins) { _, newValue in
                             localHorizontalPadding = (newValue / 100.0) * 48.0
                         }
@@ -421,7 +421,7 @@ struct ReaderSettings: View {
                 Text("Font Size: \(Int(localFontSize))px")
                     .font(Typography.caption)
                 Slider(value: $localFontSize, in: 12...32, step: 1)
-                    .tint(AppTheme.accent)
+                    .tint(.primary)
             }
         }
     }
@@ -432,12 +432,12 @@ struct ReaderSettings: View {
                 Text("Vertical Padding: \(Int(localVerticalPadding))px")
                     .font(Typography.caption)
                 Slider(value: $localVerticalPadding, in: 0...80, step: 4)
-                    .tint(AppTheme.accent)
+                    .tint(.primary)
             }
             
-            Toggle("Bionic Reading", isOn: $localBionicReading)
-            Toggle("Justify Text", isOn: $justifyText)
-            Toggle("Keep Screen On", isOn: $keepScreenOn)
+            Toggle("Bionic Reading", isOn: $localBionicReading).tint(AppTheme.controlFill)
+            Toggle("Justify Text", isOn: $justifyText).tint(AppTheme.controlFill)
+            Toggle("Keep Screen On", isOn: $keepScreenOn).tint(AppTheme.controlFill)
             
             ColorPicker("Custom Background", selection: customBgColorBinding)
             ColorPicker("Custom Text Color", selection: customTextColorBinding)
@@ -467,7 +467,7 @@ struct ReaderSettings: View {
                             focusManager.requestAuthorization()
                         }
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(AppTheme.accent)
+                        .foregroundColor(.primary)
                     } else if authStatus == 1 { // denied
                         Text("Access to Focus status has been denied. You can enable it in iOS Settings > Privacy & Security > Focus.")
                             .font(.system(size: 12))
@@ -485,7 +485,7 @@ struct ReaderSettings: View {
     private var lineFocusSection: some View {
         Section("Line Focus") {
             VStack(alignment: .leading, spacing: 12) {
-                Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.accent)
+                Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.controlFill)
                 
                 if localLineFocusEnabled {
                     VStack(alignment: .leading, spacing: 12) {
@@ -578,9 +578,9 @@ struct ReaderSettings: View {
                             .frame(height: focusHeight)
                             .overlay(
                                 VStack {
-                                    Divider().background(AppTheme.accent.opacity(0.4))
+                                    Divider().background(Color.secondary.opacity(0.4))
                                     Spacer()
-                                    Divider().background(AppTheme.accent.opacity(0.4))
+                                    Divider().background(Color.secondary.opacity(0.4))
                                 }
                             )
                         

@@ -222,7 +222,7 @@ struct ChapterDirectoryView: View {
                             .accessibilityLabel("Go to current chapter")
                     }
                     HStack {
-                        Image(systemName: "number").foregroundStyle(AppTheme.accent)
+                        Image(systemName: "number").foregroundStyle(.secondary)
                         TextField("Jump to chapter", text: $jumpNumber).keyboardType(.numberPad).focused($jumpFocused)
                         Button("Go", action: jump).disabled(jumpNumber.isEmpty)
                     }
@@ -231,14 +231,14 @@ struct ChapterDirectoryView: View {
                 Section {
                     ForEach(visible) { chapter in
                         HStack(spacing: 8) {
-                            Text(String(chapter.position + 1)).font(.caption.monospacedDigit()).foregroundStyle(chapter.path == currentChapterPath ? AppTheme.accent : .secondary).frame(minWidth: 32)
+                            Text(String(chapter.position + 1)).font(.caption.monospacedDigit()).foregroundStyle(chapter.path == currentChapterPath ? .primary : .secondary).fontWeight(chapter.path == currentChapterPath ? .semibold : .regular).frame(minWidth: 32)
                             if let onSelect {
                                 Button { onSelect(chapter) } label: {
                                     HStack {
-                                        Text(chapter.name).font(.subheadline).foregroundStyle(chapter.path == currentChapterPath ? AppTheme.accent : .primary).lineLimit(2)
+                                        Text(chapter.name).font(.subheadline).fontWeight(chapter.path == currentChapterPath ? .semibold : .regular).foregroundStyle(.primary).lineLimit(2)
                                         Spacer()
-                                        if chapter.path == currentChapterPath { Image(systemName: "book.fill").foregroundStyle(AppTheme.accent) }
-                                        else if chapter.bookmarked { Image(systemName: "bookmark.fill").foregroundStyle(AppTheme.accent) }
+                                        if chapter.path == currentChapterPath { Image(systemName: "book.fill").foregroundStyle(.primary) }
+                                        else if chapter.bookmarked { Image(systemName: "bookmark.fill").foregroundStyle(.secondary) }
                                     }.frame(minHeight: 44).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
                             } else { ChapterRow(chapter: chapter, novel: novel, pluginId: pluginId) }
@@ -250,7 +250,7 @@ struct ChapterDirectoryView: View {
             .listStyle(.insetGrouped)
             .id("\(search.isEmpty ? currentPage : -1)-\(selectedFilter.rawValue)")
             .searchable(text: $search, prompt: "Search every chapter")
-            .navigationTitle("Chapters").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Chapters").navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {

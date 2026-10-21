@@ -54,7 +54,7 @@ struct NovelHeaderView: View {
                     Rectangle()
                         .fill(
                             LinearGradient(
-                                colors: [AppTheme.accent.opacity(0.3), .clear],
+                                colors: [Color.primary.opacity(0.12), .clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -64,7 +64,7 @@ struct NovelHeaderView: View {
                 Rectangle()
                     .fill(
                         LinearGradient(
-                            colors: [AppTheme.accent.opacity(0.3), .clear],
+                            colors: [Color.primary.opacity(0.12), .clear],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -100,8 +100,10 @@ struct NovelHeaderView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                             .frame(maxWidth: .infinity, minHeight: 44)
+                            .foregroundStyle(.black)
+                            .background(.white, in: .capsule)
                     }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.plain)
                     .glassEffectID("continue", in: namespace)
                     .bookTransitionSource("continue", in: transitionNamespace)
 
@@ -113,12 +115,11 @@ struct NovelHeaderView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                         .frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundStyle(.black)
+                        .background(.white, in: .capsule)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
                     .glassEffectID("library", in: namespace)
-                    #if os(macOS)
-                        .tint(.clear)
-                    #endif
                 }
             }
             .contentShape(.rect)

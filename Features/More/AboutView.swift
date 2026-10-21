@@ -25,16 +25,16 @@ struct AboutView: View {
             }
         }
         .navigationTitle("About")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
     }
 
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: "book.fill")
                 .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(AppTheme.accent)
+                .foregroundStyle(.primary)
                 .frame(width: 48, height: 48)
-                .background(AppTheme.accent.opacity(0.15), in: .circle)
+                .background(AppTheme.surface, in: .circle)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(appName)

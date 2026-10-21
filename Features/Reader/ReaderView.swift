@@ -20,7 +20,6 @@ struct ReaderView: View {
     @ObservedObject private var ttsManager = ReaderTTSManager.shared
     @ObservedObject private var audioLibrary = TTSOfflineLibrary.shared
     @State private var showAudioDownloads = false
-    @State private var showVoicePicker = false
     @State private var showSleepPicker = false
     @State private var showSpeedPicker = false
     @State private var speechScrubTime: Double?
@@ -203,7 +202,7 @@ struct ReaderView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .statusBarHidden(!showControls)
+        .statusBarHidden(true)
         .onChange(of: showControls) { _, visible in ttsBridge.setControlsVisible(visible) }
         .sheet(isPresented: $showSettings) {
             ReaderSettings(
@@ -340,15 +339,6 @@ struct ReaderView: View {
             BookAudioDownloadsView(bookId: audioBookId, bookTitle: fetchNovel()?.name ?? currentChapterName,
                 pluginId: pluginId, novelPath: novelPath ?? "",
                 chapters: audioChapterChoices, coverURL: fetchNovel()?.cover, initialChapter: currentChapterPath)
-        }
-        .confirmationDialog("Downloaded voices for this chapter", isPresented: $showVoicePicker, titleVisibility: .visible) {
-            ForEach(audioLibrary.downloads(bookId: audioBookId, chapterId: currentChapterPath).filter(\.isAvailable)) { record in
-                Button(audioLibrary.voices.first { $0.id == record.rendition.voiceId }?.name ?? record.rendition.voiceId) {
-                    audioLibrary.selectVoice(record.rendition.voiceId, bookId: audioBookId, chapterId: currentChapterPath)
-                    ttsManager.switchVoice(to: record)
-                }
-            }
-            Button("Get more voices / manage downloads") { showAudioDownloads = true }
         }
         .confirmationDialog("Playback speed", isPresented: $showSpeedPicker) {
             ForEach([0.75, 1, 1.25, 1.5, 1.75, 2, 2.5], id: \.self) { speed in
@@ -667,6 +657,7 @@ struct ReaderView: View {
             showAudioDownloads = true
             return
         }
+        ttsManager.attachCover(url: fetchNovel()?.cover, bookId: audioBookId)
         if record.isAvailable { ttsManager.play(renditionID: record.id, paragraph: startIndex) }
         else { ttsManager.playAvailable(record) }
         ttsBridge.setSpeechMode(true)
@@ -691,7 +682,7 @@ struct ReaderView: View {
             onSettings: { showSettings = true },
             onPlayPause: { ttsManager.togglePause() }, onSkipBack: { ttsManager.skip(-15) },
             onSkipForward: { ttsManager.skip(30) }, onRate: { showSpeedPicker = true },
-            onVoice: { showVoicePicker = true },
+            onVoice: { showAudioDownloads = true },
             onBookmark: { if let chapter = currentChapter { chapter.bookmark.toggle(); try? modelContext.save() } },
             onSleep: { showSleepPicker = true },
             onFollow: { ttsBridge.resumeFollowing() },

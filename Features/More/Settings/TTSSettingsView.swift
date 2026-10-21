@@ -8,7 +8,7 @@ struct TTSSettingsView: View {
     @State private var showStorage = false
     var body: some View {
         Form {
-            Section { Toggle("Enable narration", isOn: $enabled); QwenComputePicker() }
+            Section { Toggle("Enable narration", isOn: $enabled); QwenComputePicker() }.tint(AppTheme.controlFill)
             Section {
                 QwenVoicePicker(selected: $selected)
             } header: { Text("Default narrator") }
@@ -39,7 +39,7 @@ struct TTSSettingsView: View {
             }
         }
         .navigationTitle("Narration")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .task { selected = [library.migratedDefaultVoice]; await library.refreshVoices() }
         .onChange(of: selected) { oldValue, newValue in
             if let added = newValue.subtracting(oldValue).first { defaultVoice = added; selected = [added] }

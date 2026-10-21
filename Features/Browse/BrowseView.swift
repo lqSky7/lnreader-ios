@@ -119,13 +119,10 @@ struct BrowseView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .foregroundStyle(isSelected ? AppTheme.accent : .secondary)
+                .foregroundStyle(isSelected ? .primary : .secondary)
         }
         .buttonStyle(.plain)
-        .glassEffect(
-            isSelected ? .regular.tint(AppTheme.accent).interactive() : .regular.interactive(),
-            in: .capsule
-        )
+        .glassEffect(.regular.interactive(), in: .capsule)
     }
 }
 

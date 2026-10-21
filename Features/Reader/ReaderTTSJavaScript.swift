@@ -134,7 +134,12 @@ enum ReaderTTSJavaScript {
             marker.getAnimations().forEach(function(animation) { animation.cancel(); });
             marker.animate([{opacity: 0.25, scale: '0.96'}, {opacity: 1, scale: '1'}], {duration: 170, easing: 'cubic-bezier(.22,1.25,.36,1)'});
         }
-        // Keep the reading band fixed when controls appear or disappear.
+        // "Back to current" is only for the case where the reader has scrolled away
+        // from the spoken line, so follow state mirrors whether that line is on screen.
+        if (window.__ttsSpeechMode) {
+            window.ttsSetFollowing(rect.bottom > 0 && rect.top < window.innerHeight);
+        }
+        // Fixed reading band: toggling the chrome must never re-scroll the text.
         var topInset = 156;
         var bottomInset = window.__ttsSpeechMode ? 190 : 120;
         if (window.__ttsFollowing && (rect.top < topInset || rect.bottom > window.innerHeight - bottomInset)) {
@@ -146,11 +151,6 @@ enum ReaderTTSJavaScript {
         window.ttsSetFollowing(true);
         if (window.__ttsWord) window.setTTSActiveWord(window.__ttsWord);
     };
-    window.addEventListener('touchmove', function() { if (window.__ttsSpeechMode) window.ttsSetFollowing(false); }, {passive: true});
-    window.addEventListener('wheel', function() { if (window.__ttsSpeechMode) window.ttsSetFollowing(false); }, {passive: true});
-    document.addEventListener('selectionchange', function() {
-        if (window.__ttsSpeechMode && window.getSelection().toString().trim()) window.ttsSetFollowing(false);
-    });
     window.ttsPositionAt = function(x, y) {
         var range = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
         if (!range && document.caretPositionFromPoint) {

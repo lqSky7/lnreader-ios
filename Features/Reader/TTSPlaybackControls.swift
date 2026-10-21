@@ -51,7 +51,7 @@ struct TTSPlaybackControls: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
             }
-            .foregroundStyle(AppTheme.accent)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 16)
             .frame(minHeight: 44)
             .glassEffect()
@@ -76,7 +76,7 @@ struct TTSPlaybackControls: View {
                 .mask(LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom))
                 .clipShape(.rect(cornerRadius: 26))
         }
-        .glassEffect(.clear, in: .rect(cornerRadius: 26))
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
         .frame(maxWidth: 500)
         .padding(.horizontal, 10)
         .padding(.bottom, 2)
@@ -90,7 +90,7 @@ struct TTSPlaybackControls: View {
                 in: 0...safeRangeUpper,
                 onEditingChanged: handleScrubEditing
             )
-            .tint(AppTheme.accent)
+            .tint(.primary)
             .disabled(safeDuration <= 0)
             .accessibilityLabel("Playback progress")
             .accessibilityValue("\(formatTime(displayedTime)) of \(formatTime(safeDuration))")
@@ -122,7 +122,7 @@ struct TTSPlaybackControls: View {
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                     }
                 }
-                .foregroundStyle((sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? .primary : AppTheme.accent)
+                .foregroundStyle((sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? .secondary : .primary)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
@@ -143,18 +143,17 @@ struct TTSPlaybackControls: View {
             Button(action: onPlayPause) {
                 ZStack {
                     Circle()
-                        .fill(AppTheme.accent)
+                        .fill(.white)
                         .frame(width: 44, height: 44)
 
                     if isBuffering {
                         ProgressView()
                             .progressViewStyle(.circular)
-                            .tint(.white)
+                            .tint(.black)
                     } else {
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(.white)
-                            .offset(x: isPlaying ? 0 : 2)
+                            .foregroundStyle(.black)
                     }
                 }
                 .frame(minWidth: 44, minHeight: 44)
@@ -306,19 +305,35 @@ struct TTSVoiceChip: View {
 
 /// Base hue plus its two split-complementary accents; stable after random assignment.
 enum TTSVoicePalette {
+    /// Hues between yellow-green and teal read as "green", which looks muddy next
+    /// to the rest of the palette. A stored hue outside that band is left alone, so
+    /// a voice that already looked right keeps its colour.
+    private static func safeHue(_ value: Double) -> Double {
+        let hue = value - floor(value)
+        guard (0.19...0.47).contains(hue) else { return hue }
+        return hue < 0.33 ? 0.13 : 0.58
+    }
+
     static func colors(for voiceId: String) -> [Color] {
         let defaults = UserDefaults.standard, key = "tts.voice-palette.v2"
         var assigned = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
         let hue: Double
-        if let saved = assigned[voiceId], saved.isFinite, (0..<1).contains(saved) { hue = saved }
-        else {
-            let candidates = (0..<32).map { _ in Double.random(in: 0..<1) }
-            func distance(_ h: Double) -> Double { assigned.values.map { min(abs(h - $0), 1 - abs(h - $0)) }.min() ?? 1 }
-            hue = candidates.max { distance($0) < distance($1) } ?? 0.94
-            assigned[voiceId] = hue; defaults.set(assigned, forKey: key)
+        if let saved = assigned[voiceId], saved.isFinite {
+            hue = safeHue(saved)
+        } else {
+            // Curated hues: warm ambers/roses and cool azures. No greens.
+            let curated: [Double] = [0.02, 0.06, 0.10, 0.13, 0.17, 0.56, 0.60, 0.64, 0.68, 0.90, 0.94, 0.97]
+            func distance(_ candidate: Double) -> Double {
+                assigned.values.map { let d = abs(candidate - safeHue($0)); return min(d, 1 - d) }.min() ?? 1
+            }
+            hue = curated.max { distance($0) < distance($1) } ?? 0.02
+            assigned[voiceId] = hue
+            defaults.set(assigned, forKey: key)
         }
-        return [Color(hue: hue, saturation: 0.65, brightness: 0.56),
-                Color(hue: (hue + 0.42).truncatingRemainder(dividingBy: 1), saturation: 0.58, brightness: 0.48),
-                Color(hue: (hue + 0.58).truncatingRemainder(dividingBy: 1), saturation: 0.62, brightness: 0.60)]
+        // Analogous partners keep each voice in one colour family, so no gradient
+        // ever pairs green with purple.
+        return [Color(hue: hue, saturation: 0.60, brightness: 0.54),
+                Color(hue: (hue + 0.045).truncatingRemainder(dividingBy: 1), saturation: 0.54, brightness: 0.44),
+                Color(hue: (hue - 0.05 + 1).truncatingRemainder(dividingBy: 1), saturation: 0.64, brightness: 0.60)]
     }
 }
