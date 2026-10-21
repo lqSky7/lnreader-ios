@@ -90,6 +90,7 @@ struct ChapterListView: View {
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption.weight(.semibold))
                 }.font(.subheadline.weight(.medium)).padding(.vertical, 12)
+                .contentShape(Rectangle())
             }.buttonStyle(.plain)
         }
         .padding(.horizontal)
