@@ -57,6 +57,7 @@ struct NovelDetailView: View {
                     status: localNovel?.status ?? statusFromSource,
                     inLibrary: localNovel?.inLibrary ?? false,
                     onToggleLibrary: toggleLibrary,
+                    hasStartedReading: localNovel?.chapters.contains(where: { !$0.unread || $0.readTime != nil || ($0.progress ?? 0) > 0 }) ?? false,
                     onContinueReading: continueReading
                 )
 
