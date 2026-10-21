@@ -212,7 +212,7 @@ struct NovelDetailView: View {
             
         case .progress:
             // Find the latest read chapter in the entire book
-            let readChapterPaths = allChapters.filter { !$0.unread }
+            let readChapterPaths = allChapters.filter { !$0.unread || $0.isInProgress }
             let targetIndex: Int
             
             if !readChapterPaths.isEmpty,
@@ -370,7 +370,14 @@ struct NovelDetailView: View {
         if let localNovel, !localNovel.chapters.isEmpty {
             let chapters = localNovel.chapters
             let readChapters = chapters.filter { !$0.unread }
-            
+
+            // The chapter opened most recently decides where to resume: if it is unfinished, reopen it.
+            if let lastOpened = chapters.filter({ $0.readTime != nil }).max(by: { ($0.readTime ?? .distantPast) < ($1.readTime ?? .distantPast) }),
+               lastOpened.unread {
+                navigateToChapter = ChapterDisplay(chapter: lastOpened)
+                return
+            }
+
             if !readChapters.isEmpty {
                 // Find the latest read chapter based on readTime (or fallback to position if no readTime is set)
                 let latestRead: Chapter? = {
@@ -381,19 +388,19 @@ struct NovelDetailView: View {
                         return readChapters.max(by: { $0.position < $1.position })
                     }
                 }()
-                
+
                 if let latestRead {
                     let unreadAfterLatest = chapters
                         .filter { $0.unread && $0.position > latestRead.position }
                         .sorted { $0.position < $1.position }
-                    
+
                     if let nextChapter = unreadAfterLatest.first {
                         navigateToChapter = ChapterDisplay(chapter: nextChapter)
                         return
                     }
                 }
             }
-            
+
             // Fallback: if no chapters are read, or no unread chapters exist after the latest read, open the first unread chapter
             let sorted = chapters.sorted { $0.position < $1.position }
             if let firstUnread = sorted.first(where: { $0.unread }) {

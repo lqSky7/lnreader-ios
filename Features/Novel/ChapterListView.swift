@@ -115,6 +115,7 @@ struct ChapterDisplay: Identifiable, Hashable {
     let bookmarked: Bool
     let downloaded: Bool
     let progress: Int?
+    let isInProgress: Bool
     let position: Int
     let chapterNumber: Double?
     let pluginId: String
@@ -129,6 +130,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.bookmarked = chapter.bookmark
         self.downloaded = chapter.isDownloaded
         self.progress = chapter.progress
+        self.isInProgress = chapter.isInProgress
         self.position = chapter.position
         self.chapterNumber = chapter.chapterNumber
         self.pluginId = chapter.novel?.pluginId ?? ""
@@ -144,6 +146,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.bookmarked = false
         self.downloaded = false
         self.progress = nil
+        self.isInProgress = false
         self.position = position
         self.chapterNumber = sourceChapter.chapterNumber
         self.pluginId = pluginId

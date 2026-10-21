@@ -2,6 +2,22 @@ import Combine
 import Foundation
 import WebKit
 
+struct ReaderScrollPosition: Equatable {
+    /// Index of the paragraph at the top of the viewport (the last paragraph when scrolled to the bottom).
+    let paragraphIndex: Int
+    let totalParagraphs: Int
+
+    /// Parses the "index:total" payload posted by the reader's scroll listener.
+    init?(message: String) {
+        let parts = message.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2, parts[0] >= 0, parts[1] > 0 else { return nil }
+        paragraphIndex = min(parts[0], parts[1] - 1)
+        totalParagraphs = parts[1]
+    }
+
+    var percent: Int { min(max(Int((Double(paragraphIndex + 1) / Double(totalParagraphs) * 100).rounded()), 0), 100) }
+}
+
 struct TTSSourcePosition: Equatable {
     let paragraphIndex: Int
     let offset: Int
@@ -12,7 +28,7 @@ final class ReaderContentBridge: ObservableObject {
     weak var webView: WKWebView?
     @Published private(set) var isReady = false
     @Published private(set) var isFollowing = true
-    let paragraphScrollPublisher = PassthroughSubject<Int, Never>()
+    let paragraphScrollPublisher = PassthroughSubject<ReaderScrollPosition, Never>()
     let wordTapPublisher = PassthroughSubject<TTSSourcePosition, Never>()
     private var activeWord: TTSWordTiming?
     private var activeIndex: Int?
@@ -36,7 +52,9 @@ final class ReaderContentBridge: ObservableObject {
         if name == "ttsFollowChanged", let following = body as? Bool { isFollowing = following; return true }
         return false
     }
-    func onParagraphScroll(_ index: Int) { paragraphScrollPublisher.send(index) }
+    func onParagraphScroll(_ message: String) {
+        if let position = ReaderScrollPosition(message: message) { paragraphScrollPublisher.send(position) }
+    }
     func scrollToParagraph(_ index: Int) { evaluate("window.scrollToParagraph && window.scrollToParagraph(\(index))") }
     func prepareTTS() { evaluate("window.prepareTTS && window.prepareTTS()") }
     func fetchTTSBlocks() async -> [String] {

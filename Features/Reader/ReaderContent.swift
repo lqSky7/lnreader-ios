@@ -82,10 +82,9 @@ import WebKit
                         self?.onParagraphTap?(index)
                     }
                 } else if message.name == "scrollParagraph",
-                          let body = message.body as? String,
-                          let index = Int(body) {
+                          let body = message.body as? String {
                     DispatchQueue.main.async { [weak self] in
-                        self?.bridge?.onParagraphScroll(index)
+                        self?.bridge?.onParagraphScroll(body)
                     }
                 } else if message.name == "jsError",
                           let errorBody = message.body as? String {
@@ -424,10 +423,9 @@ import WebKit
                         self?.onParagraphTap?(index)
                     }
                 } else if message.name == "scrollParagraph",
-                          let body = message.body as? String,
-                          let index = Int(body) {
+                          let body = message.body as? String {
                     DispatchQueue.main.async { [weak self] in
-                        self?.bridge?.onParagraphScroll(index)
+                        self?.bridge?.onParagraphScroll(body)
                     }
                 } else if message.name == "toggleControls" {
                     DispatchQueue.main.async { [weak self] in
@@ -1107,7 +1105,10 @@ extension ReaderContent {
             var target = document.querySelector('[data-tts-index="' + index + '"]');
             if (!target) return;
             window.__restoreIndex = index;
-            target.scrollIntoView({ behavior: 'auto', block: 'center' });
+            // Ignore scroll events caused by the restore itself so they cannot overwrite the saved position.
+            window.__ignoreScrollUntil = Date.now() + 700;
+            target.scrollIntoView({ behavior: 'auto', block: 'start' });
+            window.scrollBy(0, -80);
         }
 
         window.getParagraphs = function() {
@@ -1269,31 +1270,47 @@ extension ReaderContent {
             }
         };
 
+        window.reportReadingPosition = function() {
+            if (!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph)) return;
+            var paragraphs = window.getParagraphs();
+            if (!paragraphs.length) return;
+            var lastIndex = -1;
+            for (var j = paragraphs.length - 1; j >= 0 && lastIndex < 0; j--) {
+                var lastAttr = paragraphs[j].getAttribute("data-tts-index");
+                if (lastAttr) lastIndex = parseInt(lastAttr);
+            }
+            var root = document.scrollingElement || document.documentElement;
+            var atBottom = window.scrollY + window.innerHeight >= root.scrollHeight - 48;
+            var topIndex = -1;
+            if (atBottom) {
+                topIndex = lastIndex;
+            } else {
+                for (var i = 0; i < paragraphs.length; i++) {
+                    if (paragraphs[i].getBoundingClientRect().bottom > 80) {
+                        var indexAttr = paragraphs[i].getAttribute("data-tts-index");
+                        if (indexAttr) { topIndex = parseInt(indexAttr); break; }
+                    }
+                }
+            }
+            if (topIndex >= 0 && lastIndex >= 0) {
+                window.webkit.messageHandlers.scrollParagraph.postMessage(topIndex + ":" + (lastIndex + 1));
+            }
+        };
+
         window.addEventListener("scroll", function() {
+            if (window.__ignoreScrollUntil && Date.now() < window.__ignoreScrollUntil) return;
             if (window.__scrollTimeout) {
                 clearTimeout(window.__scrollTimeout);
             }
-            window.__scrollTimeout = setTimeout(function() {
-                var paragraphs = window.getParagraphs();
-                var topIndex = -1;
-                for (var i = 0; i < paragraphs.length; i++) {
-                    var node = paragraphs[i];
-                    var rect = node.getBoundingClientRect();
-                    if (rect.bottom > 80) {
-                        var indexAttr = node.getAttribute("data-tts-index");
-                        if (indexAttr) {
-                            var index = parseInt(indexAttr);
-                            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph) {
-                                window.webkit.messageHandlers.scrollParagraph.postMessage(String(index));
-                            }
-                            break;
-                        }
-                    }
-                }
-                if (topIndex >= 0 && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph) {
-                    window.webkit.messageHandlers.scrollParagraph.postMessage(String(topIndex));
-                }
-            }, 300);
+            window.__scrollTimeout = setTimeout(window.reportReadingPosition, 300);
+        });
+
+        // A chapter that fits on one screen never scrolls, so report it once as fully read.
+        window.addEventListener("load", function() {
+            setTimeout(function() {
+                var root = document.scrollingElement || document.documentElement;
+                if (root.scrollHeight <= window.innerHeight + 48 && !window.__restoreIndex) window.reportReadingPosition();
+            }, 800);
         });
 
         \(ReaderTTSJavaScript.interaction)
