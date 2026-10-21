@@ -277,15 +277,13 @@ struct ReaderView: View {
                 if speechScrubTime == nil { ttsBridge.setActiveWord(ttsManager.currentWord) }
                 
                 // Save reading progress to database
-                if let chapter = currentChapter {
-                    chapter.lastReadParagraphIndex = newIndex
-                    
-                    let total = ttsManager.totalBlocks
-                    if total > 0 {
-                        let percent = Int(Double(newIndex + 1) / Double(total) * 100)
-                        chapter.progress = min(max(percent, 0), 100)
-                    }
-                    try? modelContext.save()
+                let total = ttsManager.totalBlocks
+                if let chapter = currentChapter, total > 0 {
+                    let percent = Int(Double(newIndex + 1) / Double(total) * 100)
+                    libraryManager.recordReadingPosition(
+                        chapter: chapter, paragraphIndex: newIndex,
+                        percent: min(max(percent, 0), 100), context: modelContext
+                    )
                 }
             }
         }
@@ -307,13 +305,13 @@ struct ReaderView: View {
         .alert("Narration", isPresented: Binding(get: { ttsManager.errorMessage != nil }, set: { if !$0 { ttsManager.errorMessage = nil } })) {
             Button("OK", role: .cancel) { ttsManager.errorMessage = nil }
         } message: { Text(ttsManager.errorMessage ?? "") }
-        .onReceive(ttsBridge.paragraphScrollPublisher) { index in
+        .onReceive(ttsBridge.paragraphScrollPublisher) { position in
             // Only update progress when TTS is not active (TTS updates it automatically)
-            guard !isCurrentSpeech else { return }
-            if let chapter = currentChapter {
-                chapter.lastReadParagraphIndex = index
-                try? modelContext.save()
-            }
+            guard !isCurrentSpeech, let chapter = currentChapter else { return }
+            libraryManager.recordReadingPosition(
+                chapter: chapter, paragraphIndex: position.paragraphIndex,
+                percent: position.percent, context: modelContext
+            )
         }
         .onAppear {
             FocusModeManager.shared.updateFocusStatus()

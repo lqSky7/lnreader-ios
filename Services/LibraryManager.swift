@@ -99,10 +99,42 @@ final class LibraryManager {
         )
         context.insert(entry)
 
+        // Opening a chapter is not reading it: `unread` flips only once the reader reaches the end.
         novel.lastReadAt = .now
         chapter.readTime = .now
-        chapter.unread = false
 
+        try? context.save()
+    }
+
+    /// Record how far the user has read into a chapter.
+    /// Reaching `Chapter.finishedThreshold` marks the chapter read; a finished chapter keeps 100%
+    /// and reopens from the top, while rereading it never moves it back to unread.
+    func recordReadingPosition(
+        chapter: Chapter,
+        paragraphIndex: Int,
+        percent: Int,
+        context: ModelContext
+    ) {
+        let finished = !chapter.unread && chapter.progress == 100
+        if finished {
+            chapter.lastReadParagraphIndex = percent >= Chapter.finishedThreshold ? 0 : paragraphIndex
+        } else if percent >= Chapter.finishedThreshold {
+            chapter.unread = false
+            chapter.progress = 100
+            chapter.lastReadParagraphIndex = 0
+        } else {
+            chapter.progress = percent
+            chapter.lastReadParagraphIndex = paragraphIndex
+        }
+        chapter.readTime = .now
+
+        if let novel = chapter.novel {
+            let novelPath = novel.path, pluginId = novel.pluginId
+            let predicate = #Predicate<ReadingHistory> { $0.novelPath == novelPath && $0.pluginId == pluginId }
+            if let entries = try? context.fetch(FetchDescriptor(predicate: predicate)) {
+                for entry in entries where entry.chapterPath == chapter.path { entry.progress = chapter.progress }
+            }
+        }
         try? context.save()
     }
 

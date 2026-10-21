@@ -12,6 +12,7 @@ struct NovelHeaderView: View {
     let status: NovelStatus
     let inLibrary: Bool
     let onToggleLibrary: () -> Void
+    var hasStartedReading: Bool = true
     let onContinueReading: () -> Void
 
     @Namespace private var namespace
@@ -96,7 +97,7 @@ struct NovelHeaderView: View {
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 12) {
                     Button(action: onContinueReading) {
-                        Label("Continue", systemImage: "book.fill")
+                        Label(hasStartedReading ? "Continue" : "Start Reading", systemImage: "book.fill")
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                             .frame(maxWidth: .infinity, minHeight: 44)

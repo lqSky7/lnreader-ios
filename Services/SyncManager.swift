@@ -29,6 +29,7 @@ struct SyncChapterPayload: Codable {
     var page: String
     var position: Int
     var progress: Int?
+    var lastReadParagraphIndex: Int?
 }
 
 struct SyncNovelPayload: Codable {
@@ -258,6 +259,7 @@ final class SyncManager {
                 chapter.page = remoteChapter.page
                 chapter.position = remoteChapter.position
                 chapter.progress = remoteChapter.progress
+                chapter.lastReadParagraphIndex = remoteChapter.lastReadParagraphIndex
             }
         }
 
@@ -355,6 +357,7 @@ extension SyncChapterPayload {
         self.page = chapter.page
         self.position = chapter.position
         self.progress = chapter.progress
+        self.lastReadParagraphIndex = chapter.lastReadParagraphIndex
     }
 }
 

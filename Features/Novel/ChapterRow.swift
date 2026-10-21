@@ -44,7 +44,7 @@ struct ChapterRow: View {
                                 .foregroundStyle(.tertiary)
                         }
 
-                        if let progress = chapter.progress, progress > 0 {
+                        if chapter.unread, let progress = chapter.progress, progress > 0, progress < 100 {
                             Text("\(progress)%")
                                 .font(Typography.small)
                                 .foregroundStyle(.secondary)

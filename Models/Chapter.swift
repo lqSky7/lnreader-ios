@@ -46,6 +46,16 @@ final class Chapter: Hashable {
     /// When the chapter was last updated from source
     var updatedTime: Date?
 
+    // MARK: - Reading state
+
+    /// Progress at or above which a chapter counts as finished.
+    static let finishedThreshold = 95
+
+    /// Whether the user stopped partway through this chapter and should resume it.
+    var isInProgress: Bool {
+        unread && (lastReadParagraphIndex ?? 0) > 0
+    }
+
     // MARK: - Relationships
 
     /// The novel this chapter belongs to

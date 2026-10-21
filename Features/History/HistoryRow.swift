@@ -35,7 +35,7 @@ struct HistoryRow: View {
                         .font(Typography.small)
                         .foregroundStyle(.tertiary)
 
-                    if let progress = entry.progress, progress > 0 {
+                    if let progress = entry.progress, progress > 0, progress < 100 {
                         Text("\(progress)%")
                             .font(Typography.small)
                             .foregroundStyle(.secondary)
