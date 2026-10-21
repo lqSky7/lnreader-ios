@@ -14,7 +14,7 @@ struct BadgeView: View {
 
         var color: Color {
             switch self {
-            case .accent: AppTheme.accent
+            case .accent: Color.primary
             case .secondary: .secondary
             }
         }
@@ -24,7 +24,7 @@ struct BadgeView: View {
         Text("\(count)")
             .font(Typography.small)
             .fontWeight(.bold)
-            .foregroundStyle(.white)
+            .foregroundStyle(AppTheme.onPrimaryFill)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(style.color, in: .capsule)
@@ -39,7 +39,7 @@ struct IconBadge: View {
     var body: some View {
         Image(systemName: icon)
             .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(AppTheme.onPrimaryFill)
             .padding(4)
             .background(color, in: .circle)
     }
@@ -49,7 +49,7 @@ struct IconBadge: View {
     HStack(spacing: 12) {
         BadgeView(count: 5)
         BadgeView(count: 42, style: .secondary)
-        IconBadge(icon: "arrow.down", color: AppTheme.accent)
+        IconBadge(icon: "arrow.down", color: .secondary)
     }
     .padding()
 }

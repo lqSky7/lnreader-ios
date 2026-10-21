@@ -5,6 +5,7 @@ import SwiftUI
 import Glur
 
 struct NovelHeaderView: View {
+    var transitionNamespace: Namespace.ID? = nil
     let name: String
     let author: String?
     let cover: String?
@@ -53,7 +54,7 @@ struct NovelHeaderView: View {
                     Rectangle()
                         .fill(
                             LinearGradient(
-                                colors: [AppTheme.accent.opacity(0.3), .clear],
+                                colors: [Color.primary.opacity(0.12), .clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -63,7 +64,7 @@ struct NovelHeaderView: View {
                 Rectangle()
                     .fill(
                         LinearGradient(
-                            colors: [AppTheme.accent.opacity(0.3), .clear],
+                            colors: [Color.primary.opacity(0.12), .clear],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -99,9 +100,12 @@ struct NovelHeaderView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                             .frame(maxWidth: .infinity, minHeight: 44)
+                            .foregroundStyle(.black)
+                            .background(.white, in: .capsule)
                     }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.plain)
                     .glassEffectID("continue", in: namespace)
+                    .bookTransitionSource("continue", in: transitionNamespace)
 
                     Button(action: onToggleLibrary) {
                         Label(
@@ -111,12 +115,11 @@ struct NovelHeaderView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                         .frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundStyle(.black)
+                        .background(.white, in: .capsule)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
                     .glassEffectID("library", in: namespace)
-                    #if os(macOS)
-                        .tint(.clear)
-                    #endif
                 }
             }
             .contentShape(.rect)

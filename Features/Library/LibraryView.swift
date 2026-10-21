@@ -6,6 +6,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
     @Environment(PluginManager.self) private var pluginManager
     @Environment(LibraryManager.self) private var libraryManager
@@ -17,6 +19,9 @@ struct LibraryView: View {
     private var novels: [Novel]
     @Query(sort: \Category.sort) private var categories: [Category]
 
+    @Namespace private var bookTransitions
+    @State private var lastReorderTarget: PersistentIdentifier?
+    @State private var editingOrder: [PersistentIdentifier] = []
     @State private var searchText = ""
     @State private var selectedCategory: Category?
     @AppStorage("general.defaultSortOrder") private var sortOrder: SortOrder = .lastRead
@@ -40,8 +45,8 @@ struct LibraryView: View {
                     EmptyStateView(
                         icon: "books.vertical",
                         title: "Your Library is Empty",
-                        subtitle: "Browse sources to find novels, or import an EPUB file.",
-                        actionTitle: "Import EPUB",
+                        subtitle: "Browse sources to find novels, or import an EPUB or PDF.",
+                        actionTitle: "Import book",
                         action: { showFileImporter = true }
                     )
                 } else {
@@ -57,6 +62,7 @@ struct LibraryView: View {
                         switch displayMode {
                         case .list:
                             LibraryListView(
+                                transitionNamespace: bookTransitions,
                                 novels: filteredNovels,
                                 isEditing: isEditingLibrary,
                                 draggedItem: $draggedItem,
@@ -76,6 +82,7 @@ struct LibraryView: View {
                             )
                         default:
                             LibraryGridView(
+                                transitionNamespace: bookTransitions,
                                 novels: filteredNovels,
                                 displayMode: displayMode,
                                 isEditing: isEditingLibrary,
@@ -97,6 +104,11 @@ struct LibraryView: View {
                         }
                     }
                     .immediateScrollTouches()
+                    .onDrop(of: [UTType.text], isTargeted: nil) { _ in
+                        guard draggedItem != nil else { return false }
+                        draggedItem = nil
+                        return true
+                    }
                     .refreshable {
                         await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
                     }
@@ -108,7 +120,7 @@ struct LibraryView: View {
                 if isEditingLibrary {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
-                            withAnimation {
+                            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
                                 isEditingLibrary = false
                             }
                         }
@@ -122,6 +134,16 @@ struct LibraryView: View {
                         onImport: { showFileImporter = true }
                     )
                 }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active && isEditingLibrary {
+                    commitLibraryPositions(clearOrder: false)
+                    draggedItem = nil
+                }
+            }
+            .onChange(of: draggedItem) { _, item in
+                lastReorderTarget = nil
+                if item == nil && isEditingLibrary { commitLibraryPositions(clearOrder: false) }
             }
             .onChange(of: isEditingLibrary) { _, editing in
                 if !editing {
@@ -142,10 +164,11 @@ struct LibraryView: View {
             }
             .navigationDestination(for: Novel.self) { novel in
                 NovelDetailView(novel: novel)
+                    .bookZoom(from: novel.persistentModelID, in: bookTransitions)
             }
             .fileImporter(
                 isPresented: $showFileImporter,
-                allowedContentTypes: [UTType(filenameExtension: "epub")].compactMap { $0 },
+                allowedContentTypes: [UTType(filenameExtension: "epub"), .pdf].compactMap { $0 },
                 allowsMultipleSelection: false
             ) { result in
                 switch result {
@@ -159,7 +182,8 @@ struct LibraryView: View {
                             }
                         }
                         do {
-                            try LocalBookManager.importEPUB(at: url, context: modelContext)
+                            if url.pathExtension.lowercased() == "pdf" { try LocalBookManager.importPDF(at: url, context: modelContext) }
+                            else { try LocalBookManager.importEPUB(at: url, context: modelContext) }
                         } catch {
                             importError = error.localizedDescription
                             showImportError = true
@@ -212,7 +236,15 @@ struct LibraryView: View {
         let sorted: [Novel]
         switch sortOrder {
         case .custom:
-            sorted = novels.sorted { $0.libraryPosition < $1.libraryPosition }
+            if isEditingLibrary {
+                let ranks = Dictionary(uniqueKeysWithValues: editingOrder.enumerated().map { ($1, $0) })
+                return novels.sorted { (ranks[$0.persistentModelID] ?? Int.max) < (ranks[$1.persistentModelID] ?? Int.max) }
+            }
+            let ordered = novels.sorted {
+                if $0.libraryPosition != $1.libraryPosition { return $0.libraryPosition < $1.libraryPosition }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+            return sortDirection.isAscending ? ordered : ordered.reversed()
         case .alphabetical:
             sorted = novels.sorted {
                 $0.name.localizedCompare($1.name) == .orderedAscending
@@ -242,37 +274,31 @@ struct LibraryView: View {
     }
 
     private func startEditing() {
-        withAnimation {
+        let order = sortedNovels(novels).map(\.persistentModelID)
+        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
+            editingOrder = order
+            lastReorderTarget = nil
+            sortOrder = .custom
+            sortDirection = .ascending
             isEditingLibrary = true
-            if sortOrder != .custom {
-                sortOrder = .custom
-                sortDirection = .ascending
-            }
         }
     }
 
     private func reorderNovels(dragged: Novel, target: Novel) {
-        let visibleList = filteredNovels
-        guard let fromIndex = visibleList.firstIndex(of: dragged),
-              let toIndex = visibleList.firstIndex(of: target),
-              fromIndex != toIndex else { return }
-
-        // Lightweight swap: only update the two novels' positions so the
-        // ForEach re-sorts without rebuilding the entire array each frame.
-        withAnimation(.easeInOut(duration: 0.2)) {
-            let draggedPos = dragged.libraryPosition
-            dragged.libraryPosition = target.libraryPosition
-            target.libraryPosition = draggedPos
+        guard lastReorderTarget != target.persistentModelID,
+              dragged.persistentModelID != target.persistentModelID else { return }
+        lastReorderTarget = target.persistentModelID
+        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
+            editingOrder = LibraryReordering.move(dragged.persistentModelID, to: target.persistentModelID, in: editingOrder)
         }
     }
 
-    /// Normalise all library positions to sequential integers after a drag
-    /// session ends. This prevents gaps/collisions from accumulating.
-    private func commitLibraryPositions() {
-        let ordered = filteredNovels.sorted { $0.libraryPosition < $1.libraryPosition }
-        for (index, novel) in ordered.enumerated() {
-            novel.libraryPosition = index
-        }
+    private func commitLibraryPositions(clearOrder: Bool = true) {
+        let byID = Dictionary(uniqueKeysWithValues: novels.map { ($0.persistentModelID, $0) })
+        let current = Set(editingOrder)
+        let order = editingOrder + novels.filter { !current.contains($0.persistentModelID) }.map(\.persistentModelID)
+        for (index, id) in order.enumerated() { byID[id]?.libraryPosition = index }
         try? modelContext.save()
+        if clearOrder { editingOrder = [] }
     }
 }

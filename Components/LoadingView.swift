@@ -11,7 +11,7 @@ struct LoadingView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .controlSize(.large)
-                .tint(AppTheme.accent)
+                .tint(.secondary)
 
             if let message {
                 Text(message)

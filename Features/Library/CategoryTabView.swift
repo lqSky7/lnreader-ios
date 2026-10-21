@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct CategoryTabView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let categories: [Category]
     @Binding var selectedCategory: Category?
     @Namespace private var namespace
@@ -40,17 +41,16 @@ struct CategoryTabView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button {
-            withAnimation { action() }
+            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { action() }
         } label: {
             Text(title)
                 .font(Typography.caption)
+                .fontWeight(isSelected ? .semibold : .regular)
+                .foregroundStyle(isSelected ? .primary : .secondary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
         }
-        .glassEffect(
-            isSelected ? .regular.tint(AppTheme.accent) : .regular,
-            in: .capsule
-        )
+        .glassEffect(.regular, in: .capsule)
         .contentShape(.capsule)
     }
 }

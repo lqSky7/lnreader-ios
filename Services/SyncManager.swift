@@ -84,13 +84,13 @@ final class SyncManager {
 
     var backendURL: String = UserDefaults.standard.string(forKey: "sync.backendURL") ?? SyncManager.defaultBackendURL
 
-    static let defaultBackendURL = "https://lnreader-sync.onrender.com"
+    static let defaultBackendURL = "https://lnreader.traverses.dpdns.org"
     /// Retired Azure backend — existing installs still have this saved.
     private static let legacyBackendURL = "https://lnreader-sync-sky788.azurewebsites.net"
 
     init() {
         // One-time migration off the retired Azure backend.
-        if backendURL == Self.legacyBackendURL {
+        if backendURL == Self.legacyBackendURL || backendURL == "https://lnreader-sync.onrender.com" {
             backendURL = Self.defaultBackendURL
             UserDefaults.standard.set(backendURL, forKey: "sync.backendURL")
         }
@@ -253,7 +253,7 @@ final class SyncManager {
                 chapter.releaseTime = remoteChapter.releaseTime
                 chapter.bookmark = remoteChapter.bookmark
                 chapter.unread = remoteChapter.unread
-                chapter.isDownloaded = remoteChapter.isDownloaded
+                // Download availability is verified from local files, never copied from another device.
                 chapter.chapterNumber = remoteChapter.chapterNumber
                 chapter.page = remoteChapter.page
                 chapter.position = remoteChapter.position

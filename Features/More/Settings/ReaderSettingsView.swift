@@ -38,6 +38,6 @@ struct ReaderSettingsView: View {
             isEmbedded: true
         )
         .navigationTitle("Reader Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryGridView: View {
+    var transitionNamespace: Namespace.ID? = nil
     let novels: [Novel]
     let displayMode: DisplayMode
     let isEditing: Bool
@@ -43,6 +44,7 @@ struct LibraryGridView: View {
                         ))
                 } else {
                     InteractiveGridCell(
+                        transitionNamespace: transitionNamespace,
                         novel: novel,
                         displayMode: displayMode,
                         onSelect: onSelect,
@@ -60,6 +62,7 @@ struct LibraryGridView: View {
 /// Separates the delete badge from the drag surface so taps on the badge
 /// aren't swallowed by the drag gesture.
 struct EditableGridCell: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let novel: Novel
     let displayMode: DisplayMode
     let isDragging: Bool
@@ -75,13 +78,14 @@ struct EditableGridCell: View {
         .contentShape(Rectangle())
         .wiggle(when: true)
         .opacity(isDragging ? 0.4 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isDragging)
+        .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isDragging)
     }
 }
 
 // MARK: - Interactive Grid Cell Wrapper
 
 struct InteractiveGridCell: View {
+    var transitionNamespace: Namespace.ID? = nil
     let novel: Novel
     let displayMode: DisplayMode
     var onSelect: (Novel) -> Void
@@ -98,6 +102,7 @@ struct InteractiveGridCell: View {
             }
         }) {
             NovelGridCell(
+                transitionNamespace: transitionNamespace,
                 novel: novel,
                 displayMode: displayMode,
                 isEditing: false,
@@ -122,6 +127,7 @@ struct InteractiveGridCell: View {
 // MARK: - Grid Cell
 
 struct NovelGridCell: View {
+    var transitionNamespace: Namespace.ID? = nil
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
     let novel: Novel
     let displayMode: DisplayMode
@@ -136,6 +142,7 @@ struct NovelGridCell: View {
                         url: novel.cover,
                         aspectRatio: LayoutConstants.coverAspectRatio
                     )
+                    .bookTransitionSource(novel.persistentModelID, in: transitionNamespace)
 
                     if isEditing {
                         DeleteBadge(action: onDelete)

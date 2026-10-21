@@ -45,7 +45,7 @@ struct UpdateRow: View {
             // Unread indicator
             if chapter.unread {
                 Circle()
-                    .fill(AppTheme.accent)
+                    .fill(Color.primary)
                     .frame(width: 8, height: 8)
             }
         }

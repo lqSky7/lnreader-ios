@@ -1,9 +1,74 @@
 import Foundation
 import SwiftData
+import PDFKit
 
 /// Manages importing local e-books, unzipping their contents, parsing EPUB metadata/chapters, and inserting records into SwiftData.
 @MainActor
 final class LocalBookManager {
+    /// PDF outlines define chapters; PDFs without outlines use eight-page sections.
+    static func importPDF(at fileURL: URL, context: ModelContext) throws {
+        guard let document = PDFDocument(url: fileURL), document.pageCount > 0 else { throw TTSError.request("This PDF could not be opened.") }
+        var pages: [[String]] = []
+        for index in 0..<document.pageCount {
+            pages.append((document.page(at: index)?.string ?? "").components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) })
+        }
+        guard pages.joined().contains(where: { !$0.isEmpty }) else { throw TTSError.request("This PDF has no selectable text. Import an EPUB or a PDF with a text layer.") }
+        // Only repeated margin lines qualify as running headers/footers.
+        var margins: [String: Int] = [:]
+        for lines in pages {
+            for line in Set(Array(lines.filter { !$0.isEmpty }.prefix(2)) + Array(lines.filter { !$0.isEmpty }.suffix(2))) where !line.isEmpty { margins[line, default: 0] += 1 }
+        }
+        let recurring = Set(margins.filter { $0.value >= max(3, document.pageCount / 3) }.map(\.key))
+        var starts: [(Int, String)] = []
+        func collect(_ outline: PDFOutline) {
+            if let page = outline.destination?.page {
+                let index = document.index(for: page)
+                if index != NSNotFound { starts.append((index, outline.label ?? "Section \(index + 1)")) }
+            }
+            for index in 0..<outline.numberOfChildren { if let child = outline.child(at: index) { collect(child) } }
+        }
+        if let outline = document.outlineRoot { collect(outline) }
+        starts.sort { $0.0 < $1.0 }
+        var seen: Set<Int> = []
+        starts = starts.filter { seen.insert($0.0).inserted }
+        if starts.isEmpty { starts = stride(from: 0, to: document.pageCount, by: 8).map { ($0, "Pages \($0 + 1)–\(min($0 + 8, document.pageCount))") } }
+        else if starts[0].0 > 0 { starts.insert((0, "Front matter"), at: 0) }
+        let id = UUID().uuidString
+        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalNovels").appendingPathComponent(id)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let title = document.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String ?? fileURL.deletingPathExtension().lastPathComponent
+        let novel = Novel(path: "local://\(id)", pluginId: "local", name: title, author: document.documentAttributes?[PDFDocumentAttribute.authorAttribute] as? String)
+        novel.isLocal = true; novel.inLibrary = true
+        var chapters: [Chapter] = []
+        do {
+            for (position, section) in starts.enumerated() {
+                let end = position + 1 < starts.count ? starts[position + 1].0 : document.pageCount
+                var paragraphs: [String] = []
+                for pageIndex in section.0..<end {
+                    let lines = pages[pageIndex]
+                    var paragraph = ""
+                    func flush() { if !paragraph.isEmpty { paragraphs.append(paragraph); paragraph = "" } }
+                    for (lineIndex, line) in lines.enumerated() {
+                        let margin = lineIndex < 2 || lineIndex >= lines.count - 2
+                        if margin && (recurring.contains(line) || line.range(of: #"^(?:Page\s+)?\d+(?:\s+of\s+\d+)?$"#, options: [.regularExpression, .caseInsensitive]) != nil) { continue }
+                        if line.isEmpty { flush(); continue }
+                        let clean = line.replacingOccurrences(of: #"[⁰¹²³⁴⁵⁶⁷⁸⁹]+"#, with: "", options: .regularExpression)
+                        if paragraph.hasSuffix("-") { paragraph.removeLast(); paragraph += clean }
+                        else { paragraph += (paragraph.isEmpty ? "" : " ") + clean }
+                    }
+                    flush()
+                }
+                guard !paragraphs.isEmpty else { continue }
+                let path = "chapter-\(position).html"
+                try TTSBookIdentity.html(blocks: paragraphs).write(to: directory.appendingPathComponent(path), atomically: true, encoding: .utf8)
+                let chapter = Chapter(path: path, name: section.1, position: chapters.count)
+                chapter.isDownloaded = true; chapter.novel = novel; chapters.append(chapter)
+            }
+            novel.chapters = chapters
+            context.insert(novel)
+            try context.save()
+        } catch { try? FileManager.default.removeItem(at: directory); throw error }
+    }
     
     /// Imports an EPUB file, extracts all its assets, parses its structural metadata, and inserts it into SwiftData.
     static func importEPUB(at fileURL: URL, context: ModelContext) throws {

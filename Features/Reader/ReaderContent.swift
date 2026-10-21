@@ -24,6 +24,9 @@ import WebKit
         let characterSpacing: Double
         let wordSpacing: Double
         let grainIntensity: Double
+        let highlightColorHex: String
+        let highlightOpacity: Double
+        let justifyText: Bool
         let commentsHtml: String
         let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
@@ -54,6 +57,9 @@ import WebKit
             var loadedCharacterSpacing: Double?
             var loadedWordSpacing: Double?
             var loadedGrainIntensity: Double?
+            var loadedHighlightColorHex: String?
+            var loadedHighlightOpacity: Double?
+            var loadedJustifyText: Bool?
             var loadedCommentsHtml: String?
             var loadedHasMoreComments: Bool?
 
@@ -68,6 +74,7 @@ import WebKit
             }
 
             func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+                if bridge?.receive(message.name, body: message.body) == true { return }
                 if message.name == "tapParagraph",
                    let body = message.body as? String,
                    let index = Int(body) {
@@ -114,6 +121,8 @@ import WebKit
             let userContentController = WKUserContentController()
             let helper = ScriptMessageHandlerHelper(delegate: context.coordinator)
             userContentController.add(helper, name: "tapParagraph")
+            userContentController.add(helper, name: "ttsWordTap")
+            userContentController.add(helper, name: "ttsFollowChanged")
             userContentController.add(helper, name: "scrollParagraph")
             userContentController.add(helper, name: "jsError")
             userContentController.add(helper, name: "toggleControls")
@@ -123,8 +132,9 @@ import WebKit
             config.userContentController = userContentController
 
             let webView = WKWebView(frame: .zero, configuration: config)
-            let uiColor = UIColor(hex: backgroundColorHex) ?? .systemBackground
-            webView.isOpaque = true
+            let uiColor = UIColor(hex: backgroundColorHex) ?? UIColor(AppTheme.readerBackground)
+            webView.isOpaque = false
+            webView.underPageBackgroundColor = uiColor
             webView.backgroundColor = uiColor
             webView.scrollView.backgroundColor = uiColor
             webView.scrollView.showsHorizontalScrollIndicator = false
@@ -142,7 +152,8 @@ import WebKit
             context.coordinator.bridge = bridge
             
             #if os(iOS)
-            let uiColor = UIColor(hex: backgroundColorHex) ?? .systemBackground
+            let uiColor = UIColor(hex: backgroundColorHex) ?? UIColor(AppTheme.readerBackground)
+            webView.underPageBackgroundColor = uiColor
             webView.backgroundColor = uiColor
             webView.scrollView.backgroundColor = uiColor
             webView.scrollView.isScrollEnabled = true
@@ -163,7 +174,10 @@ import WebKit
                                context.coordinator.loadedLineFocusDulling != lineFocusDulling ||
                                context.coordinator.loadedCharacterSpacing != characterSpacing ||
                                context.coordinator.loadedWordSpacing != wordSpacing ||
-                               context.coordinator.loadedGrainIntensity != grainIntensity
+                               context.coordinator.loadedGrainIntensity != grainIntensity ||
+                               context.coordinator.loadedHighlightColorHex != highlightColorHex ||
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity ||
+                               context.coordinator.loadedJustifyText != justifyText
             
             #if DEBUG
             print("🔊 [ReaderContent] updateUIView. loadedHtmlContentIsNil: \(context.coordinator.loadedHtmlContent == nil), contentChanged: \(contentChanged), styleChanged: \(styleChanged)")
@@ -218,7 +232,9 @@ import WebKit
                 if context.coordinator.loadedWordSpacing != wordSpacing {
                     print("🔊   -> wordSpacing changed! (\(String(describing: context.coordinator.loadedWordSpacing)) -> \(wordSpacing))")
                 }
-                if context.coordinator.loadedGrainIntensity != grainIntensity {
+                if context.coordinator.loadedGrainIntensity != grainIntensity ||
+                               context.coordinator.loadedHighlightColorHex != highlightColorHex ||
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity {
                     print("🔊   -> grainIntensity changed! (\(String(describing: context.coordinator.loadedGrainIntensity)) -> \(grainIntensity))")
                 }
                 #endif
@@ -246,6 +262,9 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             } else if commentsChanged {
                 context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
@@ -256,8 +275,8 @@ import WebKit
                 let lineFocusHeight = resolvedLineFocusHeight(lines: lineFocusLines, fontSize: fontSize, lineHeight: lineHeight)
                 let lineFocusDisplay = lineFocusEnabled ? "block" : "none"
                 
-                let topOffset = 70.0 + verticalPadding
-                let bottomOffset = verticalPadding
+                let topOffset = 136.0 + verticalPadding
+                let bottomOffset = 120.0 + verticalPadding
                 
                 let js = """
                 document.body.style.fontFamily = "'\(fontFamily)', 'Georgia', serif";
@@ -271,6 +290,9 @@ import WebKit
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
+                document.documentElement.style.setProperty('--reader-text-align', '\(justifyText ? "justify" : "start")');
+                document.documentElement.style.setProperty('--reader-highlight', '\(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity))');
+                if (window.__ttsWord) { requestAnimationFrame(function() { window.setTTSActiveWord(window.__ttsWord); }); }
                 var ruler = document.getElementById("line-focus-ruler");
                 if (ruler) {
                     ruler.style.display = '\(lineFocusDisplay)';
@@ -280,7 +302,7 @@ import WebKit
                 
                 var grain = document.getElementById("paper-grain-overlay");
                 if (grain) {
-                    grain.style.opacity = '\(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0)';
+                    grain.style.opacity = '\(grainIntensity / 100.0)';
                 }
                 """
                 webView.evaluateJavaScript(js)
@@ -299,6 +321,9 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             }
         }
 
@@ -321,6 +346,9 @@ import WebKit
             lhs.characterSpacing == rhs.characterSpacing &&
             lhs.wordSpacing == rhs.wordSpacing &&
             lhs.grainIntensity == rhs.grainIntensity &&
+            lhs.highlightColorHex == rhs.highlightColorHex &&
+            lhs.highlightOpacity == rhs.highlightOpacity &&
+            lhs.justifyText == rhs.justifyText &&
             lhs.commentsHtml == rhs.commentsHtml &&
             lhs.hasMoreComments == rhs.hasMoreComments
         }
@@ -345,6 +373,9 @@ import WebKit
         let characterSpacing: Double
         let wordSpacing: Double
         let grainIntensity: Double
+        let highlightColorHex: String
+        let highlightOpacity: Double
+        let justifyText: Bool
         let commentsHtml: String
         let hasMoreComments: Bool
         var onTap: (() -> Void)? = nil
@@ -370,6 +401,9 @@ import WebKit
             var loadedCharacterSpacing: Double?
             var loadedWordSpacing: Double?
             var loadedGrainIntensity: Double?
+            var loadedHighlightColorHex: String?
+            var loadedHighlightOpacity: Double?
+            var loadedJustifyText: Bool?
             var loadedCommentsHtml: String?
             var loadedHasMoreComments: Bool?
             weak var bridge: ReaderContentBridge?
@@ -382,6 +416,7 @@ import WebKit
             }
 
             func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+                if bridge?.receive(message.name, body: message.body) == true { return }
                 if message.name == "tapParagraph",
                    let body = message.body as? String,
                    let index = Int(body) {
@@ -427,6 +462,8 @@ import WebKit
             let userContentController = WKUserContentController()
             let helper = ScriptMessageHandlerHelper(delegate: context.coordinator)
             userContentController.add(helper, name: "tapParagraph")
+            userContentController.add(helper, name: "ttsWordTap")
+            userContentController.add(helper, name: "ttsFollowChanged")
             userContentController.add(helper, name: "scrollParagraph")
             userContentController.add(helper, name: "toggleControls")
             userContentController.add(helper, name: "loadMoreComments")
@@ -461,7 +498,10 @@ import WebKit
                                context.coordinator.loadedLineFocusDulling != lineFocusDulling ||
                                context.coordinator.loadedCharacterSpacing != characterSpacing ||
                                context.coordinator.loadedWordSpacing != wordSpacing ||
-                               context.coordinator.loadedGrainIntensity != grainIntensity
+                               context.coordinator.loadedGrainIntensity != grainIntensity ||
+                               context.coordinator.loadedHighlightColorHex != highlightColorHex ||
+                               context.coordinator.loadedHighlightOpacity != highlightOpacity ||
+                               context.coordinator.loadedJustifyText != justifyText
             
             if contentChanged || context.coordinator.loadedHtmlContent == nil || (commentsChanged && context.coordinator.loadedCommentsHtml == nil) {
                 bridge.contentDidChange()
@@ -485,6 +525,9 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             } else if commentsChanged {
                 context.coordinator.loadedCommentsHtml = commentsHtml
             } else if styleChanged {
@@ -495,8 +538,8 @@ import WebKit
                 let lineFocusHeight = resolvedLineFocusHeight(lines: lineFocusLines, fontSize: fontSize, lineHeight: lineHeight)
                 let lineFocusDisplay = lineFocusEnabled ? "block" : "none"
                 
-                let topOffset = 70.0 + verticalPadding
-                let bottomOffset = verticalPadding
+                let topOffset = 136.0 + verticalPadding
+                let bottomOffset = 120.0 + verticalPadding
                 
                 let js = """
                 document.body.style.fontFamily = "'\(fontFamily)', 'Georgia', serif";
@@ -510,6 +553,9 @@ import WebKit
                 document.body.style.background = '\(resolvedBg)';
                 document.body.style.color = '\(resolvedText)';
                 
+                document.documentElement.style.setProperty('--reader-text-align', '\(justifyText ? "justify" : "start")');
+                document.documentElement.style.setProperty('--reader-highlight', '\(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity))');
+                if (window.__ttsWord) { requestAnimationFrame(function() { window.setTTSActiveWord(window.__ttsWord); }); }
                 var ruler = document.getElementById("line-focus-ruler");
                 if (ruler) {
                     ruler.style.display = '\(lineFocusDisplay)';
@@ -519,7 +565,7 @@ import WebKit
                 
                 var grain = document.getElementById("paper-grain-overlay");
                 if (grain) {
-                    grain.style.opacity = '\(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0)';
+                    grain.style.opacity = '\(grainIntensity / 100.0)';
                 }
                 """
                 webView.evaluateJavaScript(js)
@@ -538,6 +584,9 @@ import WebKit
                 context.coordinator.loadedCharacterSpacing = characterSpacing
                 context.coordinator.loadedWordSpacing = wordSpacing
                 context.coordinator.loadedGrainIntensity = grainIntensity
+                context.coordinator.loadedHighlightColorHex = highlightColorHex
+                context.coordinator.loadedHighlightOpacity = highlightOpacity
+                context.coordinator.loadedJustifyText = justifyText
             }
         }
 
@@ -560,6 +609,9 @@ import WebKit
             lhs.characterSpacing == rhs.characterSpacing &&
             lhs.wordSpacing == rhs.wordSpacing &&
             lhs.grainIntensity == rhs.grainIntensity &&
+            lhs.highlightColorHex == rhs.highlightColorHex &&
+            lhs.highlightOpacity == rhs.highlightOpacity &&
+            lhs.justifyText == rhs.justifyText &&
             lhs.commentsHtml == rhs.commentsHtml &&
             lhs.hasMoreComments == rhs.hasMoreComments
         }
@@ -581,8 +633,8 @@ extension ReaderContent {
             }
             """ : ""
 
-        let topOffset = 70.0 + verticalPadding
-        let bottomOffset = verticalPadding
+        let topOffset = 136.0 + verticalPadding
+        let bottomOffset = 120.0 + verticalPadding
 
         var commentsSection = ""
         if !comments.isEmpty {
@@ -614,6 +666,8 @@ extension ReaderContent {
             :root {
                 color-scheme: light dark;
             }
+            :root { --reader-text-align: \(justifyText ? "justify" : "start"); --reader-top-inset: \(topOffset)px; --reader-highlight: \(ReaderAppearance.highlightCSS(background: backgroundColorHex, custom: highlightColorHex, opacity: highlightOpacity)); }
+            ::selection { background: var(--reader-highlight); }
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
                 font-family: '\(fontFamily)', 'Georgia', serif;
@@ -634,7 +688,7 @@ extension ReaderContent {
             \(darkMediaQuery)
             p {
                 margin-bottom: 1em;
-                text-align: justify;
+                text-align: var(--reader-text-align) !important;
             }
             p:empty { display: none; }
             img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; }
@@ -645,9 +699,9 @@ extension ReaderContent {
             h1 { font-size: 1.5em; }
             h2 { font-size: 1.3em; }
             h3 { font-size: 1.15em; }
-            a { color: #d4a574; text-decoration: none; }
+            a { color: #FA2D48; text-decoration: none; }
             blockquote {
-                border-left: 3px solid #d4a574;
+                border-left: 3px solid #FA2D48;
                 padding-left: 1em;
                 margin: 1em 0;
                 color: #8e8e93;
@@ -655,19 +709,15 @@ extension ReaderContent {
             hr { border: none; border-top: 1px solid #3a3a3c; margin: 2em 0; }
             em { font-style: italic; }
             strong { font-weight: bold; }
-            .tts-active {
-                background: rgba(212, 165, 116, 0.18);
-                border-radius: 8px;
-                box-shadow: inset 0 0 0 1px rgba(212, 165, 116, 0.28);
-                padding: 0.05em 0.1em;
-            }
+            \(ReaderTTSJavaScript.highlightStyle)
+            \(ReaderTTSJavaScript.speechLayoutStyle)
             #tts-dot {
                 position: absolute;
                 width: 6px;
                 height: 6px;
                 border-radius: 999px;
-                background: #d4a574;
-                box-shadow: 0 0 8px rgba(212, 165, 116, 0.8);
+                background: #FA2D48;
+                box-shadow: 0 0 8px rgba(250, 45, 72, 0.8);
                 opacity: 0;
                 pointer-events: none;
                 transition: transform 0.2s ease, opacity 0.2s ease;
@@ -683,8 +733,8 @@ extension ReaderContent {
                 box-shadow: 0 0 0 9999px rgba(0, 0, 0, \(resolvedLineFocusOpacity(dulling: lineFocusDulling)));
                 pointer-events: none;
                 z-index: 9999;
-                border-top: 1px dashed rgba(212, 165, 116, 0.4);
-                border-bottom: 1px dashed rgba(212, 165, 116, 0.4);
+                border-top: 1px dashed var(--reader-highlight);
+                border-bottom: 1px dashed var(--reader-highlight);
                 display: \(lineFocusEnabled ? "block" : "none");
             }
             #paper-grain-overlay {
@@ -695,9 +745,12 @@ extension ReaderContent {
                 height: 100vh;
                 pointer-events: none;
                 z-index: 99999;
-                opacity: \(backgroundColorHex == "#1C1C1E" ? grainIntensity / 100.0 : 0.0);
-                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-                mix-blend-mode: overlay;
+                opacity: \(grainIntensity / 100.0);
+                background-image: url("\(ReaderAppearance.paperDataURL)");
+                background-repeat: repeat;
+                background-size: 128px 128px;
+                contain: strict;
+                mix-blend-mode: soft-light;
             }
 
             /* Comments Section CSS */
@@ -886,8 +939,8 @@ extension ReaderContent {
                 background: rgba(128, 128, 128, 0.15);
             }
             .like-button.checked {
-                color: #3182ce !important;
-                background: rgba(49, 130, 206, 0.15);
+                color: #FA2D48 !important;
+                background: rgba(250, 45, 72, 0.15);
             }
             .dislike-button.checked {
                 color: #e53e3e !important;
@@ -1061,28 +1114,16 @@ extension ReaderContent {
             if (!window.__cachedParagraphs) {
                 var allNodes = Array.from(document.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li"));
                 window.__cachedParagraphs = allNodes.filter(function(node) {
-                    return !node.closest("#lnw-comments-section");
+                    return !node.closest("#lnw-comments-section") && !(node.tagName === "LI" && node.querySelector("p,li"));
                 });
             }
             return window.__cachedParagraphs;
         }
 
+        \(ReaderTTSJavaScript.mapping)
         window.collectBlocks = function() {
-            if (window.__ttsBlocks) return;
-            var nodes = window.getParagraphs();
-            var texts = [];
-            nodes.forEach(function(node) {
-                var text = node.innerText.replace(/\\s+/g, " ").trim();
-                if (text.length === 0) {
-                    node.setAttribute("data-tts-index", "-1");
-                    return;
-                }
-                var index = texts.length;
-                node.setAttribute("data-tts-index", String(index));
-                texts.push(text);
-            });
-            window.__ttsBlocks = texts;
-        }
+            if (!window.__ttsBlocks) window.__ttsBlocks = window.ttsExtractBlocks();
+        };
 
         window.applyBionicToNode = function(startNode) {
             var processNode = function(node) {
@@ -1215,7 +1256,7 @@ extension ReaderContent {
             }
             target.classList.add("tts-active");
             window.__restoreIndex = index;
-            if (!window.isElementVisible(target)) {
+            if (window.__ttsFollowing && !window.isElementVisible(target)) {
                 target.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
             if (dot) {
@@ -1225,17 +1266,6 @@ extension ReaderContent {
                 if (x < 6) { x = 6; }
                 dot.style.transform = "translate(" + x + "px, " + y + "px)";
                 dot.style.opacity = 1;
-            }
-        };
-
-        window.clearTTSActive = function() {
-            var active = document.querySelector(".tts-active");
-            if (active) {
-                active.classList.remove("tts-active");
-            }
-            var dot = document.getElementById("tts-dot");
-            if (dot) {
-                dot.style.opacity = 0;
             }
         };
 
@@ -1266,53 +1296,7 @@ extension ReaderContent {
             }, 300);
         });
 
-        // Gestures management using PointerEvents
-        var startX = 0;
-        var startY = 0;
-        var startTime = 0;
-
-        window.addEventListener("pointerdown", function(e) {
-            if (!e.isPrimary) return;
-            if (e.target.tagName === 'A' || e.target.closest('a') || e.target.tagName === 'BUTTON') return;
-            
-            startX = e.clientX;
-            startY = e.clientY;
-            startTime = Date.now();
-        });
-
-        window.addEventListener("pointerup", function(e) {
-            if (!e.isPrimary) return;
-            if (e.target.tagName === 'A' || e.target.closest('a') || e.target.tagName === 'BUTTON') return;
-
-            var diffX = e.clientX - startX;
-            var diffY = e.clientY - startY;
-            var elapsed = Date.now() - startTime;
-
-            // Check if there is active selection
-            var selection = window.getSelection().toString();
-            if (selection && selection.trim().length > 0) {
-                return;
-            }
-
-            // Tap detection
-            if (Math.abs(diffX) < 8 && Math.abs(diffY) < 8 && elapsed < 300) {
-                // Scroll mode: tap toggles controls, or triggers tapParagraph if on a paragraph
-                var paragraph = e.target.closest('p, h1, h2, h3, h4, h5, h6, li');
-                if (paragraph) {
-                    var indexAttr = paragraph.getAttribute("data-tts-index");
-                    if (indexAttr && indexAttr !== "-1") {
-                        var index = parseInt(indexAttr);
-                        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tapParagraph) {
-                            window.webkit.messageHandlers.tapParagraph.postMessage(String(index));
-                        }
-                    }
-                }
-                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleControls) {
-                    window.webkit.messageHandlers.toggleControls.postMessage("");
-                }
-            }
-        });
-
+        \(ReaderTTSJavaScript.interaction)
         window.prepareTTS();
         """
     }

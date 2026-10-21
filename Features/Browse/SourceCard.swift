@@ -51,7 +51,7 @@ struct SourceCard: View {
                 Button(action: action) {
                     Image(systemName: isInstalled ? "trash" : "arrow.down.circle")
                         .foregroundStyle(
-                            isInstalled ? AppTheme.destructive : AppTheme.accent
+                            isInstalled ? AppTheme.destructive : Color.primary
                         )
                 }
                 .buttonStyle(.glass)

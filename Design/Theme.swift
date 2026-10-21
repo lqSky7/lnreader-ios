@@ -8,13 +8,33 @@ import SwiftUI
 /// updated in a single place.
 enum AppTheme {
 
-    // MARK: Accent Colors
+    // MARK: Interactive Palette
 
-    /// Primary accent — grey.
-    static let accent = Color(hue: 0.0, saturation: 0.0, brightness: 0.60)
+    /// Primary interactive color: black in light mode, white in dark mode.
+    ///
+    /// The interface is deliberately monochrome. Red is *not* the accent — it
+    /// is reserved for destructive actions and error states so that it still
+    /// means something when it does appear.
+    static let accent = Color.primary
 
-    /// Secondary accent — soft teal.
-    static let secondaryAccent = Color(hue: 0.50, saturation: 0.45, brightness: 0.80)
+    /// Softer interactive tone for secondary controls and metadata actions.
+    static let secondaryAccent = Color.secondary
+
+    /// High-contrast fill for a primary control (play button, selected dot).
+    static let primaryFill = Color.primary
+
+    /// Track fill for switches. Pure primary would render an enabled switch
+    /// white-on-white in dark mode, so dark mode uses a legible mid gray.
+    static let controlFill = Color(light: Color(white: 0.12), dark: Color(white: 0.62))
+
+    /// Content drawn on top of `primaryFill`.
+    static let onPrimaryFill = Color(light: .white, dark: .black)
+
+    /// Grouped surface for cards and inset rows (systemGray6).
+    static let surface = Color(
+        light: Color(red: 242 / 255, green: 242 / 255, blue: 247 / 255),
+        dark: Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
+    )
 
     // MARK: Reader
 
@@ -32,18 +52,18 @@ enum AppTheme {
 
     // MARK: Surface & Text
 
-    /// Subtle card background.
-    static let cardBackground = Color(
-        light: Color(hue: 0.0, saturation: 0.0, brightness: 0.96),
-        dark: Color(hue: 0.0, saturation: 0.0, brightness: 0.16)
-    )
+    /// Subtle card background (systemGray6).
+    static let cardBackground = surface
 
     /// Secondary / subtitle text.
     static let subtitleText = Color.secondary
 
     // MARK: Semantic
 
-    /// Destructive action color (delete, remove).
+    /// Destructive action color (delete, remove, failed state).
+    ///
+    /// Red is intentionally rare: use it only where the user must recognize a
+    /// destructive or failed outcome, never for decoration or ordinary accents.
     static let destructive = Color.red
 }
 
@@ -162,5 +182,77 @@ extension Color {
                           Int(round(green * 255)),
                           Int(round(blue * 255)))
         }
+    }
+}
+
+// Native navigation keeps the source view alive for the interactive return zoom.
+extension View {
+    @ViewBuilder func bookTransitionSource<ID: Hashable>(_ id: ID, in namespace: Namespace.ID?) -> some View {
+        #if os(iOS)
+        if let namespace { self.matchedTransitionSource(id: id, in: namespace) } else { self }
+        #else
+        self
+        #endif
+    }
+    func bookZoom<ID: Hashable>(from id: ID, in namespace: Namespace.ID) -> some View {
+        modifier(BookZoomTransition(sourceID: id, namespace: namespace))
+    }
+}
+private struct BookZoomTransition<ID: Hashable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let sourceID: ID
+    let namespace: Namespace.ID
+    @ViewBuilder func body(content: Content) -> some View {
+        #if os(iOS)
+        if reduceMotion { content } else { content.navigationTransition(.zoom(sourceID: sourceID, in: namespace)) }
+        #else
+        content
+        #endif
+    }
+}
+
+
+// MARK: - Ambient Background
+
+/// Slow, touch-reactive light field for full-screen surfaces.
+///
+/// A blurred mesh gradient: soft, static in feel, and cheap enough to keep behind
+/// frosted cards without fighting the content for attention.
+struct AuroraBackdrop: View {
+    /// Finger position in this view's coordinate space.
+    var touch: CGPoint = .zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let px = Float(min(max(touch.x / 390, 0), 1)) - 0.5
+            let py = Float(min(max(touch.y / 800, 0), 1)) - 0.5
+            MeshGradient(
+                width: 3,
+                height: 3,
+                points: [
+                    SIMD2<Float>(0, 0),
+                    SIMD2<Float>(Float(0.5 + 0.03 * sin(t * 0.20)), 0),
+                    SIMD2<Float>(1, 0),
+                    SIMD2<Float>(0, Float(0.5 + 0.04 * cos(t * 0.16))),
+                    SIMD2<Float>(Float(0.5 + 0.07 * sin(t * 0.12)) + px * 0.08,
+                                 Float(0.5 + 0.06 * cos(t * 0.18)) + py * 0.08),
+                    SIMD2<Float>(1, Float(0.5 + 0.04 * sin(t * 0.21))),
+                    SIMD2<Float>(0, 1),
+                    SIMD2<Float>(Float(0.5 + 0.03 * cos(t * 0.14)), 1),
+                    SIMD2<Float>(1, 1)
+                ],
+                colors: [
+                    .black, Color(white: 0.07), .black,
+                    Color(white: 0.10), Color(white: 0.42), Color(white: 0.09),
+                    .black, Color(white: 0.05), .black
+                ]
+            )
+            .blur(radius: 40)
+        }
+        .overlay(Color.black.opacity(0.30))
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 }

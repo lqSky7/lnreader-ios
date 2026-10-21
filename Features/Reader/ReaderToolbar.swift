@@ -15,6 +15,7 @@ struct ReaderToolbar: View {
     let onNextChapter: () -> Void
     let onChapterClick: () -> Void
     var onComments: (() -> Void)? = nil
+    var isListening = false
 
     @Namespace private var topNamespace
     @Namespace private var bottomNamespace
@@ -25,7 +26,7 @@ struct ReaderToolbar: View {
         VStack {
             topBar
             Spacer()
-            bottomBar
+            if !isListening { bottomBar }
         }
     }
 
@@ -78,10 +79,11 @@ struct ReaderToolbar: View {
                                 .glassEffectID("tts-trigger", in: topNamespace)
                         } else {
                             Button(action: onTTSStart) {
-                                Image(systemName: "waveform")
+                                Image(systemName: isListening ? "stop.fill" : "waveform")
                                     .font(.title2.weight(.bold))
                             }
                             .buttonStyle(.glass)
+                            .accessibilityLabel(isListening ? "Stop listening" : "Listen to chapter")
                             .glassEffectID("tts-trigger", in: topNamespace)
                             #if os(macOS)
                                 .tint(.clear)
@@ -165,10 +167,11 @@ struct ReaderToolbar: View {
 // MARK: - Interactive plain button style for unified elements
 
 struct InteractivePlainButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
-            .opacity(configuration.isPressed ? 0.6 : 1.0)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1.0)
+            .opacity(configuration.isPressed ? 0.75 : 1.0)
+            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }

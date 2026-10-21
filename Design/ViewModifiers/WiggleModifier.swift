@@ -4,6 +4,8 @@
 import SwiftUI
 
 struct WiggleModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     let isWiggling: Bool
 
     @State private var isAnimating = false
@@ -11,17 +13,19 @@ struct WiggleModifier: ViewModifier {
     // or isWiggling flips before the animation even starts.
     @State private var wiggleTask: Task<Void, Never>? = nil
 
+    private var shouldWiggle: Bool { isWiggling && !reduceMotion && scenePhase == .active }
+
     func body(content: Content) -> some View {
         content
-            .rotationEffect(.degrees(isWiggling ? (isAnimating ? 0.6 : -0.6) : 0))
+            .rotationEffect(.degrees(shouldWiggle ? (isAnimating ? 0.6 : -0.6) : 0))
             .offset(
-                x: isWiggling ? (isAnimating ? 0.3 : -0.3) : 0,
-                y: isWiggling ? (isAnimating ? -0.3 : 0.3) : 0
+                x: shouldWiggle ? (isAnimating ? 0.3 : -0.3) : 0,
+                y: shouldWiggle ? (isAnimating ? -0.3 : 0.3) : 0
             )
             .onAppear {
-                if isWiggling { scheduleWiggleStart() }
+                if shouldWiggle { scheduleWiggleStart() }
             }
-            .onChange(of: isWiggling) { _, newValue in
+            .onChange(of: shouldWiggle) { _, newValue in
                 if newValue {
                     scheduleWiggleStart()
                 } else {
@@ -33,6 +37,7 @@ struct WiggleModifier: ViewModifier {
                 // @State on a view that is no longer in the hierarchy.
                 wiggleTask?.cancel()
                 wiggleTask = nil
+                isAnimating = false
             }
     }
 

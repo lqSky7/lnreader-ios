@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DD1ED2CBFBA44AE1B6E75002 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = DD1ED2CBFBA44AE1B6E75003 /* SwiftSoup */; };
+		DD1ED2CBFBA44AE1B6E75000 /* ReaderAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1ED2CBFBA44AE1B6E75001 /* ReaderAppearance.swift */; };
+		EDC300000000000000000001 /* ReadingNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC300000000000000000002 /* ReadingNavigation.swift */; };
 		0518E7BC7FF5DA15E6F1CB52 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2B650856C28BA6DD64543A24 /* AppIcon.icon */; };
 		05D969D4F7888414872F4A1F /* Novel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B56B530299C57FD90A1E1FB3 /* Novel.swift */; };
 		0C03062A193BA30A59F0417F /* MoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22DDF1DFDE958E4744082B1B /* MoreView.swift */; };
@@ -38,7 +41,6 @@
 		70AF3DCF891725ECA2575D6E /* CustomAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B15C949254CA69833D943AC /* CustomAsyncImage.swift */; };
 		75995F2F5AE6494AC92E1C43 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 179854008F9437120FBDEDDB /* GlassCard.swift */; };
 		7BF5C5BE164E42B9EA245AFE /* HTMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C68D75AE23FF560C56A9C84 /* HTMLParser.swift */; };
-		7C176687CDA357D1C003C517 /* TTSAudioCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B329FB083E53D42E5825CC0 /* TTSAudioCache.swift */; };
 		844BC985C7BAC123C2DB2C06 /* UpdatesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAEBBACB7F3008512E5F5C8 /* UpdatesView.swift */; };
 		85CDA37BF617A6E77D899825 /* TinyXMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E10BF3DAB13B839E1205F6D /* TinyXMLParser.swift */; };
 		89540930F1A34DF599CEA02B /* DeleteBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 623EA90F63B7AF0B5426E96B /* DeleteBadge.swift */; };
@@ -89,9 +91,19 @@
 		F8879A418673455C0E62F341 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93193A48DE8D174048C0696 /* SyncManager.swift */; };
 		FA024401BCB08F7E6C64FBFE /* HistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9C09B8F93F66D136B578B /* HistoryRow.swift */; };
 		FD91FA952D879AFFD81F3ED3 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788EA87FDCBD419221019BB2 /* Constants.swift */; };
+		EB83EEFDBC246CAE607A6791 /* TTSAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46BA28F00A8896A7E69C83B /* TTSAudio.swift */; };
+		983E3ED3C3B85C4B2D856362 /* TTSAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575BF20D543425010A281D1D /* TTSAPIClient.swift */; };
+		42E350E7BA9C567B9484C78C /* TTSOfflineLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = D629A9BAEAE61A89C750A012 /* TTSOfflineLibrary.swift */; };
+		76AB4E1FBB6ED32F82E3CDFB /* TTSChapterSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20C2FE9D0133D8131081F47 /* TTSChapterSource.swift */; };
+		D98D203BBBEF09D9B8E99C39 /* TTSAudioAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2134FC9B8F314414383E3D90 /* TTSAudioAppDelegate.swift */; };
+		2484C593F6D40E679494C6CC /* BookAudioDownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B52FBF3B582C74A0B195493 /* BookAudioDownloadsView.swift */; };
+		A68075468E239F35711B5DA1 /* ReaderTTSJavaScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412E463FAEFE042C2A0891BD /* ReaderTTSJavaScript.swift */; };
+		295E3A3C6DA5D18305CFC473 /* TTSPlaybackControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9702A50839CC133D304D202D /* TTSPlaybackControls.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		DD1ED2CBFBA44AE1B6E75001 /* ReaderAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderAppearance.swift; sourceTree = "<group>"; };
+		EDC300000000000000000002 /* ReadingNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../ReadingNavigation.swift; sourceTree = "<group>"; };
 		003CA6699D27A4A3DCAFD2EF /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
 		037C592FB524AD4F9A9F370F /* NovelFireLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireLoginView.swift; sourceTree = "<group>"; };
 		077BF4C78DF1F6E3662DC6A8 /* NovelStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelStatus.swift; sourceTree = "<group>"; };
@@ -120,7 +132,6 @@
 		528A1466337E800799FED5D8 /* NovelDropDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelDropDelegate.swift; sourceTree = "<group>"; };
 		529ECBBE4EC3C2A151959310 /* SortOrder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SortOrder.swift; sourceTree = "<group>"; };
 		530E8B72F8C400221A99FB1B /* NetworkClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkClient.swift; sourceTree = "<group>"; };
-		5B329FB083E53D42E5825CC0 /* TTSAudioCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSAudioCache.swift; sourceTree = "<group>"; };
 		5ED6BA0F67B3BD27D533F6FB /* LibraryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryListView.swift; sourceTree = "<group>"; };
 		60F9403D2E7706164EFA9DFB /* LibraryGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryGridView.swift; sourceTree = "<group>"; };
 		623EA90F63B7AF0B5426E96B /* DeleteBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteBadge.swift; sourceTree = "<group>"; };
@@ -174,6 +185,14 @@
 		FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSSettingsView.swift; sourceTree = "<group>"; };
 		FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassOverlay.swift; sourceTree = "<group>"; };
 		FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsView.swift; sourceTree = "<group>"; };
+		E46BA28F00A8896A7E69C83B /* TTSAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSAudio.swift; sourceTree = "<group>"; };
+		575BF20D543425010A281D1D /* TTSAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSAPIClient.swift; sourceTree = "<group>"; };
+		D629A9BAEAE61A89C750A012 /* TTSOfflineLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSOfflineLibrary.swift; sourceTree = "<group>"; };
+		D20C2FE9D0133D8131081F47 /* TTSChapterSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSChapterSource.swift; sourceTree = "<group>"; };
+		2134FC9B8F314414383E3D90 /* TTSAudioAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSAudioAppDelegate.swift; sourceTree = "<group>"; };
+		2B52FBF3B582C74A0B195493 /* BookAudioDownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookAudioDownloadsView.swift; sourceTree = "<group>"; };
+		412E463FAEFE042C2A0891BD /* ReaderTTSJavaScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTTSJavaScript.swift; sourceTree = "<group>"; };
+		9702A50839CC133D304D202D /* TTSPlaybackControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlaybackControls.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -182,6 +201,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F058C4831CC3F14C9B5EDC9B /* Glur in Frameworks */,
+				DD1ED2CBFBA44AE1B6E75002 /* SwiftSoup in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -215,6 +235,7 @@
 		153762F160E602478412D796 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				E46BA28F00A8896A7E69C83B /* TTSAudio.swift */,
 				C365B6B617F5A22505985AA7 /* Category.swift */,
 				83D4C60AFAD837E951FD8186 /* Chapter.swift */,
 				CAA6EC9C1F5F0F6587444BBF /* ChapterComment.swift */,
@@ -230,8 +251,11 @@
 		1AAECBCAFF61AC4195AF99ED /* Reader */ = {
 			isa = PBXGroup;
 			children = (
+				9702A50839CC133D304D202D /* TTSPlaybackControls.swift */,
+				412E463FAEFE042C2A0891BD /* ReaderTTSJavaScript.swift */,
 				4C4CCC920C4381FB8A63F2AE /* NovelFireCommentsView.swift */,
 				8A3F4D29864B2CD889170153 /* ReaderChapterListSheet.swift */,
+				DD1ED2CBFBA44AE1B6E75001 /* ReaderAppearance.swift */,
 				89DF43235A3A3FF8323B318A /* ReaderContent.swift */,
 				44694161C716310552872C25 /* ReaderContentBridge.swift */,
 				174C8A293062CFE21B69CD54 /* ReaderSettings.swift */,
@@ -265,6 +289,7 @@
 		31630C79D4727AAF6DD33667 /* Novel */ = {
 			isa = PBXGroup;
 			children = (
+				2B52FBF3B582C74A0B195493 /* BookAudioDownloadsView.swift */,
 				9B5910B0EC9309E6416CFAFB /* ChapterListView.swift */,
 				EF6E35C495529EB1044040B0 /* ChapterRow.swift */,
 				F8C839AAAF9EECC8AEFF7D32 /* NovelDetailView.swift */,
@@ -329,6 +354,10 @@
 		7191043716F4CF4E3B9A7046 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				2134FC9B8F314414383E3D90 /* TTSAudioAppDelegate.swift */,
+				D20C2FE9D0133D8131081F47 /* TTSChapterSource.swift */,
+				D629A9BAEAE61A89C750A012 /* TTSOfflineLibrary.swift */,
+				575BF20D543425010A281D1D /* TTSAPIClient.swift */,
 				C5EE675CB77CE18FD43663D2 /* CommentSite.swift */,
 				2E6A6D07AE4B518B274A5072 /* FocusModeManager.swift */,
 				635EBF2C4EBF46F848E6E070 /* LibraryManager.swift */,
@@ -336,7 +365,6 @@
 				FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */,
 				BD006CC34D0C4C76D36DE78E /* ReaderTTSManager.swift */,
 				A93193A48DE8D174048C0696 /* SyncManager.swift */,
-				5B329FB083E53D42E5825CC0 /* TTSAudioCache.swift */,
 				4E92C3475CD613743DA07BD2 /* Plugins */,
 			);
 			path = Services;
@@ -365,6 +393,7 @@
 				E0BAC8A5A6A4148EFD000C5E /* DisplayMode.swift */,
 				077BF4C78DF1F6E3662DC6A8 /* NovelStatus.swift */,
 				529ECBBE4EC3C2A151959310 /* SortOrder.swift */,
+				EDC300000000000000000002 /* ReadingNavigation.swift */,
 			);
 			path = Enums;
 			sourceTree = "<group>";
@@ -453,6 +482,7 @@
 			);
 			name = LNReader;
 			packageProductDependencies = (
+				DD1ED2CBFBA44AE1B6E75003 /* SwiftSoup */,
 				0D468E064E87EA8FE7747702 /* Glur */,
 			);
 			productName = LNReader;
@@ -483,6 +513,7 @@
 			mainGroup = 6A3F5AB528717E8414751190;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				DD1ED2CBFBA44AE1B6E75004 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -512,6 +543,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				295E3A3C6DA5D18305CFC473 /* TTSPlaybackControls.swift in Sources */,
+				A68075468E239F35711B5DA1 /* ReaderTTSJavaScript.swift in Sources */,
+				2484C593F6D40E679494C6CC /* BookAudioDownloadsView.swift in Sources */,
+				D98D203BBBEF09D9B8E99C39 /* TTSAudioAppDelegate.swift in Sources */,
+				76AB4E1FBB6ED32F82E3CDFB /* TTSChapterSource.swift in Sources */,
+				42E350E7BA9C567B9484C78C /* TTSOfflineLibrary.swift in Sources */,
+				983E3ED3C3B85C4B2D856362 /* TTSAPIClient.swift in Sources */,
+				EB83EEFDBC246CAE607A6791 /* TTSAudio.swift in Sources */,
 				B6C6D1C5F90025D8A536E91B /* AboutView.swift in Sources */,
 				C4748B637ED36325AFC4D906 /* AdvancedSettingsView.swift in Sources */,
 				0F37784CA27169F604E6AF15 /* AuthView.swift in Sources */,
@@ -566,6 +605,7 @@
 				ABD443FA39C59BF556CA2100 /* PluginManager.swift in Sources */,
 				8C9407C6843D94D83BC3760D /* PluginShims.swift in Sources */,
 				C7DCD24BA48D3707D689052D /* ReaderChapterListSheet.swift in Sources */,
+				DD1ED2CBFBA44AE1B6E75000 /* ReaderAppearance.swift in Sources */,
 				939B509FC87B4E6546B04724 /* ReaderContent.swift in Sources */,
 				6663C20B34190DA7759BF147 /* ReaderContentBridge.swift in Sources */,
 				AC18996B8CB747D0257FB2DE /* ReaderSettings.swift in Sources */,
@@ -576,13 +616,13 @@
 				B583B0FCB254B1732516B008 /* ReadingHistory.swift in Sources */,
 				1B98738FDB08E9739DEA128F /* Repository.swift in Sources */,
 				A808755A9ED9DE0C3FB473C8 /* SortOrder.swift in Sources */,
+				EDC300000000000000000001 /* ReadingNavigation.swift in Sources */,
 				332668269D86AA69EFACDF60 /* SourceCard.swift in Sources */,
 				C54D0BBB558ED4A8EEB89352 /* SourceDetailView.swift in Sources */,
 				E8E599B09D9B415DFC301756 /* SourcePlugin.swift in Sources */,
 				EEDF92E541FC7528E7BEAA2B /* StatisticsView.swift in Sources */,
 				62C08A004F957CA7BE8565D4 /* String+Extensions.swift in Sources */,
 				F8879A418673455C0E62F341 /* SyncManager.swift in Sources */,
-				7C176687CDA357D1C003C517 /* TTSAudioCache.swift in Sources */,
 				F284113DD4D3BBD22FA26560 /* TTSSettingsView.swift in Sources */,
 				964462B69BFEFB77456C4391 /* Theme.swift in Sources */,
 				85CDA37BF617A6E77D899825 /* TinyXMLParser.swift in Sources */,
@@ -790,6 +830,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		DD1ED2CBFBA44AE1B6E75004 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/scinfu/SwiftSoup.git"; requirement = {kind = upToNextMajorVersion; minimumVersion = 2.6.0; }; };
 		ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/joogps/Glur";
@@ -801,6 +842,7 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		DD1ED2CBFBA44AE1B6E75003 /* SwiftSoup */ = {isa = XCSwiftPackageProductDependency; package = DD1ED2CBFBA44AE1B6E75004 /* XCRemoteSwiftPackageReference "SwiftSoup" */; productName = SwiftSoup; };
 		0D468E064E87EA8FE7747702 /* Glur */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */;

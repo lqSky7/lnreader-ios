@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct SourceDetailView: View {
+    @Namespace private var bookTransitions
     let plugin: PluginListItem
     @Environment(PluginManager.self) private var pluginManager
 
@@ -33,8 +34,9 @@ struct SourceDetailView: View {
                 ForEach(novels) { novel in
                     NavigationLink {
                         NovelDetailView(partialNovel: novel, pluginId: plugin.id)
+                            .bookZoom(from: novel.path, in: bookTransitions)
                     } label: {
-                        BrowseNovelCell(novel: novel)
+                        BrowseNovelCell(novel: novel, transitionNamespace: bookTransitions)
                     }
                     .buttonStyle(.plain)
                 }
@@ -137,6 +139,7 @@ struct SourceDetailView: View {
 
 struct BrowseNovelCell: View {
     let novel: PartialNovel
+    var transitionNamespace: Namespace.ID? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -144,6 +147,7 @@ struct BrowseNovelCell: View {
                 url: novel.cover,
                 aspectRatio: LayoutConstants.coverAspectRatio
             )
+            .bookTransitionSource(novel.path, in: transitionNamespace)
 
             Text(novel.name)
                 .font(Typography.caption)

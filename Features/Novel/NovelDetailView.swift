@@ -13,6 +13,7 @@ struct NovelDetailView: View {
     let partialNovel: PartialNovel?
     let pluginId: String
 
+    @Namespace private var chapterTransition
     @State private var localNovel: Novel? = nil
     @State private var sourceNovel: SourceNovel?
     @State private var isLoading = true
@@ -25,6 +26,7 @@ struct NovelDetailView: View {
     @State private var chapterSearch = ""
     @State private var navigateToChapter: ChapterDisplay? = nil
     @State private var allChapters: [ChapterDisplay] = []
+    @State private var showAudioDownloads = false
 
     // MARK: - Initializers
 
@@ -48,6 +50,7 @@ struct NovelDetailView: View {
         NovelDetailScrollView(
             content: VStack(spacing: 0) {
                 NovelHeaderView(
+                    transitionNamespace: chapterTransition,
                     name: displayName,
                     author: displayAuthor,
                     cover: displayCover,
@@ -84,6 +87,7 @@ struct NovelDetailView: View {
 
                     ChapterListView(
                         novel: localNovel,
+                        allChapters: allChapters,
                         chapters: pagedChapters,
                         totalCount: allChapters.count,
                         filteredCount: filteredChapters.count,
@@ -100,14 +104,26 @@ struct NovelDetailView: View {
             }
         )
         .toolbar(removing: .title)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showAudioDownloads = true } label: { Image(systemName: "headphones.circle").frame(width: 44, height: 44) }
+                    .accessibilityLabel("Manage chapter audio downloads")
+            }
+        }
+        .sheet(isPresented: $showAudioDownloads) {
+            BookAudioDownloadsView(bookId: TTSBookIdentity.make(pluginId: pluginId, novelPath: localNovel?.path ?? partialNovel?.path ?? ""),
+                bookTitle: displayName, pluginId: pluginId, novelPath: localNovel?.path ?? partialNovel?.path ?? "",
+                chapters: allChapters.map { TTSChapterChoice($0) }, coverURL: displayCover)
+        }
         .navigationDestination(item: $navigateToChapter) { chapter in
             ReaderView(
                 chapterPath: chapter.path,
                 chapterName: chapter.name,
                 pluginId: pluginId,
-                novelPath: localNovel?.path
+                novelPath: localNovel?.path ?? partialNovel?.path ?? sourceNovel?.path
             )
             .id(chapter.path)
+            .bookZoom(from: "continue", in: chapterTransition)
         }
         .onAppear {
             syncLocalNovel()
@@ -161,7 +177,7 @@ struct NovelDetailView: View {
             }
         } else {
             let sourceChapters = sourceNovel?.chapters ?? []
-            let mapped = sourceChapters.enumerated().map { ChapterDisplay(sourceChapter: $1, position: $0) }
+            let mapped = sourceChapters.enumerated().map { ChapterDisplay(sourceChapter: $1, position: $0, pluginId: pluginId, novelPath: partialNovel?.path ?? sourceNovel?.path) }
             self.allChapters = mapped
         }
     }
@@ -176,7 +192,7 @@ struct NovelDetailView: View {
         }
         if !chapterSearch.isEmpty {
             result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(chapterSearch)
+                $0.name.localizedCaseInsensitiveContains(chapterSearch) || String($0.position + 1) == chapterSearch.trimmingCharacters(in: .whitespaces)
             }
         }
         return result
@@ -186,6 +202,7 @@ struct NovelDetailView: View {
         let list = filteredChapters
         guard !list.isEmpty else { return [] }
         
+        if !chapterSearch.isEmpty || selectedFilter != .all { return Array(list.prefix(50)) }
         switch selectedRange {
         case .first:
             return Array(list.prefix(10))

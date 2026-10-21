@@ -5,6 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LibraryListView: View {
+    var transitionNamespace: Namespace.ID? = nil
     let novels: [Novel]
     let isEditing: Bool
     @Binding var draggedItem: Novel?
@@ -38,6 +39,7 @@ struct LibraryListView: View {
                             ))
                     } else {
                         InteractiveListRow(
+                            transitionNamespace: transitionNamespace,
                             novel: novel,
                             onSelect: onSelect,
                             onStartEditing: onStartEditing
@@ -56,6 +58,7 @@ struct LibraryListView: View {
 /// Separates the delete button from the drag surface so taps on the button
 /// aren't swallowed by the drag gesture.
 struct EditableListRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let novel: Novel
     let isDragging: Bool
     var onDelete: () -> Void
@@ -69,13 +72,14 @@ struct EditableListRow: View {
         .contentShape(Rectangle())
         .wiggle(when: true)
         .opacity(isDragging ? 0.4 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isDragging)
+        .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isDragging)
     }
 }
 
 // MARK: - Interactive List Row Wrapper
 
 struct InteractiveListRow: View {
+    var transitionNamespace: Namespace.ID? = nil
     let novel: Novel
     var onSelect: (Novel) -> Void
     var onStartEditing: () -> Void
@@ -91,6 +95,7 @@ struct InteractiveListRow: View {
             }
         }) {
             LibraryListRow(
+                transitionNamespace: transitionNamespace,
                 novel: novel,
                 isEditing: false,
                 onDelete: {}
@@ -114,6 +119,7 @@ struct InteractiveListRow: View {
 // MARK: - List Row
 
 struct LibraryListRow: View {
+    var transitionNamespace: Namespace.ID? = nil
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
     let novel: Novel
     var isEditing: Bool = false
@@ -139,6 +145,7 @@ struct LibraryListRow: View {
                 aspectRatio: LayoutConstants.coverAspectRatio
             )
             .frame(width: 60, height: 86)
+            .bookTransitionSource(novel.persistentModelID, in: transitionNamespace)
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {

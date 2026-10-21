@@ -22,7 +22,7 @@ struct AdvancedSettingsView: View {
             }
         }
         .navigationTitle("Advanced")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .confirmationDialog(
             "Clear plugin cache?",
             isPresented: $showClearPluginsDialog,
