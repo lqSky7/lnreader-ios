@@ -53,6 +53,8 @@ touches `default.store`, so the old data stays recoverable on disk.
 | `abc7f23` | Scanlator priority + per-scanlator visibility |
 | `6c32ca4` | Browse split into two catalogues |
 | `86d0c39` | Version 2.0.0 |
+| `3072d5d` | Reader controls polish, Browse refinement (Glur backdrop) |
+| `846d553` | Offline chapters, background updates, encrypted library backups |
 | `2092e97` | Rewrote this progress tracker as a status ledger |
 | `3072d5d` | Reader/Browse UI fixes, shared manga chapter directory, audit, sample source removal |
 
@@ -146,16 +148,15 @@ are separate from the implemented local `.lnbk` snapshot.
 | `scripts/check-v2-scanlators.sh` | Dedup/hide rules, hidden-winner fallback |
 | `scripts/try-mangafire.sh` | Live MangaFire through the host (network required) |
 
-Device builds are produced with:
+Device builds come from `./scripts/build-ipa.sh` (`release` for a Release build, `--checks`
+to typecheck first). It builds, packages and sanity-checks the archive:
 
 ```sh
-xcodebuild -project LNReader.xcodeproj -scheme LNReader -configuration Debug \
-  -sdk iphoneos -destination 'generic/platform=iOS' -disableAutomaticPackageResolution \
-  ENABLE_DEBUG_DYLIB=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+./scripts/build-ipa.sh              # -> ../LNReader-<version>-unsigned.ipa
 ```
 
-then `Payload/LNReader.app` zipped. `ENABLE_DEBUG_DYLIB=NO` matters: the default Debug build
-is a stub launcher plus a dylib, which is fragile once re-signed.
+`ENABLE_DEBUG_DYLIB=NO` matters: the default Debug build is a stub launcher plus a dylib,
+which is fragile once re-signed.
 
 ## Decisions worth remembering
 
