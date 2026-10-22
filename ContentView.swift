@@ -13,7 +13,7 @@ struct ContentView: View {
     @Environment(SyncManager.self) private var syncManager
     @Environment(SourceManager.self) private var sourceManager
     @Environment(\.modelContext) private var modelContext
-    @AppStorage("general.autoUpdateOnLaunch") private var autoUpdateOnLaunch = true
+    @AppStorage("general.autoUpdateOnLaunch") private var autoUpdateOnLaunch = false
     @State private var selectedTab: AppTab = .library
     @State private var readerRouter = ReaderRouter()
 

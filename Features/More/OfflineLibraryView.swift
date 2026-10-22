@@ -57,6 +57,7 @@ struct OfflineLibraryView: View {
 struct LibraryUpdateSettingsView: View {
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<Entry> { $0.inLibrary }) private var entries: [Entry]
+    @AppStorage("general.autoUpdateOnLaunch") private var autoUpdateOnLaunch = false
     @AppStorage("updates.backgroundEnabled") private var enabled = false
     @AppStorage("updates.intervalHours") private var hours = 6.0
     @AppStorage("general.updateOnWifiOnly") private var wifiOnly = true
@@ -67,6 +68,9 @@ struct LibraryUpdateSettingsView: View {
     @AppStorage("updates.schedulingError") private var schedulingError = ""
     var body: some View {
         Form {
+            Section("On launch") {
+                Toggle("Update library on launch", isOn: $autoUpdateOnLaunch).tint(AppTheme.controlFill)
+            }
             Section("Background refresh") {
                 Toggle("Check for new chapters", isOn: $enabled).tint(AppTheme.controlFill)
                 Stepper("Requested interval: \(Int(hours)) hours", value: $hours, in: 1...72, step: 1)
