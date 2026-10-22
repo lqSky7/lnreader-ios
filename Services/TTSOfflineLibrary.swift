@@ -363,7 +363,7 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         let transferID = records[index].transferID
         records[index].state = "paused"; save()
-        session.getAllTasks { tasks in
+        session.getAllTasks { [weak self] tasks in
             for task in tasks where task.taskDescription == transferID {
                 if let download = task as? URLSessionDownloadTask {
                     download.cancel { [weak self] data in

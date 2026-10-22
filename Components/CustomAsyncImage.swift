@@ -82,20 +82,24 @@ final class ImageCache {
     private static var inFlight: [NSURL: Task<PlatformImage, Error>] = [:]
 
     static func dedupedDownload(for key: NSURL, download: @escaping () async throws -> PlatformImage) async throws -> PlatformImage {
-        lock.lock()
-        if let existing = inFlight[key] {
-            lock.unlock()
-            return try await existing.value
-        }
-        let task = Task<PlatformImage, Error> { try await download() }
-        inFlight[key] = task
-        lock.unlock()
-        defer {
-            lock.lock()
-            inFlight.removeValue(forKey: key)
-            lock.unlock()
-        }
+        let (task, isOwner) = claim(key, download: download)
+        // Only the request's owner clears the entry; waiters just share its result.
+        defer { if isOwner { release(key) } }
         return try await task.value
+    }
+
+    // Synchronous so the lock is never held across a suspension point.
+    private static func claim(_ key: NSURL, download: @escaping () async throws -> PlatformImage) -> (Task<PlatformImage, Error>, Bool) {
+        lock.withLock {
+            if let existing = inFlight[key] { return (existing, false) }
+            let task = Task<PlatformImage, Error> { try await download() }
+            inFlight[key] = task
+            return (task, true)
+        }
+    }
+
+    private static func release(_ key: NSURL) {
+        lock.withLock { _ = inFlight.removeValue(forKey: key) }
     }
 
     static func store(_ image: PlatformImage, for key: NSURL) {

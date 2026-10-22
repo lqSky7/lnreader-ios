@@ -115,7 +115,7 @@ final class LocalBookManager {
         
         // Extract all entries in the ZIP to disk
         var extractedCount = 0
-        for (path, entry) in zip.entries {
+        for (path, _) in zip.entries {
             if path.hasSuffix("/") { continue } // Skip directories
             
             if let fileData = zip.fileData(for: path) {

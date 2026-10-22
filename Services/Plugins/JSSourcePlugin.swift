@@ -38,7 +38,8 @@ enum PluginError: LocalizedError {
 /// The JS plugins use CommonJS `module.exports` pattern. This class sets up
 /// the JSContext with the required environment (module, require, fetch, crypto) and
 /// bridges calls to the plugin's functions.
-final class JSSourcePlugin: SourcePlugin {
+// JS state is only touched on `jsQueue`, which makes cross-queue captures safe.
+final class JSSourcePlugin: SourcePlugin, @unchecked Sendable {
     let id: String
     let name: String
     let iconURL: String
@@ -605,7 +606,7 @@ final class JSSourcePlugin: SourcePlugin {
                                         { (res: JSValue, rej: JSValue) in
                                             context.evaluateScript("JSON.parse")?.call(
                                                 withArguments: [text]
-                                            ).map { res.call(withArguments: [$0]) }
+                                            ).map { _ = res.call(withArguments: [$0]) }
                                         } as @convention(block) (JSValue, JSValue) -> Void,
                                         to: AnyObject.self
                                     )
@@ -932,8 +933,6 @@ final class JSSourcePlugin: SourcePlugin {
             #if DEBUG
             print("📄 [\(id)] parsePage result: could not parse chapters. isObject=\(result.isObject), isArray=\(!result.isUndefined && result.toArray() != nil)")
             #endif
-            if let raw = result.toDictionary() {
-            }
             chapters = []
         }
         #if DEBUG
