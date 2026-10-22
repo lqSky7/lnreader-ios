@@ -123,6 +123,11 @@
 		8B3EDC653451FF7B962965A6 /* SourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FC6D6218E18B347E20036D /* SourceManager.swift */; };
 		7AAEBEF2A33430B43EBBB97D /* SourceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7BE97FD82780D085139CC2 /* SourceModels.swift */; };
 		BA5373CEFD2C47E31C3F7277 /* DateParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1DF540805D2C722F69C437 /* DateParsing.swift */; };
+		294D9C07492C6ECB25DA61EF /* ExtensionContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86B874B8C39C474F97FB2CE /* ExtensionContract.swift */; };
+		2453009394E1C29F33BA7456 /* ExtensionRepoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D85DD8B6F9B5A21D3906B6E /* ExtensionRepoService.swift */; };
+		3677CEA5E0278FDC4BD229E0 /* ExtensionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2DAFDDA81802FB60316A08 /* ExtensionStore.swift */; };
+		B152D4A75103710108D37FA5 /* JSBundleMangaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7C537C97E7B2AA00700BA5 /* JSBundleMangaSource.swift */; };
+		DE9F26EF7BEE71CCF351DAE3 /* JSExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -241,6 +246,11 @@
 		95FC6D6218E18B347E20036D /* SourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceManager.swift; sourceTree = "<group>"; };
 		2C7BE97FD82780D085139CC2 /* SourceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceModels.swift; sourceTree = "<group>"; };
 		DE1DF540805D2C722F69C437 /* DateParsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateParsing.swift; sourceTree = "<group>"; };
+		E86B874B8C39C474F97FB2CE /* ExtensionContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionContract.swift; sourceTree = "<group>"; };
+		3D85DD8B6F9B5A21D3906B6E /* ExtensionRepoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionRepoService.swift; sourceTree = "<group>"; };
+		9E2DAFDDA81802FB60316A08 /* ExtensionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionStore.swift; sourceTree = "<group>"; };
+		AC7C537C97E7B2AA00700BA5 /* JSBundleMangaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSBundleMangaSource.swift; sourceTree = "<group>"; };
+		803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSExtensionHost.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -414,6 +424,7 @@
 				0F0800F1C8A9CD9E40C97AA4 /* Images */,
 				67D5E46151A19BB7CC7CBFDF /* Network */,
 				A189E877E8F4ED17EF07AC8A /* Sources */,
+				A528C90D541AC49490F539EC /* Extensions */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -575,6 +586,18 @@
 				2C7BE97FD82780D085139CC2 /* SourceModels.swift */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		A528C90D541AC49490F539EC /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				E86B874B8C39C474F97FB2CE /* ExtensionContract.swift */,
+				3D85DD8B6F9B5A21D3906B6E /* ExtensionRepoService.swift */,
+				9E2DAFDDA81802FB60316A08 /* ExtensionStore.swift */,
+				AC7C537C97E7B2AA00700BA5 /* JSBundleMangaSource.swift */,
+				803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */,
+			);
+			path = Extensions;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -767,6 +790,11 @@
 				8B3EDC653451FF7B962965A6 /* SourceManager.swift in Sources */,
 				7AAEBEF2A33430B43EBBB97D /* SourceModels.swift in Sources */,
 				BA5373CEFD2C47E31C3F7277 /* DateParsing.swift in Sources */,
+				294D9C07492C6ECB25DA61EF /* ExtensionContract.swift in Sources */,
+				2453009394E1C29F33BA7456 /* ExtensionRepoService.swift in Sources */,
+				3677CEA5E0278FDC4BD229E0 /* ExtensionStore.swift in Sources */,
+				B152D4A75103710108D37FA5 /* JSBundleMangaSource.swift in Sources */,
+				DE9F26EF7BEE71CCF351DAE3 /* JSExtensionHost.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

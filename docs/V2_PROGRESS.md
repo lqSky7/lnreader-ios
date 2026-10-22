@@ -273,3 +273,55 @@ remains the source of truth — `xcodegen generate` reproduces the same membersh
 4. **Library update scheduling** (plan §8): `BGAppRefreshTask`, per-entry restrictions,
    batching through a background `@ModelActor`.
 5. **Filter UI** on browse, now that `FilterState` exists.
+
+## Slice 7 — extension host (landed, MangaFire blocked)
+
+The wiring a transpiled extension needs is in place and verified; the first real
+extension is not, because MangaFire currently cannot be reached by a scraper.
+
+| File | What it is |
+|---|---|
+| `Services/Extensions/ExtensionContract.swift` | The bundle contract: one global `extension` object, synchronous methods, `http` + `dom` globals |
+| `Services/Extensions/JSExtensionHost.swift` | JavaScriptCore host: HTTP bridge (blocking, off the cooperative pool) and a SwiftSoup-backed DOM bridge |
+| `Services/Extensions/JSBundleMangaSource.swift` | `MangaSource` adapter: bundle JSON → `SourceEntry` / `SourceChapter` / `SourcePage` |
+| `Services/Extensions/ExtensionStore.swift` | Installed bundles on disk (`<pkg>.js` + `<pkg>.json`) |
+| `Services/Extensions/ExtensionRepoService.swift` | `repo.json` / `index.min.json`, signing-fingerprint pinning, bundle download |
+| `scripts/check-v2-extensions.sh` | Runs a bundle through the real host against a local fixture server |
+
+The contract is synchronous on purpose: the host blocks the JS thread while
+`http.get` runs. That keeps bundles straight-line and lets a transpiler emit
+plain calls instead of promise plumbing. Two globals are provided:
+
+```js
+http.get(url, headers)   // -> { status, url, body } | { error }
+dom.parse(html); dom.select(h, css); dom.text/attr/html(h)
+```
+
+### Verification
+
+`check-v2-extensions.sh` serves `tests/fixtures/extensions` over localhost and drives a
+fixture bundle through popular / search / latest / details / chapters / pages, plus a
+missing method, a throwing bundle, a bundle with no `extension`, and a 404. It passes.
+
+### MangaFire: blocked, with evidence
+
+Three separate walls, all checked from this machine:
+
+1. **Cloudflare.** `GET https://mangafire.to/` returns a 3 KB shell containing
+   `window.__CF$cv$params` — the JS challenge, not the page. Content is SPA-rendered.
+2. **Token-gated API.** `GET /api/titles?keyword=naruto` → `403 {"message":"Missing token."}`
+3. **The token is derived, not published.** `window.__config` (a 130-char blob) is not the
+   token: sending it as `x-auth-token`, `Authorization: Bearer`, or `token`, with a warm
+   cookie jar from the same session, still returns 403. The derivation lives in
+   lazily-loaded chunks of the 630 KB `main-*.js`; the strings `Missing token`, `x-auth`
+   and `api/titles` do not appear in that bundle at all.
+
+Porting MangaFire therefore needs one of:
+
+- the token algorithm reverse-engineered (a project of its own, and it rotates), or
+- a WebView-backed fetch that lets the site's own JS mint the token, then scrapes the
+  rendered DOM — which needs a device to verify and is not something this environment can
+  test.
+
+No `mangafire.js` was shipped rather than shipping a bundle that always throws.
+
