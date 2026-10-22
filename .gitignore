@@ -18,3 +18,6 @@ DerivedData/
 
 # Reference checkout (Tachiyomi/Mihon fork) used for the v2 rewrite
 /yokai/
+
+# Xcode schemes are per-developer
+LNReader.xcodeproj/xcshareddata/xcschemes/
