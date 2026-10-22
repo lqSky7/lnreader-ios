@@ -21,23 +21,14 @@ extension View {
     /// built every page up front, re-evaluated all of them on any state change,
     /// and fought the scroll view for the gesture. This renders one page and
     /// only reacts when a drag ends, so vertical scrolling is never touched.
+    /// Whatever changes `selection` (swipe or segmented control) gets the same
+    /// animated page change.
     func horizontalSwipe(
         selection: Binding<String>,
         options: [String],
         isEnabled: Bool = true
     ) -> some View {
-        simultaneousGesture(
-            DragGesture(minimumDistance: 24)
-                .onEnded { value in
-                    guard isEnabled,
-                          abs(value.translation.width) > 80,
-                          abs(value.translation.width) > abs(value.translation.height) * 2,
-                          let current = options.firstIndex(of: selection.wrappedValue) else { return }
-                    let next = current + (value.translation.width < 0 ? 1 : -1)
-                    guard options.indices.contains(next) else { return }
-                    withAnimation(.easeInOut(duration: 0.2)) { selection.wrappedValue = options[next] }
-                }
-        )
+        modifier(HorizontalSwipePager(selection: selection, options: options, isEnabled: isEnabled))
     }
 
     // MARK: - Keyboard
@@ -123,3 +114,41 @@ extension View {
         }
     }
 #endif
+
+/// Cross-fades between pages as `selection` changes, drifting slightly in the
+/// direction of travel so a swipe reads as movement instead of a cut.
+private struct HorizontalSwipePager: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var selection: String
+    let options: [String]
+    let isEnabled: Bool
+    @State private var travel: CGFloat = 1
+
+    func body(content: Content) -> some View {
+        ZStack {
+            content
+                .id(selection)
+                .transition(reduceMotion ? .opacity : .asymmetric(
+                    insertion: .opacity.combined(with: .offset(x: 28 * travel)),
+                    removal: .opacity.combined(with: .offset(x: -28 * travel))
+                ))
+        }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: selection)
+        .onChange(of: selection) { old, new in
+            guard let from = options.firstIndex(of: old), let to = options.firstIndex(of: new) else { return }
+            travel = to > from ? 1 : -1
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard isEnabled,
+                          abs(value.translation.width) > 80,
+                          abs(value.translation.width) > abs(value.translation.height) * 2,
+                          let current = options.firstIndex(of: selection) else { return }
+                    let next = current + (value.translation.width < 0 ? 1 : -1)
+                    guard options.indices.contains(next) else { return }
+                    selection = options[next]
+                }
+        )
+    }
+}
