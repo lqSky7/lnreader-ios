@@ -1,0 +1,436 @@
+// MihonBackup.swift - Reads and restores `.tachibk` backups.
+//
+// `.tachibk` is the format Mihon, Tachiyomi forks, Yokai and Tachimanga write: a
+// gzipped protobuf `Backup` message. Field numbers below are theirs; see
+// docs/MANGA_SUPPORT_PLAN.md §6.1. Only the manga half is read. Preferences,
+// extension repos and source preferences belong to another app's settings
+// model and are ignored.
+
+import Foundation
+import SwiftData
+
+enum MihonBackup {
+
+    /// Decompressed size we are willing to read.
+    static let sizeLimit = 256 * 1024 * 1024
+
+    // MARK: - Decoded values
+
+    struct Backup: Sendable {
+        var manga: [Manga] = []
+        var categories: [Category] = []
+        /// Names the backup recorded for the sources it uses, by source id.
+        var sourceNames: [Int64: String] = [:]
+    }
+
+    struct Category: Sendable {
+        var name = ""
+        var order = 0
+    }
+
+    struct Manga: Sendable {
+        var source: Int64 = 0
+        var url = ""
+        var title = ""
+        var artist = ""
+        var author = ""
+        var description = ""
+        var genres: [String] = []
+        var status = 0
+        var thumbnailURL = ""
+        var dateAdded: Int64 = 0
+        /// Absent means `true`: Mihon omits the field when it holds its default.
+        var favorite = true
+        var viewerFlags = 0
+        var updateStrategy = 0
+        var memo = ""
+        /// `Category.order` values of the categories this title belongs to.
+        var categoryOrders: [Int64] = []
+        var chapters: [Chapter] = []
+        var tracks: [Track] = []
+        var history: [History] = []
+    }
+
+    struct Chapter: Sendable {
+        var url = ""
+        var name = ""
+        var scanlator = ""
+        var read = false
+        var bookmark = false
+        var lastPageRead = 0
+        var dateFetch: Int64 = 0
+        var dateUpload: Int64 = 0
+        var number: Float = -1
+        var sourceOrder = 0
+        var memo = ""
+    }
+
+    struct Track: Sendable {
+        var syncId = 0
+        var libraryId: Int64 = 0
+        var mediaId: Int64 = 0
+        var url = ""
+        var title = ""
+        var lastChapterRead: Float = 0
+        var totalChapters = 0
+        var score: Float = 0
+        var status = 0
+        var startedMs: Int64 = 0
+        var finishedMs: Int64 = 0
+    }
+
+    struct History: Sendable {
+        var chapterURL = ""
+        var lastReadMs: Int64 = 0
+        var durationMs: Int64 = 0
+    }
+
+    enum BackupError: LocalizedError {
+        case empty
+        var errorDescription: String? { "The backup has no titles in it." }
+    }
+
+    // MARK: - Decoding
+
+    /// Decode a backup file's bytes. Accepts gzipped (the normal case) or raw protobuf.
+    static func decode(_ file: Data) throws -> Backup {
+        let payload = Gzip.isGzip(file) ? try Gzip.decompress(file, limit: sizeLimit) : file
+        var reader = ProtobufReader(payload)
+        var backup = Backup()
+
+        while let (field, value) = try reader.next() {
+            switch field {
+            case 1: if let data = value.message { backup.manga.append(try manga(from: data)) }
+            case 2: if let data = value.message { backup.categories.append(try category(from: data)) }
+            case 101: if let data = value.message { try source(from: data, into: &backup.sourceNames) }
+            default: break
+            }
+        }
+        guard !backup.manga.isEmpty else { throw BackupError.empty }
+        return backup
+    }
+
+    private static func manga(from data: Data) throws -> Manga {
+        var out = Manga()
+        var reader = ProtobufReader(data)
+        while let (field, value) = try reader.next() {
+            switch field {
+            case 1: out.source = value.int64 ?? 0
+            case 2: out.url = value.string ?? ""
+            case 3: out.title = value.string ?? ""
+            case 4: out.artist = value.string ?? ""
+            case 5: out.author = value.string ?? ""
+            case 6: out.description = value.string ?? ""
+            case 7: if let genre = value.string { out.genres.append(genre) }
+            case 8: out.status = value.int ?? 0
+            case 9: out.thumbnailURL = value.string ?? ""
+            case 13: out.dateAdded = value.int64 ?? 0
+            case 16: if let data = value.message { out.chapters.append(try chapter(from: data)) }
+            case 17: out.categoryOrders.append(contentsOf: value.integers)
+            case 18: if let data = value.message { out.tracks.append(try track(from: data)) }
+            case 100: out.favorite = value.bool ?? true
+            case 103: out.viewerFlags = value.int ?? 0
+            case 104: if let data = value.message { out.history.append(try history(from: data)) }
+            case 105: out.updateStrategy = value.int ?? 0
+            case 112: out.memo = value.string ?? ""
+            default: break
+            }
+        }
+        return out
+    }
+
+    private static func chapter(from data: Data) throws -> Chapter {
+        var out = Chapter()
+        var reader = ProtobufReader(data)
+        while let (field, value) = try reader.next() {
+            switch field {
+            case 1: out.url = value.string ?? ""
+            case 2: out.name = value.string ?? ""
+            case 3: out.scanlator = value.string ?? ""
+            case 4: out.read = value.bool ?? false
+            case 5: out.bookmark = value.bool ?? false
+            case 6: out.lastPageRead = value.int ?? 0
+            case 7: out.dateFetch = value.int64 ?? 0
+            case 8: out.dateUpload = value.int64 ?? 0
+            case 9: out.number = value.float ?? -1
+            case 10: out.sourceOrder = value.int ?? 0
+            case 13: out.memo = value.string ?? ""
+            default: break
+            }
+        }
+        return out
+    }
+
+    private static func track(from data: Data) throws -> Track {
+        var out = Track()
+        var reader = ProtobufReader(data)
+        while let (field, value) = try reader.next() {
+            switch field {
+            case 1: out.syncId = value.int ?? 0
+            case 2: out.libraryId = value.int64 ?? 0
+            case 3: if out.mediaId == 0 { out.mediaId = value.int64 ?? 0 }   // legacy 32-bit id
+            case 4: out.url = value.string ?? ""
+            case 5: out.title = value.string ?? ""
+            case 6: out.lastChapterRead = value.float ?? 0
+            case 7: out.totalChapters = value.int ?? 0
+            case 8: out.score = value.float ?? 0
+            case 9: out.status = value.int ?? 0
+            case 10: out.startedMs = value.int64 ?? 0
+            case 11: out.finishedMs = value.int64 ?? 0
+            case 100: out.mediaId = value.int64 ?? out.mediaId
+            default: break
+            }
+        }
+        return out
+    }
+
+    private static func history(from data: Data) throws -> History {
+        var out = History()
+        var reader = ProtobufReader(data)
+        while let (field, value) = try reader.next() {
+            switch field {
+            case 1: out.chapterURL = value.string ?? ""
+            case 2: out.lastReadMs = value.int64 ?? 0
+            case 3: out.durationMs = value.int64 ?? 0
+            default: break
+            }
+        }
+        return out
+    }
+
+    private static func category(from data: Data) throws -> Category {
+        var out = Category()
+        var reader = ProtobufReader(data)
+        while let (field, value) = try reader.next() {
+            switch field {
+            case 1: out.name = value.string ?? ""
+            case 2: out.order = value.int ?? 0
+            default: break
+            }
+        }
+        return out
+    }
+
+    private static func source(from data: Data, into names: inout [Int64: String]) throws {
+        var name = ""
+        var id: Int64 = 0
+        var reader = ProtobufReader(data)
+        while let (field, value) = try reader.next() {
+            switch field {
+            case 1: name = value.string ?? ""
+            case 2: id = value.int64 ?? 0
+            default: break
+            }
+        }
+        if id != 0 { names[id] = name }
+    }
+
+    // MARK: - Summary
+
+    /// What a restore did, for the confirmation and the result message.
+    struct Summary: Sendable {
+        var added = 0
+        var merged = 0
+        var chapters = 0
+        var categories = 0
+        /// Titles whose source is not one of the bundled extensions, by source name.
+        var unmatchedSources: [String: Int] = [:]
+        var skipped = 0
+    }
+
+    /// Count titles per source without touching the store, for the preview dialog.
+    static func preview(_ backup: Backup) -> (matched: Int, unmatched: [String: Int]) {
+        var matched = 0
+        var unmatched: [String: Int] = [:]
+        for manga in backup.manga {
+            if BundledExtensions.mihonSourceIDs[manga.source] != nil {
+                matched += 1
+            } else {
+                unmatched[backup.sourceNames[manga.source] ?? "Source \(manga.source)", default: 0] += 1
+            }
+        }
+        return (matched, unmatched)
+    }
+
+    // MARK: - Restore
+
+    /// `sourceKey` an imported title is stored under.
+    static func sourceKey(forSource id: Int64) -> String {
+        if let pkg = BundledExtensions.mihonSourceIDs[id] {
+            return SourceKey.make(kind: .manga, id: pkg)
+        }
+        // Not installed: keep the Mihon id so it resolves when a matching
+        // extension arrives, and so the title is not silently lost.
+        return SourceKey.make(kind: .manga, id: String(id))
+    }
+
+    /// Merge `backup` into the store behind `container`.
+    ///
+    /// Runs on whatever thread calls it, with its own `ModelContext`, so call it
+    /// off the main actor: a large library is tens of thousands of rows.
+    ///
+    /// Merge rules, from Mihon's `BackupRestorer` (plan §6.1): categories match by
+    /// name, titles by (source, url) and keep their stored details; chapters
+    /// match by url with read and bookmark OR-ed and the further page kept;
+    /// history keeps the later read; trackers match by service and keep the
+    /// higher chapter.
+    static func restore(_ backup: Backup, into container: ModelContainer) throws -> Summary {
+        var summary = Summary()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+
+        // Categories.
+        var categories = Dictionary(
+            try context.fetch(FetchDescriptor<SchemaV1.Category>()).map { ($0.name, $0) },
+            uniquingKeysWith: { first, _ in first })
+        var nextOrder = (categories.values.map(\.order).max() ?? -1) + 1
+        var categoryByBackupOrder: [Int64: SchemaV1.Category] = [:]
+        for category in backup.categories.sorted(by: { $0.order < $1.order }) {
+            let name = category.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            if let existing = categories[name] {
+                categoryByBackupOrder[Int64(category.order)] = existing
+            } else {
+                let created = SchemaV1.Category(name: name, order: nextOrder)
+                nextOrder += 1
+                context.insert(created)
+                categories[name] = created
+                categoryByBackupOrder[Int64(category.order)] = created
+                summary.categories += 1
+            }
+        }
+
+        // Existing titles, indexed once.
+        var entries: [String: Entry] = [:]
+        for entry in try context.fetch(FetchDescriptor<Entry>()) where entry.kind == .manga {
+            entries["\(entry.sourceKey)\u{0}\(entry.url)"] = entry
+        }
+
+        for (offset, manga) in backup.manga.enumerated() {
+            guard !manga.url.isEmpty, !manga.title.isEmpty else {
+                summary.skipped += 1
+                continue
+            }
+            let key = sourceKey(forSource: manga.source)
+            if BundledExtensions.mihonSourceIDs[manga.source] == nil {
+                summary.unmatchedSources[backup.sourceNames[manga.source] ?? "Source \(manga.source)", default: 0] += 1
+            }
+
+            let entry: Entry
+            if let existing = entries["\(key)\u{0}\(manga.url)"] {
+                entry = existing
+                summary.merged += 1
+            } else {
+                entry = Entry(kind: .manga, sourceKey: key, url: manga.url, title: manga.title)
+                context.insert(entry)
+                apply(manga, to: entry)
+                entries["\(key)\u{0}\(manga.url)"] = entry
+                summary.added += 1
+            }
+            entry.inLibrary = entry.inLibrary || manga.favorite
+
+            for order in manga.categoryOrders {
+                guard let category = categoryByBackupOrder[order],
+                      !entry.categories.contains(where: { $0.name == category.name })
+                else { continue }
+                entry.categories.append(category)
+            }
+
+            summary.chapters += mergeChapters(manga, into: entry, context: context)
+            mergeTracks(manga.tracks, into: entry, context: context)
+
+            // Keep memory flat on a big library.
+            if offset % 25 == 24 { try context.save() }
+        }
+
+        try context.save()
+        return summary
+    }
+
+    private static func apply(_ manga: Manga, to entry: Entry) {
+        entry.author = manga.author.isEmpty ? nil : manga.author
+        entry.artist = manga.artist.isEmpty ? nil : manga.artist
+        entry.summary = manga.description.isEmpty ? nil : manga.description
+        entry.genres = manga.genres.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        entry.status = EntryStatus(rawValue: manga.status) ?? .unknown
+        entry.thumbnailURL = manga.thumbnailURL.isEmpty ? nil : manga.thumbnailURL
+        if manga.dateAdded > 0 { entry.dateAdded = date(manga.dateAdded) }
+        entry.viewerFlags = manga.viewerFlags
+        entry.updateStrategy = UpdateStrategy(rawValue: manga.updateStrategy) ?? .always
+        entry.memo = manga.memo.isEmpty ? "{}" : manga.memo
+    }
+
+    private static func mergeChapters(_ manga: Manga, into entry: Entry, context: ModelContext) -> Int {
+        var byURL = Dictionary(entry.chapters.map { ($0.url, $0) }, uniquingKeysWith: { first, _ in first })
+        var inserted = 0
+
+        for item in manga.chapters where !item.url.isEmpty && byURL[item.url] == nil {
+            let chapter = SchemaV1.Chapter(
+                url: item.url,
+                name: item.name,
+                chapterNumber: item.number.isFinite ? Double(item.number) : -1,
+                sourceOrder: item.sourceOrder)
+            context.insert(chapter)
+            chapter.entry = entry
+            chapter.scanlator = item.scanlator.isEmpty ? nil : item.scanlator
+            if item.dateUpload > 0 { chapter.dateUpload = date(item.dateUpload) }
+            if item.dateFetch > 0 { chapter.dateFetch = date(item.dateFetch) }
+            chapter.memo = item.memo.isEmpty ? "{}" : item.memo
+            byURL[item.url] = chapter
+            inserted += 1
+        }
+
+        var latestRead: Date?
+        for item in manga.chapters {
+            guard let chapter = byURL[item.url] else { continue }
+            chapter.read = chapter.read || item.read
+            chapter.bookmark = chapter.bookmark || item.bookmark
+            // A finished chapter reads as 100%, as the reader records it.
+            if chapter.read { chapter.progress = max(chapter.progress, 100) }
+            if item.lastPageRead > chapter.lastPageRead { chapter.lastPageRead = item.lastPageRead }
+        }
+
+        for item in manga.history where item.lastReadMs > 0 {
+            guard let chapter = byURL[item.chapterURL] else { continue }
+            let when = date(item.lastReadMs)
+            let seconds = TimeInterval(item.durationMs) / 1000
+            if let history = chapter.history {
+                history.lastRead = max(history.lastRead, when)
+                history.timeRead = max(history.timeRead, seconds)
+            } else {
+                let history = SchemaV1.History(chapterURL: item.chapterURL, lastRead: when)
+                history.timeRead = seconds
+                context.insert(history)
+                history.chapter = chapter
+                chapter.history = history
+            }
+            latestRead = max(latestRead ?? .distantPast, when)
+        }
+        if let latestRead { entry.lastReadAt = max(entry.lastReadAt ?? .distantPast, latestRead) }
+        return inserted
+    }
+
+    private static func mergeTracks(_ tracks: [Track], into entry: Entry, context: ModelContext) {
+        for item in tracks {
+            if let existing = entry.tracks.first(where: { $0.syncId == item.syncId }) {
+                existing.lastChapterRead = max(existing.lastChapterRead, Double(item.lastChapterRead))
+                continue
+            }
+            let track = SchemaV1.Track(syncId: item.syncId, remoteId: item.mediaId, title: item.title)
+            context.insert(track)
+            track.entry = entry
+            track.libraryId = item.libraryId == 0 ? nil : item.libraryId
+            track.lastChapterRead = Double(item.lastChapterRead)
+            track.totalChapters = item.totalChapters
+            track.status = item.status
+            track.score = Double(item.score)
+            track.remoteURL = item.url
+            if item.startedMs > 0 { track.startDate = date(item.startedMs) }
+            if item.finishedMs > 0 { track.finishDate = date(item.finishedMs) }
+        }
+    }
+
+    private static func date(_ milliseconds: Int64) -> Date {
+        Date(timeIntervalSince1970: TimeInterval(milliseconds) / 1000)
+    }
+}

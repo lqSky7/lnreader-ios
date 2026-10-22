@@ -149,6 +149,9 @@
 		FA024401BCB08F7E6C64FBFE /* HistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9C09B8F93F66D136B578B /* HistoryRow.swift */; };
 		FD91FA952D879AFFD81F3ED3 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788EA87FDCBD419221019BB2 /* Constants.swift */; };
 		ABCD26890000000000000100 /* Services/Extensions/WebViewCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000100 /* Services/Extensions/WebViewCapture.swift */; };
+		ABCD26890000000000000101 /* Services/Backup/ProtobufReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000101 /* Services/Backup/ProtobufReader.swift */; };
+		ABCD26890000000000000102 /* Services/Backup/MihonBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000102 /* Services/Backup/MihonBackup.swift */; };
+		ABCD26890000000000000103 /* Utilities/Gzip.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000103 /* Utilities/Gzip.swift */; };
 		ABCD26890000000000000104 /* Resources/allmanga.js in Resources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000104 /* Resources/allmanga.js */; };
 /* End PBXBuildFile section */
 
@@ -293,6 +296,9 @@
 		FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassOverlay.swift; sourceTree = "<group>"; };
 		FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsView.swift; sourceTree = "<group>"; };
 		ABCD26880000000000000100 /* Services/Extensions/WebViewCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Extensions/WebViewCapture.swift; sourceTree = SOURCE_ROOT; };
+		ABCD26880000000000000101 /* Services/Backup/ProtobufReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Backup/ProtobufReader.swift; sourceTree = SOURCE_ROOT; };
+		ABCD26880000000000000102 /* Services/Backup/MihonBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Backup/MihonBackup.swift; sourceTree = SOURCE_ROOT; };
+		ABCD26880000000000000103 /* Utilities/Gzip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utilities/Gzip.swift; sourceTree = SOURCE_ROOT; };
 		ABCD26880000000000000104 /* Resources/allmanga.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Resources/allmanga.js; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -454,6 +460,9 @@
 			isa = PBXGroup;
 			children = (
 				ABCD26880000000000000100 /* Services/Extensions/WebViewCapture.swift */,
+				ABCD26880000000000000101 /* Services/Backup/ProtobufReader.swift */,
+				ABCD26880000000000000102 /* Services/Backup/MihonBackup.swift */,
+				ABCD26880000000000000103 /* Utilities/Gzip.swift */,
 				ABCD26880000000000000104 /* Resources/allmanga.js */,
 				ABCD26880000000000000003 /* Features/More/OfflineLibraryView.swift */,
 				ABCD26880000000000000002 /* Services/LibraryMaintenance.swift */,
@@ -755,6 +764,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				ABCD26890000000000000100 /* Services/Extensions/WebViewCapture.swift in Sources */,
+				ABCD26890000000000000101 /* Services/Backup/ProtobufReader.swift in Sources */,
+				ABCD26890000000000000102 /* Services/Backup/MihonBackup.swift in Sources */,
+				ABCD26890000000000000103 /* Utilities/Gzip.swift in Sources */,
 				ABCD26890000000000000004 /* Services/OfflineChapters.swift in Sources */,
 				ABCD26890000000000000003 /* Features/More/OfflineLibraryView.swift in Sources */,
 				ABCD26890000000000000002 /* Services/LibraryMaintenance.swift in Sources */,

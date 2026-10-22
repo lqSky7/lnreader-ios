@@ -116,6 +116,9 @@ struct LibraryBackupView: View {
     @State private var busy = false
     @State private var message: String?
     @State private var pending: LibraryBackup.Snapshot?
+    @State private var pendingMihon: MihonBackup.Backup?
+    /// Which kind of file the file picker is currently choosing.
+    @State private var importsMihon = false
     var body: some View {
         Form {
             Section("Encrypted backup") {
@@ -132,7 +135,12 @@ struct LibraryBackupView: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                 Text("Leave blank to use this device’s key. Existing title details and newer reading progress are kept.")
                     .font(.footnote).foregroundStyle(.secondary)
-                Button("Choose .lnbk backup") { importing = true }.disabled(busy)
+                Button("Choose .lnbk backup") { importsMihon = false; importing = true }.disabled(busy)
+            }
+            Section("Import from another app") {
+                Text("Restores the manga library, categories, read chapters, history and trackers from a .tachibk backup made by Mihon, Tachiyomi, Yokai or Tachimanga. Titles already here keep their details and the further reading progress.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Choose .tachibk backup") { importsMihon = true; importing = true }.disabled(busy)
             }
             if busy { ProgressView("Working…") }
             if let message { Section { Text(message) } }
@@ -146,6 +154,15 @@ struct LibraryBackupView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.lnreaderBackup, .data], allowsMultipleSelection: false) { result in
             Task { await read(result) }
         }
+        .confirmationDialog(mihonPrompt, isPresented: Binding(get: { pendingMihon != nil }, set: { if !$0 { pendingMihon = nil } }), titleVisibility: .visible) {
+            Button("Import backup") {
+                guard let backup = pendingMihon else { return }
+                pendingMihon = nil
+                restoreMihon(backup)
+            }
+        } message: {
+            Text(mihonDetail)
+        }
         .confirmationDialog("Merge \(pending?.entries.count ?? 0) titles into your library?", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), titleVisibility: .visible) {
             Button("Restore backup") {
                 guard let snapshot = pending else { return }
@@ -155,6 +172,43 @@ struct LibraryBackupView: View {
             }
         }
     }
+    private var mihonPrompt: String { "Import \(pendingMihon?.manga.count ?? 0) titles?" }
+
+    /// Which sources the file uses and whether they are installed.
+    private var mihonDetail: String {
+        guard let backup = pendingMihon else { return "" }
+        let preview = MihonBackup.preview(backup)
+        var lines = ["\(preview.matched) titles are from sources built into the app."]
+        if !preview.unmatched.isEmpty {
+            let names = preview.unmatched.sorted { $0.value > $1.value }
+                .map { "\($0.key) (\($0.value))" }.joined(separator: ", ")
+            lines.append("These sources are not installed, so their titles will be listed but cannot be opened until you add them: \(names).")
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    private func restoreMihon(_ backup: MihonBackup.Backup) {
+        busy = true
+        let container = context.container
+        Task {
+            defer { busy = false }
+            do {
+                let summary = try await Task.detached(priority: .userInitiated) {
+                    try MihonBackup.restore(backup, into: container)
+                }.value
+                LibraryChapterCounts.shared.invalidate()
+                var text = "Imported \(summary.added) new titles with \(summary.chapters) chapters"
+                if summary.merged > 0 { text += ", merged \(summary.merged) that were already here" }
+                if summary.categories > 0 { text += ", added \(summary.categories) categories" }
+                message = text + "."
+                if !summary.unmatchedSources.isEmpty {
+                    let total = summary.unmatchedSources.values.reduce(0, +)
+                    message? += " \(total) titles come from sources that are not installed."
+                }
+            } catch { message = "Import failed: \(error.localizedDescription)" }
+        }
+    }
+
     private func export() {
         busy = true
         Task {
@@ -175,12 +229,24 @@ struct LibraryBackupView: View {
             guard let url = try result.get().first else { return }
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            if importsMihon {
+                pendingMihon = try await Task.detached {
+                    let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                    guard size <= 256 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
+                    return try MihonBackup.decode(Data(contentsOf: url))
+                }.value
+                return
+            }
             let key = importKey.isEmpty ? recoveryKey : importKey
             pending = try await Task.detached {
                 let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
                 guard size <= LibraryBackup.limit + 64 else { throw CocoaError(.fileReadTooLarge) }
                 return try LibraryBackup.open(Data(contentsOf: url), recoveryKey: key)
             }.value
-        } catch { message = "Could not open backup. Check the recovery key and file. \(error.localizedDescription)" }
+        } catch {
+            message = importsMihon
+                ? "Could not read that backup. \(error.localizedDescription)"
+                : "Could not open backup. Check the recovery key and file. \(error.localizedDescription)"
+        }
     }
 }

@@ -63,7 +63,7 @@ and migration behavior is unchanged.
 The local format is `LNRB | 2 | AES-GCM combined box`, authenticating the five-byte
 header. Its payload is versioned JSON. This is a distinct envelope version from the
 plan's Argon2/protobuf proposal, so it cannot silently misread that future format.
-The planned .tachibk interoperability remains part of deferred migration work. There
+**More → Backup & restore → Import from another app** reads `.tachibk` files from Mihon, Tachiyomi forks, Yokai and Tachimanga (see below). Exporting a `.tachibk` is still deferred. There
 is no cloud backup endpoint in this change.
 
 Import authenticates and validates the snapshot before presenting the merge action.
@@ -86,3 +86,24 @@ Device checks are still required for the new screens, Files export/import and Ke
 behavior, airplane-mode reading, task expiration, continued-processing progress, and
 scheduled refresh/notifications. This host currently has no installed Simulator runtime;
 the paired iPhone is unavailable. A Simulator SDK build checks compilation only.
+
+## Importing a .tachibk backup
+
+`Services/Backup/MihonBackup.swift` reads the gzipped protobuf those apps write (field numbers in
+`docs/MANGA_SUPPORT_PLAN.md` §6.1) with a small hand-written wire reader; there is no protobuf dependency.
+It restores titles, categories, chapters (read, bookmark, last page, scanlator, upload and fetch dates),
+history and trackers. App preferences, extension repos and source preferences are ignored.
+
+- **Merge, not replace.** Titles match on source and URL and keep the details already stored. Chapters
+  match on URL; read and bookmark are OR-ed and the further page wins. History keeps the later read,
+  trackers keep the higher chapter. Importing the same file twice changes nothing.
+- **Sources.** A backup names a source by its Mihon id. `BundledExtensions.mihonSourceIDs` maps the ids of
+  built-in extensions (MangaFire, AllManga) to them. A title from any other source is still imported, under
+  `mihon:<id>`, and the confirmation says which sources are missing; it opens once a matching extension
+  is installed.
+- **Favorites.** Mihon omits `favorite` when it is true, so a missing flag means "in library".
+- **Novels.** The plan reserves fields 5000+ for LNReader's own novel data. Nothing writes them yet, so
+  nothing reads them.
+
+`scripts/check-mihon-backup.sh` builds a backup in the test, gzips it and restores it into an in-memory
+store; set `TACHIBK_SAMPLE=/path/to/file.tachibk` to run a real export too.
