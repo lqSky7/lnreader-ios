@@ -14,12 +14,15 @@ struct ChapterListView: View {
     /// Manga sources hand over the whole chapter list at once, so there is
     /// nothing to page through — show all of it.
     var showsAllChapters = false
+    /// Per-entry scanlator priority, when the parent owns one.
+    var scanlatorSettings: ScanlatorSettings? = nil
     let sourceKey: String
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
     @State private var showSearchField = false
     @State private var showDirectory = false
+    @State private var showScanlators = false
     @FocusState private var searchFocused: Bool
 
     private var isFiltered: Bool { selectedFilter != .all || !searchText.isEmpty }
@@ -54,6 +57,17 @@ struct ChapterListView: View {
                 } label: {
                     Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill").frame(width: 40, height: 40)
                 }.buttonStyle(.glass).accessibilityLabel("Filter chapters")
+
+                if let scanlatorSettings {
+                    Button {
+                        showScanlators = true
+                    } label: {
+                        Image(systemName: scanlatorSettings.isEnabled ? "person.2.fill" : "person.2")
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Scanlator priority")
+                }
             }
             .padding(.top, 8)
 
@@ -107,6 +121,17 @@ struct ChapterListView: View {
                 initialSearch: searchText, initialFilter: selectedFilter)
         }
         .onAppear { showSearchField = !searchText.isEmpty }
+        .sheet(isPresented: $showScanlators) {
+            if let scanlatorSettings {
+                ScanlatorSettingsView(
+                    settings: scanlatorSettings,
+                    scanlators: Set(allChapters.isEmpty ? chapters : allChapters)
+                        .compactMap(\.scanlator)
+                        .filter { !$0.isEmpty }
+                        .sorted()
+                )
+            }
+        }
     }
 }
 
@@ -128,6 +153,8 @@ struct ChapterDisplay: Identifiable, Hashable {
     let isInProgress: Bool
     let position: Int
     let chapterNumber: Double?
+    /// Which group released this chapter, when the source says.
+    let scanlator: String?
     /// Ordering key that does not depend on how the source listed the chapters.
     /// MangaFire returns newest-first, most novel sources oldest-first, so
     /// `position` is not comparable across sources — the number is.
@@ -150,6 +177,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.isInProgress = chapter.isInProgress
         self.position = chapter.sourceOrder
         self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
+        self.scanlator = chapter.scanlator
         self.sortNumber = chapter.chapterNumber > 0
             ? chapter.chapterNumber
             : Double(chapter.sourceOrder + 1)
@@ -176,6 +204,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.isInProgress = false
         self.position = position
         self.chapterNumber = sourceChapter.chapterNumber >= 0 ? sourceChapter.chapterNumber : nil
+        self.scanlator = sourceChapter.scanlator
         let parsed = sourceChapter.chapterNumber > 0
             ? sourceChapter.chapterNumber
             : ChapterRecognition.parseChapterNumber(sourceChapter.name)

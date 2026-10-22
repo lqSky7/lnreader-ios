@@ -376,3 +376,25 @@ per source — "First" showed the newest chapters for manga.
   should not render 2000 rows on the detail screen.
 - Chapter search now matches the parsed number rather than `position + 1`.
 
+## Slice 13 — scanlator priority
+
+One toggle per entry, then an ordered list. Drag a scanlator to set priority (used to merge
+duplicate chapter numbers); switch a row off to hide that scanlator's chapters.
+
+| File | What it is |
+|---|---|
+| `Features/Novel/ScanlatorRules.swift` | Pure rule: given chapter numbers, scanlators and a preference, which indices survive |
+| `Features/Novel/ScanlatorSettings.swift` | The `@Observable` wrapper, persisted per entry in UserDefaults |
+| `Features/Novel/ScanlatorSettingsView.swift` | The sheet: master toggle, draggable rows, per-row switch |
+| `scripts/check-v2-scanlators.sh` | Seven cases: off, no priority, priority order, hidden scanlator, hidden *winner*, unnumbered chapters, unlisted ranking |
+
+Decisions:
+
+- **Stored in UserDefaults, not `Entry`.** These are view preferences; adding them to the
+  model would mean a schema migration for every tuning knob.
+- **Master toggle gates everything.** Off means no merging and no hiding, so a half-set-up
+  list can never silently drop chapters.
+- **A hidden winner falls back.** If the top-priority scanlator is switched off, the next
+  one's chapter is kept rather than the number disappearing entirely.
+- **Unnumbered chapters are never merged** — there is nothing to match them on.
+

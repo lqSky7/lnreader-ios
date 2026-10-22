@@ -36,6 +36,8 @@ struct NovelDetailView: View {
     @State private var navigateToChapter: ChapterDisplay? = nil
     @State private var allChapters: [ChapterDisplay] = []
     @State private var showAudioDownloads = false
+    /// Scanlator priority for this entry, loaded from its own defaults key.
+    @State private var scanlatorSettings: ScanlatorSettings
 
     // MARK: - Initializers
 
@@ -45,6 +47,9 @@ struct NovelDetailView: View {
         self.sourceEntry = nil
         self.sourceKey = entry.sourceKey
         self._localEntry = State(initialValue: entry)
+        self._scanlatorSettings = State(
+            initialValue: ScanlatorSettings(key: "\(entry.sourceKey)::\(entry.url)")
+        )
     }
 
     /// View an entry discovered from browse/search.
@@ -53,6 +58,9 @@ struct NovelDetailView: View {
         self.sourceEntry = sourceEntry
         self.sourceKey = sourceEntry.sourceKey
         self._localEntry = State(initialValue: nil)
+        self._scanlatorSettings = State(
+            initialValue: ScanlatorSettings(key: "\(sourceEntry.sourceKey)::\(sourceEntry.url)")
+        )
     }
 
     var body: some View {
@@ -102,6 +110,7 @@ struct NovelDetailView: View {
                         totalCount: allChapters.count,
                         filteredCount: filteredChapters.count,
                         showsAllChapters: showsAllChapters,
+                        scanlatorSettings: scanlatorSettings,
                         sourceKey: sourceKey,
                         selectedRange: $selectedRange,
                         selectedFilter: $selectedFilter,
@@ -209,7 +218,10 @@ struct NovelDetailView: View {
     /// newest-first while most novel sources go oldest-first — so it cannot be
     /// used to sort. The parsed number can.
     private var orderedChapters: [ChapterDisplay] {
-        allChapters.sorted { lhs, rhs in
+        // Merge and hide by scanlator before ordering, so the list shows what
+        // the user actually asked for.
+        let base = ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
+        return base.sorted { lhs, rhs in
             if lhs.sortNumber != rhs.sortNumber { return lhs.sortNumber > rhs.sortNumber }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
         }

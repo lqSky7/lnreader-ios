@@ -133,6 +133,9 @@
 		0C1F88D43CB0872BBEFD8D36 /* SourceIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */; };
 		B00394AC973379A2DB10AF2B /* ReaderRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */; };
 		C8637E60FBC9B7A81BA3A275 /* ReaderChromeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62993C0D9FEA014390994E1 /* ReaderChromeState.swift */; };
+		04C6FC56B9070F98F8B4B3A6 /* ScanlatorRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19BE8C9EDED69C07CE5F18A /* ScanlatorRules.swift */; };
+		8D0D94AA7469B8B75A2E194F /* ScanlatorSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB18EE68F95E7A622DA3FCCC /* ScanlatorSettings.swift */; };
+		706569663D252E73D671EB2D /* ScanlatorSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAA342A4ECE74C98B08EB38 /* ScanlatorSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -261,6 +264,9 @@
 		3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceIconView.swift; sourceTree = "<group>"; };
 		F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderRouter.swift; sourceTree = "<group>"; };
 		B62993C0D9FEA014390994E1 /* ReaderChromeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderChromeState.swift; sourceTree = "<group>"; };
+		C19BE8C9EDED69C07CE5F18A /* ScanlatorRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanlatorRules.swift; sourceTree = "<group>"; };
+		BB18EE68F95E7A622DA3FCCC /* ScanlatorSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanlatorSettings.swift; sourceTree = "<group>"; };
+		CFAA342A4ECE74C98B08EB38 /* ScanlatorSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanlatorSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -363,6 +369,9 @@
 				F8C839AAAF9EECC8AEFF7D32 /* NovelDetailView.swift */,
 				864A984E2C4C0237F815C05E /* NovelHeaderView.swift */,
 				F40544D40A826C93D44709D4 /* NovelInfoSection.swift */,
+				C19BE8C9EDED69C07CE5F18A /* ScanlatorRules.swift */,
+				BB18EE68F95E7A622DA3FCCC /* ScanlatorSettings.swift */,
+				CFAA342A4ECE74C98B08EB38 /* ScanlatorSettingsView.swift */,
 			);
 			path = Novel;
 			sourceTree = "<group>";
@@ -815,6 +824,9 @@
 				0C1F88D43CB0872BBEFD8D36 /* SourceIconView.swift in Sources */,
 				B00394AC973379A2DB10AF2B /* ReaderRouter.swift in Sources */,
 				C8637E60FBC9B7A81BA3A275 /* ReaderChromeState.swift in Sources */,
+				04C6FC56B9070F98F8B4B3A6 /* ScanlatorRules.swift in Sources */,
+				8D0D94AA7469B8B75A2E194F /* ScanlatorSettings.swift in Sources */,
+				706569663D252E73D671EB2D /* ScanlatorSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

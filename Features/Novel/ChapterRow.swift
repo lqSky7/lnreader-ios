@@ -37,6 +37,13 @@ struct ChapterRow: View {
                         .lineLimit(2)
 
                     HStack(spacing: 8) {
+                        if let scanlator = chapter.scanlator, !scanlator.isEmpty {
+                            Text(scanlator.prefix(1).uppercased() + scanlator.dropFirst())
+                                .font(Typography.small)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+
                         if let releaseTime = chapter.releaseTime {
                             Text(releaseTime)
                                 .font(Typography.small)
