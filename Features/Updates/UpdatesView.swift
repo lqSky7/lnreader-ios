@@ -12,12 +12,20 @@ struct UpdatesView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @State private var showClearConfirmation = false
 
-    @Query(
-        filter: #Predicate<Chapter> { $0.dateFetch != nil },
-        sort: \Chapter.dateFetch,
-        order: .reverse
-    )
-    private var recentChapters: [Chapter]
+    @Query private var recentChapters: [Chapter]
+
+    /// Newest-first, capped: grouping and diffing every chapter ever fetched
+    /// froze the main thread for over a second on a large library.
+    private static let feedLimit = 300
+
+    init() {
+        var descriptor = FetchDescriptor<Chapter>(
+            predicate: #Predicate { $0.dateFetch != nil },
+            sortBy: [SortDescriptor(\Chapter.dateFetch, order: .reverse)]
+        )
+        descriptor.fetchLimit = Self.feedLimit
+        _recentChapters = Query(descriptor)
+    }
 
     var body: some View {
         NavigationStack {

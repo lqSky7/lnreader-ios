@@ -346,12 +346,15 @@ final class LibraryManager {
 
         var pending: [UpdateWork] = []
         var notInstalled = 0
+        let unreadOnly = UserDefaults.standard.bool(forKey: "updates.unreadOnly")
+        let skipCompleted = UserDefaults.standard.bool(forKey: "updates.skipCompleted")
         for entry in entries where !entry.isLocal {
             guard !Task.isCancelled else { return }
+            // `hasUnread` faults in every chapter of the entry on the main actor,
+            // so only ask when the answer can change the outcome.
             guard LibraryUpdatePolicy.permits(strategy: entry.updateStrategy, hasFetched: entry.lastUpdate != nil,
-                status: entry.status, hasUnread: entry.hasUnread, automatic: automatic,
-                unreadOnly: UserDefaults.standard.bool(forKey: "updates.unreadOnly"),
-                skipCompleted: UserDefaults.standard.bool(forKey: "updates.skipCompleted")) else { continue }
+                status: entry.status, hasUnread: automatic && unreadOnly ? entry.hasUnread : true, automatic: automatic,
+                unreadOnly: unreadOnly, skipCompleted: skipCompleted) else { continue }
             guard let source = sourceManager.source(forKey: entry.sourceKey) else {
                 notInstalled += 1
                 continue
