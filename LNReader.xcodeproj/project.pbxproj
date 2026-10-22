@@ -141,12 +141,14 @@
 		1B7EA7CD78D6EB26DF7E50ED /* LibraryToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryToolbar.swift; sourceTree = "<group>"; };
 		1F23349EABEA436D6793D9B6 /* BadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeView.swift; sourceTree = "<group>"; };
 		22DDF1DFDE958E4744082B1B /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
+		2B650856C28BA6DD64543A24 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		2D249BF6B2E5EFC8CEE1A15F /* SourceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDetailView.swift; sourceTree = "<group>"; };
 		2E6A6D07AE4B518B274A5072 /* FocusModeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusModeManager.swift; sourceTree = "<group>"; };
 		3098E6B5EE638FB9BAC7732D /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		392C327BEA15155A04D0DE30 /* MockSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockSource.swift; sourceTree = "<group>"; };
 		3C527A04CDCEF84E8DEA8EFB /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
 		44694161C716310552872C25 /* ReaderContentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentBridge.swift; sourceTree = "<group>"; };
+		46FA6A19D9FC62CAFEB6AEC5 /* LNReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LNReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C4CCC920C4381FB8A63F2AE /* NovelFireCommentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireCommentsView.swift; sourceTree = "<group>"; };
 		4FEB9DFD69BA0045086A56C6 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
 		50F9C09B8F93F66D136B578B /* HistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRow.swift; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 		A6F1A6745E7ACADABB7304F5 /* UpdateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateRow.swift; sourceTree = "<group>"; };
 		A93193A48DE8D174048C0696 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
 		B16239F828D386E43FDBB928 /* PluginShims.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginShims.swift; sourceTree = "<group>"; };
+		BA227D06471ABC5D87C79929 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BD006CC34D0C4C76D36DE78E /* ReaderTTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTTSManager.swift; sourceTree = "<group>"; };
 		BE5F1E7A32777F36CB6BB15B /* SourceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceCard.swift; sourceTree = "<group>"; };
 		C5EE675CB77CE18FD43663D2 /* CommentSite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentSite.swift; sourceTree = "<group>"; };
@@ -378,6 +381,8 @@
 		6A3F5AB528717E8414751190 = {
 			isa = PBXGroup;
 			children = (
+				2B650856C28BA6DD64543A24 /* AppIcon.icon */,
+				BA227D06471ABC5D87C79929 /* Assets.xcassets */,
 				3098E6B5EE638FB9BAC7732D /* ContentView.swift */,
 				7C9E9CDAAAE1E4CA9DAA3212 /* LNReaderApp.swift */,
 				1070FB7AAEA8249AB2A5EA25 /* Components */,
@@ -425,6 +430,7 @@
 		B71E1B3A1604D37BAFAC1585 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				46FA6A19D9FC62CAFEB6AEC5 /* LNReader.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
