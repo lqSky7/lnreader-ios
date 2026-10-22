@@ -137,9 +137,12 @@ struct NovelDetailView: View {
         )
         .toolbar(removing: .title)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showAudioDownloads = true } label: { Image(systemName: "headphones.circle").frame(width: 44, height: 44) }
-                    .accessibilityLabel("Manage chapter audio downloads")
+            // Audio is generated from chapter text, which manga don't have.
+            if !isManga {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAudioDownloads = true } label: { Image(systemName: "headphones.circle").frame(width: 44, height: 44) }
+                        .accessibilityLabel("Manage chapter audio downloads")
+                }
             }
         }
         .sheet(isPresented: $showAudioDownloads) {
@@ -268,7 +271,9 @@ struct NovelDetailView: View {
     /// Manga sources report every chapter at once, so the list shows all of
     /// them. Novels keep the windowed preview: their sources paginate, and a
     /// 2000-chapter web novel should not render 2000 rows on the detail screen.
-    private var showsAllChapters: Bool {
+    private var showsAllChapters: Bool { isManga }
+
+    private var isManga: Bool {
         (localEntry?.kind ?? sourceEntry?.kind ?? .novel) == .manga
     }
 
