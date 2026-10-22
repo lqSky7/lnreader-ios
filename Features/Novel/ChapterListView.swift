@@ -165,7 +165,7 @@ struct ChapterDisplay: Identifiable, Hashable {
     /// stored entry to ask.
     let kind: ContentKind
 
-    init(chapter: Chapter) {
+    init(chapter: Chapter, position: Int? = nil) {
         self.id = chapter.url
         self.name = chapter.name
         self.path = chapter.url
@@ -175,12 +175,12 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.downloaded = chapter.isDownloaded
         self.progress = chapter.progress > 0 ? Int(chapter.progress) : nil
         self.isInProgress = chapter.isInProgress
-        self.position = chapter.sourceOrder
+        self.position = position ?? chapter.sourceOrder
         self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
         self.scanlator = chapter.scanlator
         self.sortNumber = chapter.chapterNumber > 0
             ? chapter.chapterNumber
-            : Double(chapter.sourceOrder + 1)
+            : Double((position ?? chapter.sourceOrder) + 1)
         self.sourceKey = chapter.entry?.sourceKey ?? ""
         self.entryURL = chapter.entry?.url
         self.kind = chapter.entry?.kind ?? .novel
@@ -219,6 +219,7 @@ struct ChapterDisplay: Identifiable, Hashable {
 struct ChapterDirectoryView: View {
     @Environment(\.dismiss) private var dismiss
     let entry: Entry?
+    let sourceEntry: SourceEntry?
     let chapters: [ChapterDisplay]
     let sourceKey: String
     let currentChapterPath: String?
@@ -227,8 +228,8 @@ struct ChapterDirectoryView: View {
     let initialSearch: String
     let initialFilter: ChapterFilter
 
-    init(entry: Entry?, chapters: [ChapterDisplay], sourceKey: String, currentChapterPath: String?, onSelect: ((ChapterDisplay) -> Void)? = nil, onClose: (() -> Void)? = nil, initialSearch: String = "", initialFilter: ChapterFilter = .all) {
-        self.entry = entry; self.chapters = chapters; self.sourceKey = sourceKey; self.currentChapterPath = currentChapterPath
+    init(entry: Entry?, chapters: [ChapterDisplay], sourceKey: String, currentChapterPath: String?, onSelect: ((ChapterDisplay) -> Void)? = nil, onClose: (() -> Void)? = nil, initialSearch: String = "", initialFilter: ChapterFilter = .all, sourceEntry: SourceEntry? = nil) {
+        self.entry = entry; self.sourceEntry = sourceEntry; self.chapters = chapters; self.sourceKey = sourceKey; self.currentChapterPath = currentChapterPath
         self.onSelect = onSelect; self.onClose = onClose; self.initialSearch = initialSearch; self.initialFilter = initialFilter
         self._search = State(initialValue: initialSearch); self._selectedFilter = State(initialValue: initialFilter)
     }
@@ -276,9 +277,9 @@ struct ChapterDirectoryView: View {
             List {
                 Section {
                     HStack(spacing: 12) {
-                        NovelCoverView(url: entry?.displayThumbnailURL, aspectRatio: LayoutConstants.coverAspectRatio).frame(width: 42, height: 60)
+                        NovelCoverView(url: entry?.displayThumbnailURL ?? sourceEntry?.thumbnailURL, aspectRatio: LayoutConstants.coverAspectRatio).frame(width: 42, height: 60)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(entry?.displayTitle ?? "Chapters").font(.headline).lineLimit(2)
+                            Text(entry?.displayTitle ?? sourceEntry?.title ?? "Chapters").font(.headline).lineLimit(2)
                             Text("\(chapters.count) chapters").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()

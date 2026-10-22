@@ -81,6 +81,7 @@
 		EEDF92E541FC7528E7BEAA2B /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D010962F3B606729E91A2B /* StatisticsView.swift */; };
 		EFAD3576C145DEDFF32B3D98 /* GlassOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */; };
 		F058C4831CC3F14C9B5EDC9B /* Glur in Frameworks */ = {isa = PBXBuildFile; productRef = 0D468E064E87EA8FE7747702 /* Glur */; };
+		A7C9F15B2D4E4D5099B98101 /* GlurBackdrop in Frameworks */ = {isa = PBXBuildFile; productRef = A7C9F15B2D4E4D5099B98102 /* GlurBackdrop */; };
 		F284113DD4D3BBD22FA26560 /* TTSSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */; };
 		F8879A418673455C0E62F341 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93193A48DE8D174048C0696 /* SyncManager.swift */; };
 		FA024401BCB08F7E6C64FBFE /* HistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9C09B8F93F66D136B578B /* HistoryRow.swift */; };
@@ -117,7 +118,6 @@
 		9820DF3D67143443C3905EB9 /* ChapterRecognition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08FFA9F783FE74CFB5D0A992 /* ChapterRecognition.swift */; };
 		41519F5E53EF4ED524B1DCA4 /* ChapterSourceSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */; };
 		344E11FAE534AB9956E96334 /* LNPluginSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7299CA8D5B6F5FD6BEC4E58E /* LNPluginSource.swift */; };
-		C96A8E00533D4B82925A1447 /* SampleMangaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410DA8C88862DA46FE679AF9 /* SampleMangaSource.swift */; };
 		2220BBC5FB756854B1B4A9A9 /* SourceFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32DFC42772907A1432627098 /* SourceFilters.swift */; };
 		04D74105186AEBE9879341B0 /* SourceKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC517C802BAFA82D76F87B6E /* SourceKey.swift */; };
 		8B3EDC653451FF7B962965A6 /* SourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FC6D6218E18B347E20036D /* SourceManager.swift */; };
@@ -248,7 +248,6 @@
 		08FFA9F783FE74CFB5D0A992 /* ChapterRecognition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterRecognition.swift; sourceTree = "<group>"; };
 		D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterSourceSync.swift; sourceTree = "<group>"; };
 		7299CA8D5B6F5FD6BEC4E58E /* LNPluginSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LNPluginSource.swift; sourceTree = "<group>"; };
-		410DA8C88862DA46FE679AF9 /* SampleMangaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleMangaSource.swift; sourceTree = "<group>"; };
 		32DFC42772907A1432627098 /* SourceFilters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFilters.swift; sourceTree = "<group>"; };
 		BC517C802BAFA82D76F87B6E /* SourceKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceKey.swift; sourceTree = "<group>"; };
 		95FC6D6218E18B347E20036D /* SourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceManager.swift; sourceTree = "<group>"; };
@@ -275,6 +274,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F058C4831CC3F14C9B5EDC9B /* Glur in Frameworks */,
+				A7C9F15B2D4E4D5099B98101 /* GlurBackdrop in Frameworks */,
 				DD1ED2CBFBA44AE1B6E75002 /* SwiftSoup in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -602,7 +602,6 @@
 				08FFA9F783FE74CFB5D0A992 /* ChapterRecognition.swift */,
 				D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */,
 				7299CA8D5B6F5FD6BEC4E58E /* LNPluginSource.swift */,
-				410DA8C88862DA46FE679AF9 /* SampleMangaSource.swift */,
 				32DFC42772907A1432627098 /* SourceFilters.swift */,
 				BC517C802BAFA82D76F87B6E /* SourceKey.swift */,
 				95FC6D6218E18B347E20036D /* SourceManager.swift */,
@@ -643,6 +642,7 @@
 			packageProductDependencies = (
 				DD1ED2CBFBA44AE1B6E75003 /* SwiftSoup */,
 				0D468E064E87EA8FE7747702 /* Glur */,
+				A7C9F15B2D4E4D5099B98102 /* GlurBackdrop */,
 			);
 			productName = LNReader;
 			productReference = 46FA6A19D9FC62CAFEB6AEC5 /* LNReader.app */;
@@ -809,7 +809,6 @@
 				9820DF3D67143443C3905EB9 /* ChapterRecognition.swift in Sources */,
 				41519F5E53EF4ED524B1DCA4 /* ChapterSourceSync.swift in Sources */,
 				344E11FAE534AB9956E96334 /* LNPluginSource.swift in Sources */,
-				C96A8E00533D4B82925A1447 /* SampleMangaSource.swift in Sources */,
 				2220BBC5FB756854B1B4A9A9 /* SourceFilters.swift in Sources */,
 				04D74105186AEBE9879341B0 /* SourceKey.swift in Sources */,
 				8B3EDC653451FF7B962965A6 /* SourceManager.swift in Sources */,
@@ -1043,6 +1042,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */;
 			productName = Glur;
+		};
+		A7C9F15B2D4E4D5099B98102 /* GlurBackdrop */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAF6D219B75436D3C66C40 /* XCRemoteSwiftPackageReference "Glur" */;
+			productName = GlurBackdrop;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

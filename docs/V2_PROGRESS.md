@@ -1,7 +1,7 @@
 # v2 rewrite — status
 
-**Branch** `feat/v2-rewrite-manga` · **Version** 2.0.0 (build 3) · **App target** 124 Swift
-files, ~23.4k lines · **Commits** 16 ahead of `main`
+**Updated** 2026-10-22 · **Branch** `feat/v2-rewrite-manga` · **Version** 2.0.0 (build 3)
+· **Latest update** Reader and Browse UI corrections, chapter directory reuse, and UI audit
 
 The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end, and puts
 every source behind one protocol so a JS plugin and a transpiled extension are the same
@@ -23,6 +23,7 @@ touches `default.store`, so the old data stays recoverable on disk.
 | First extension | **Done** | MangaFire, ported from keiyoushi, verified live |
 | Chapter lists | **Done** | Number ordering, all-chapters for manga, scanlator priority |
 | Browse | **Done** | Split into Light Novels / Manga |
+| Reader and Browse UI polish | **Implemented; device check pending** | Manga controls and dismiss swipe; Browse title and switcher; English default for novel sources |
 | Extension repo UI | Not started | `ExtensionRepoService` works; nothing calls it yet |
 | WebView fetch primitive | Not started | Blocks captcha-gated sources (MangaFire included) |
 | Kotlin/JS transpiler | Blocked | No JDK/Kotlin/Gradle in this environment |
@@ -52,14 +53,38 @@ touches `default.store`, so the old data stays recoverable on disk.
 | `abc7f23` | Scanlator priority + per-scanlator visibility |
 | `6c32ca4` | Browse split into two catalogues |
 | `86d0c39` | Version 2.0.0 |
+| `2092e97` | Rewrote this progress tracker as a status ledger |
+
+## UI update
+
+- **Manga reader:** top controls follow the novel reader's layout. The bottom controls now
+  put a custom 44-point page slider and paired chapter buttons in one row, without a
+  page-count pill. The slider and chapter buttons share the Liquid Glass capsule style.
+  Light Glur backdrop blur replaces the black edge fade when controls are visible. A
+  leftward swipe from the right edge dismisses the full-screen reader. The chapter sheet
+  now uses the shared reader directory with cover/title metadata, search, jump, filters,
+  and 50-chapter pages. It fetches source chapters for titles outside the library and
+  applies scanlator rules consistently with adjacent navigation. The scrubber is a bar
+  without a circular thumb and seeks both paged and webtoon content.
+- **Browse:** uses the standard SwiftUI navigation title, a dedicated Light Novels / Manga
+  switcher with `systemGray6`, one spring-sliding white selection, and selection haptics.
+  The switcher and search field share a 44-point height, corner radius, and row margins.
+  The selected language pill is white with black text; Global Search sits above the tab bar
+  on the lower right. Available Light Novel sources default to English.
+- **Verification:** iOS Simulator SDK Debug build and page-pipeline/scanlator checks passed.
+  No Simulator runtime is installed here. The manga swipe, slider, safe-area layout, and
+  Browse animation still need a device interaction check. See [UI audit](UI_AUDIT.md)
+  for corrected defects, remaining issues, and the limits of these checks.
+- **Sample source:** removed the offline sample manga source, its startup registration,
+  and its Xcode project references.
 
 ## Open issues
 
 1. **MangaFire captcha.** A `403 {"error":"captcha_required"}` from the API surfaces as an
    error. Upstream solves it with OpenCV.js in a WebView and a `waf_pass` cookie. Needs the
    WebView fetch primitive below.
-2. **Reader chapter sheet ignores scanlator rules.** It lists stored chapters raw. Route it
-   through `ScanlatorRules` for consistency with the detail screen.
+2. **Reader UI needs device verification.** Shared chapter directory and scanlator
+   rules are wired; seeking, gestures, large text, and blur still need interactive checks.
 3. **Global search is novel-only.** `GlobalSearchView` iterates `sourceManager.novelSources`;
    hidden on the Manga tab rather than shown broken.
 4. **Downloads / scheduling absent.** No offline manga, no background refresh.
@@ -68,16 +93,18 @@ touches `default.store`, so the old data stays recoverable on disk.
 
 ## Next, in order
 
-1. **WebView fetch primitive** (`webview.fetch(url, waitForSelector)`) — unblocks captcha
+1. **Check the UI changes interactively.** Confirm manga paging and
+   webtoon scrolling still work alongside the edge swipe, and check Browse on a compact phone.
+2. **WebView fetch primitive** (`webview.fetch(url, waitForSelector)`) — unblocks captcha
    sources and gives MangaFire its solver path. Testable only on device.
-2. **Repository browser** — `ExtensionRepoService.fetchIndex/install` already exist; needs a
+3. **Repository browser** — `ExtensionRepoService.fetchIndex/install` already exist; needs a
    screen (add repo, list available extensions, install/uninstall).
-3. **Kotlin/JS shims** — `HttpSource`, `ParsedHttpSource`, `SManga`, `SChapter`, `Page`,
+4. **Kotlin/JS shims** — `HttpSource`, `ParsedHttpSource`, `SManga`, `SChapter`, `Page`,
    `Request`, `Response` + OkHttp/Jsoup in Kotlin/JS, so extensions compile unchanged. Needs
    a machine with a JDK; nothing here can build it.
-4. **Downloads** — reuse `PageLoader` + `ChapterCache`, add CBZ/folder output.
-5. **Update scheduling** — `BGAppRefreshTask`, per-entry restrictions, background actor.
-6. **`.lnbk` backup** — the schema is stable enough now.
+5. **Downloads** — reuse `PageLoader` + `ChapterCache`, add CBZ/folder output.
+6. **Update scheduling** — `BGAppRefreshTask`, per-entry restrictions, background actor.
+7. **`.lnbk` backup** — the schema is stable enough now.
 
 ## Verification
 
@@ -132,4 +159,3 @@ is a stub launcher plus a dylib, which is fragile once re-signed.
   by counting files on disk against the Sources phase.
 - **Never let that patch touch non-Swift references.** An earlier version removed
   `Assets.xcassets` and the app icon, and the build still succeeded.
-- **`git add -A` re-stages `docs/MIGRATION_TO_V2.md`**, which is intentionally uncommitted.

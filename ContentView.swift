@@ -63,11 +63,6 @@ struct ContentView: View {
             // whenever one is installed or removed.
             pluginManager.onInstalledSourcesChanged = { sourceManager.sync(with: pluginManager) }
             await pluginManager.restoreInstalledPlugins()
-            #if DEBUG
-            // Development aid: an offline source that serves generated pages so
-            // the manga reader can be exercised before extensions exist.
-            sourceManager.register(SampleMangaSource())
-            #endif
             sourceManager.sync(with: pluginManager)
             // Extensions: ship MangaFire with the binary, then load whatever is
             // installed (bundled or from a repository).

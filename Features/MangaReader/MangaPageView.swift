@@ -15,6 +15,7 @@ struct MangaPageView: View {
     var contentMode: ContentMode = .fit
 
     @State private var image: UIImage?
+    @State private var loadedURL: String?
     @State private var didFail = false
     @State private var attempt = 0
 
@@ -53,8 +54,10 @@ struct MangaPageView: View {
     }
 
     private func load() async {
+        let requestedURL = page.url
         didFail = false
-        if image != nil { return }
+        if image != nil, loadedURL == requestedURL { return }
+        image = nil
         do {
             let data = try await loader.image(for: page, sourceKey: sourceKey)
             // Decode off the main actor: a full page is a few megabytes of
@@ -62,10 +65,12 @@ struct MangaPageView: View {
             let decoded = await Task.detached(priority: .userInitiated) {
                 UIImage(data: data)
             }.value
+            guard !Task.isCancelled else { return }
             guard let decoded else {
                 throw HTTPError.transport("Page \(page.index + 1) is not a valid image")
             }
             image = decoded
+            loadedURL = requestedURL
         } catch {
             if !Task.isCancelled {
                 didFail = true
