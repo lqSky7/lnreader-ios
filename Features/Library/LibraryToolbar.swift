@@ -7,12 +7,20 @@ struct LibraryToolbar: ToolbarContent {
     @Binding var sortOrder: SortOrder
     @Binding var sortDirection: SortDirection
     @Binding var displayMode: DisplayMode
+    var activeFilterCount = 0
+    var onShowFilters: () -> Void = {}
     var onImport: () -> Void
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             Button(action: onImport) {
                 Label("Import EPUB", systemImage: "square.and.arrow.down")
+            }
+
+            Button(action: onShowFilters) {
+                Label("Filter", systemImage: activeFilterCount > 0
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle")
             }
 
             Menu {

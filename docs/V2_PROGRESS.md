@@ -47,7 +47,7 @@ per-series settings store comes first because reader modes, filters and incognit
 | R4 | Volume-key page turns | **Implemented; device check pending** | R1 |
 | R5 | Auto scroll | **Implemented; device check pending** | R1 |
 | R6 | Hold to scroll, with swipe-to-change-speed | **Implemented; device check pending** | R5 |
-| R7 | Library filters | Planned | — |
+| R7 | Library filters | **Implemented; device check pending** | — |
 | R8 | Library sorts (per category) | Planned | R7 |
 | R9 | Categories: per-category sort, display, update scope | Planned | R7, R8 |
 | R10 | Library badges | Planned | — |
@@ -136,6 +136,15 @@ the range, and the volume is restored after closing the reader or backgrounding 
 - **R7 filters.** Downloaded, unread, started, completed, tracked, source/kind. Tri-state
   (include / exclude / off) like Mihon, persisted per category. Counts must come from
   `LibraryChapterCounts` — no relationship walks in a `body` (see Decisions).
+- **R7 as built.** `LibraryFilter` (`Models/Enums/LibraryFilter.swift`): downloaded, unread,
+  started, completed, tracked, each a `TriState`. `LibraryFilterStore` keeps one filter per
+  category (keyed by name; `nil` is All) as one JSON value under `library.filters`.
+  `LibraryChapterCounts.Counts` gained `downloaded`; the view loads counts for the filter into
+  `filterCounts` off-main (only when a count-based rule is on) and entries whose counts have not
+  arrived yet pass, so the library never blanks. UI: toolbar button → `LibraryFilterSheet`.
+  Checked headless by `scripts/check-library-filters.sh`; typechecks. Source/kind filtering
+  is still the existing All/Novels/Manga picker. Device check: filter counts match the cells,
+  and a filter set on one category does not leak into another.
 - **R8 sorts.** Sort orders exist today (`SortOrder`); add per-category sort + direction,
   and "latest chapter", "last checked", "chapter fetch date". Sorting by unread must use the
   cached counts, never `Entry.unreadCount`.

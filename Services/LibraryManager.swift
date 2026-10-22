@@ -461,6 +461,8 @@ final class LibraryChapterCounts {
     struct Counts: Equatable, Sendable {
         var total = 0
         var unread = 0
+        /// Chapters whose download finished and is on disk.
+        var downloaded = 0
     }
 
     /// How long a count is trusted. Short enough that finishing a chapter shows
@@ -496,6 +498,7 @@ final class LibraryChapterCounts {
         let url = entry.url
         let sourceKey = entry.sourceKey
         let startGeneration = generation
+        let completedState = DownloadState.completed
 
         let task = Task.detached(priority: .userInitiated) { () -> Counts in
             let context = ModelContext(container)
@@ -506,9 +509,14 @@ final class LibraryChapterCounts {
                 let unreadInEntry = #Predicate<Chapter> {
                     $0.entry?.url == url && $0.entry?.sourceKey == sourceKey && !$0.read
                 }
+                let downloadedInEntry = #Predicate<Chapter> {
+                    $0.entry?.url == url && $0.entry?.sourceKey == sourceKey
+                        && $0.downloadItem?.state == completedState
+                }
                 let total = try context.fetchCount(FetchDescriptor<Chapter>(predicate: inEntry))
                 let unread = try context.fetchCount(FetchDescriptor<Chapter>(predicate: unreadInEntry))
-                return Counts(total: total, unread: unread)
+                let downloaded = try context.fetchCount(FetchDescriptor<Chapter>(predicate: downloadedInEntry))
+                return Counts(total: total, unread: unread, downloaded: downloaded)
             } catch {
                 return Counts()
             }

@@ -29,6 +29,12 @@ struct LibraryView: View {
     @AppStorage("general.defaultDisplayMode") private var displayMode: DisplayMode = .comfortable
     @AppStorage("general.confirmRemove") private var confirmRemove = true
     @AppStorage("library.kindFilter") private var kindFilterRaw = LibraryKindFilter.all.rawValue
+    /// Tri-state filters, one per category (`LibraryFilterStore`).
+    @AppStorage("library.filters") private var filtersJSON = "{}"
+    /// Chapter counts for the filters, loaded off the main thread. Filtering
+    /// reads this, not `Entry.chapters` (see `LibraryChapterCounts`).
+    @State private var filterCounts: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
+    @State private var showFilterSheet = false
 
     @State private var isEditingLibrary = false
     @State private var draggedItem: Entry? = nil
@@ -87,10 +93,20 @@ struct LibraryView: View {
                         sortOrder: $sortOrder,
                         sortDirection: $sortDirection,
                         displayMode: $displayMode,
+                        activeFilterCount: activeFilter.activeCount,
+                        onShowFilters: { showFilterSheet = true },
                         onImport: { showFileImporter = true }
                     )
                 }
             }
+            .sheet(isPresented: $showFilterSheet) {
+                LibraryFilterSheet(
+                    filter: activeFilterBinding,
+                    scopeName: selectedCategory?.name ?? "All"
+                )
+                .presentationDetents([.medium])
+            }
+            .task(id: filterCountsKey) { await loadFilterCounts() }
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active && isEditingLibrary {
                     commitLibraryPositions(clearOrder: false)
@@ -215,7 +231,7 @@ struct LibraryView: View {
     /// An empty page is normal when only one kind is in the library, so say
     /// which one is empty instead of pretending the library has nothing.
     private func emptyPage(_ kind: LibraryKindFilter) -> some View {
-        let isFiltering = !searchText.isEmpty || selectedCategory != nil
+        let isFiltering = !searchText.isEmpty || selectedCategory != nil || activeFilter.isActive
         return EmptyStateView(
             icon: isFiltering ? "magnifyingglass" : "books.vertical",
             title: isFiltering ? "No Matches" : "No \(kind.title)",
@@ -306,7 +322,65 @@ struct LibraryView: View {
             }
         }
 
+        let filter = activeFilter
+        if filter.isActive {
+            result = result.filter { filter.matches(facts(for: $0, filter: filter)) }
+        }
+
         return sortedNovels(result)
+    }
+
+    // MARK: Filters
+
+    private var filterStore: LibraryFilterStore { LibraryFilterStore(json: filtersJSON) }
+
+    private var activeFilter: LibraryFilter { filterStore.filter(for: selectedCategory?.name) }
+
+    private var activeFilterBinding: Binding<LibraryFilter> {
+        let name = selectedCategory?.name
+        return Binding(
+            get: { filterStore.filter(for: name) },
+            set: {
+                var store = filterStore
+                store.set($0, for: name)
+                filtersJSON = store.json
+            }
+        )
+    }
+
+    /// Re-run the count pass when the filter, the category or the library changes.
+    private var filterCountsKey: String {
+        "\(activeFilter.needsChapterCounts)|\(novels.count)|\(scenePhase == .active)"
+    }
+
+    private func loadFilterCounts() async {
+        guard activeFilter.needsChapterCounts else { return }
+        let container = modelContext.container
+        var loaded: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
+        for novel in novels {
+            if Task.isCancelled { return }
+            loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container)
+        }
+        filterCounts = loaded
+    }
+
+    /// An entry whose counts have not loaded yet is treated as passing, so a
+    /// filter never blanks the library while the count pass runs.
+    private func facts(for entry: Entry, filter: LibraryFilter) -> LibraryFilterFacts {
+        var facts = LibraryFilterFacts()
+        if filter.needsChapterCounts, let counts = filterCounts[entry.persistentModelID] {
+            facts.unread = counts.unread
+            facts.total = counts.total
+            facts.downloaded = counts.downloaded
+        } else if filter.needsChapterCounts {
+            // Unknown: satisfy whatever the filter asks so the entry stays visible.
+            facts.unread = filter.unread == .exclude ? 0 : 1
+            facts.total = filter.started == .exclude ? facts.unread : facts.unread + 1
+            facts.downloaded = filter.downloaded == .exclude ? 0 : 1
+        }
+        facts.isCompleted = entry.status == .completed
+        if filter.tracked != .off { facts.isTracked = !entry.tracks.isEmpty }
+        return facts
     }
 
     private func sortedNovels(_ novels: [Entry]) -> [Entry] {
