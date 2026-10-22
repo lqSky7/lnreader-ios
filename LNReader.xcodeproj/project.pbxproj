@@ -55,6 +55,10 @@
 		75995F2F5AE6494AC92E1C43 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 179854008F9437120FBDEDDB /* GlassCard.swift */; };
 		76AB4E1FBB6ED32F82E3CDFB /* TTSChapterSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20C2FE9D0133D8131081F47 /* TTSChapterSource.swift */; };
 		7AAEBEF2A33430B43EBBB97D /* SourceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7BE97FD82780D085139CC2 /* SourceModels.swift */; };
+		418CF02C133A84A95E87AFCA /* MangaReaderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6370955C5BC3A2447F107BA1 /* MangaReaderControls.swift */; };
+		E583BD542D9AA66F4F2F3C64 /* WebtoonScrollController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 262701D6ACC5D6FCEF035D3A /* WebtoonScrollController.swift */; };
+		DE0A961DD410269F6BCBC623 /* VolumeKeyHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB55B26EF30F76CEF9700E2 /* VolumeKeyHost.swift */; };
+		86B3C0C4E92106BD234C6EC6 /* MangaReaderSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751B70951B5FBD5C069CA2EE /* MangaReaderSettingsSheet.swift */; };
 		7B8EDF6DE1B5CD2F0F554762 /* MangaReadingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2444D9999645B4E03406760D /* MangaReadingMode.swift */; };
 		783C6021A7654C62A3259F0B /* MangaReaderSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF92F808187C51A5EFE24B6 /* MangaReaderSettings.swift */; };
 		7BF5C5BE164E42B9EA245AFE /* HTMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C68D75AE23FF560C56A9C84 /* HTMLParser.swift */; };
@@ -162,6 +166,10 @@
 		2134FC9B8F314414383E3D90 /* TTSAudioAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSAudioAppDelegate.swift; sourceTree = "<group>"; };
 		22DDF1DFDE958E4744082B1B /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
 		2444D9999645B4E03406760D /* MangaReadingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaReadingMode.swift; sourceTree = "<group>"; };
+		751B70951B5FBD5C069CA2EE /* MangaReaderSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaReaderSettingsSheet.swift; sourceTree = "<group>"; };
+		0BB55B26EF30F76CEF9700E2 /* VolumeKeyHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeKeyHost.swift; sourceTree = "<group>"; };
+		262701D6ACC5D6FCEF035D3A /* WebtoonScrollController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebtoonScrollController.swift; sourceTree = "<group>"; };
+		6370955C5BC3A2447F107BA1 /* MangaReaderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaReaderControls.swift; sourceTree = "<group>"; };
 		5AF92F808187C51A5EFE24B6 /* MangaReaderSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaReaderSettings.swift; sourceTree = "<group>"; };
 		2B52FBF3B582C74A0B195493 /* BookAudioDownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookAudioDownloadsView.swift; sourceTree = "<group>"; };
 		2B650856C28BA6DD64543A24 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
@@ -581,6 +589,10 @@
 				D97993579546ABBFF8B0DF11 /* MangaProgress.swift */,
 				92CB4FC06A797835ACB92A41 /* MangaReaderView.swift */,
 				2444D9999645B4E03406760D /* MangaReadingMode.swift */,
+				751B70951B5FBD5C069CA2EE /* MangaReaderSettingsSheet.swift */,
+				0BB55B26EF30F76CEF9700E2 /* VolumeKeyHost.swift */,
+				262701D6ACC5D6FCEF035D3A /* WebtoonScrollController.swift */,
+				6370955C5BC3A2447F107BA1 /* MangaReaderControls.swift */,
 				5AF92F808187C51A5EFE24B6 /* MangaReaderSettings.swift */,
 				D1F6219C00A36C989425F4DD /* PagePrefetchPlan.swift */,
 			);
@@ -811,6 +823,10 @@
 				F5748C2F70B0F83B25583038 /* MangaProgress.swift in Sources */,
 				8C1F779158B5AE64F3CC4DE1 /* MangaReaderView.swift in Sources */,
 				7B8EDF6DE1B5CD2F0F554762 /* MangaReadingMode.swift in Sources */,
+				86B3C0C4E92106BD234C6EC6 /* MangaReaderSettingsSheet.swift in Sources */,
+				DE0A961DD410269F6BCBC623 /* VolumeKeyHost.swift in Sources */,
+				E583BD542D9AA66F4F2F3C64 /* WebtoonScrollController.swift in Sources */,
+				418CF02C133A84A95E87AFCA /* MangaReaderControls.swift in Sources */,
 				783C6021A7654C62A3259F0B /* MangaReaderSettings.swift in Sources */,
 				EDF44ACAF399D5B540D6B1BF /* PagePrefetchPlan.swift in Sources */,
 				BB062E90FBD86B888400C533 /* ChapterReader.swift in Sources */,

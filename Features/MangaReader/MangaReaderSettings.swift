@@ -16,6 +16,8 @@ import Foundation
 struct MangaReaderOverrides: Codable, Equatable {
     var readingMode: MangaReadingMode?
     var direction: MangaPagingDirection?
+    var tapZones: MangaTapZoneLayout?
+    var invertTapZones: Bool?
 
     var isEmpty: Bool { self == MangaReaderOverrides() }
 }
@@ -24,6 +26,8 @@ struct MangaReaderOverrides: Codable, Equatable {
 struct MangaReaderPreferences: Equatable {
     var readingMode: MangaReadingMode
     var direction: MangaPagingDirection
+    var tapZones: MangaTapZoneLayout
+    var invertTapZones: Bool
 
     /// The app-wide defaults, read from the same keys the settings UI writes.
     static func defaults(_ store: UserDefaults = .standard) -> MangaReaderPreferences {
@@ -31,7 +35,10 @@ struct MangaReaderPreferences: Equatable {
             readingMode: store.string(forKey: MangaReaderSettingsKey.readingMode)
                 .flatMap(MangaReadingMode.init(rawValue:)) ?? .pager,
             direction: store.string(forKey: MangaReaderSettingsKey.direction)
-                .flatMap(MangaPagingDirection.init(rawValue:)) ?? .leftToRight
+                .flatMap(MangaPagingDirection.init(rawValue:)) ?? .leftToRight,
+            tapZones: store.string(forKey: MangaReaderSettingsKey.tapZones)
+                .flatMap(MangaTapZoneLayout.init(rawValue:)) ?? .standard,
+            invertTapZones: store.bool(forKey: MangaReaderSettingsKey.invertTapZones)
         )
     }
 
@@ -39,7 +46,9 @@ struct MangaReaderPreferences: Equatable {
     func applying(_ overrides: MangaReaderOverrides) -> MangaReaderPreferences {
         MangaReaderPreferences(
             readingMode: overrides.readingMode ?? readingMode,
-            direction: overrides.direction ?? direction
+            direction: overrides.direction ?? direction,
+            tapZones: overrides.tapZones ?? tapZones,
+            invertTapZones: overrides.invertTapZones ?? invertTapZones
         )
     }
 }
@@ -48,6 +57,8 @@ struct MangaReaderPreferences: Equatable {
 enum MangaReaderSettingsKey {
     static let readingMode = "manga.readingMode"
     static let direction = "manga.pagingDirection"
+    static let tapZones = "manga.tapZones"
+    static let invertTapZones = "manga.tapZonesInverted"
 }
 
 @Observable
@@ -81,6 +92,14 @@ final class MangaSeriesSettings {
         mutate { $0.direction = direction }
     }
 
+    func setTapZones(_ layout: MangaTapZoneLayout?) {
+        mutate { $0.tapZones = layout }
+    }
+
+    func setInvertTapZones(_ inverted: Bool?) {
+        mutate { $0.invertTapZones = inverted }
+    }
+
     /// Forget every override; the series follows the defaults again.
     func reset() {
         mutate { $0 = MangaReaderOverrides() }
@@ -93,6 +112,8 @@ final class MangaSeriesSettings {
         let current = resolved
         defaults.set(current.readingMode.rawValue, forKey: MangaReaderSettingsKey.readingMode)
         defaults.set(current.direction.rawValue, forKey: MangaReaderSettingsKey.direction)
+        defaults.set(current.tapZones.rawValue, forKey: MangaReaderSettingsKey.tapZones)
+        defaults.set(current.invertTapZones, forKey: MangaReaderSettingsKey.invertTapZones)
         reset()
     }
 

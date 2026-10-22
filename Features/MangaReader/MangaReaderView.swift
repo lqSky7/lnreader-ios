@@ -43,8 +43,13 @@ struct MangaReaderView: View {
     /// evaluation, and rebuilding it means mapping every chapter plus a
     /// scanlator pass — over the whole list, for every tap and page turn.
     @State private var navigable: [SourceChapter] = []
-    @State private var webtoonPosition: Int?
-    @State private var readerWidth: CGFloat = 0
+    @State private var webtoonProxy: ScrollViewProxy?
+    @State private var isRestoringPosition = false
+    @State private var readerSize: CGSize = .zero
+    @State private var scroller = WebtoonScrollController()
+    @State private var showReaderSettings = false
+    /// Volume keys, auto scroll and hold-to-scroll: one stored value for the user.
+    @AppStorage(MangaControlSettings.storageKey) private var inputSettings = MangaControlSettings()
     @State private var currentIndex = 0
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -99,16 +104,23 @@ struct MangaReaderView: View {
                 // the webtoon would not scroll and the pager would not swipe.
                 .simultaneousGesture(
                     SpatialTapGesture()
-                        .onEnded { value in handleTap(at: value.location.x) }
+                        .onEnded { value in handleTap(at: value.location) }
                 )
-                .simultaneousGesture(dismissSwipe)
 
             if chrome.isControl {
                 controls
             }
+
+            scrollOverlays
         }
+        .background { volumeKeys }
+        .background(EdgeSwipeDismiss {
+            guard !isDismissing else { return }
+            isDismissing = true
+            dismiss()
+        })
         .statusBarHidden(true)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { readerWidth = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { readerSize = $0 }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
@@ -117,8 +129,19 @@ struct MangaReaderView: View {
             await loadChapterChoices()
         }
         .sheet(isPresented: $showChapterSheet) { chapterSheet }
-        .onAppear { setScreenAwake(true) }
+        .sheet(isPresented: $showReaderSettings) {
+            MangaReaderSettingsSheet(series: seriesSettings, controls: $inputSettings)
+        }
+        .onAppear {
+            setScreenAwake(true)
+            configureScroller()
+        }
+        .onChange(of: inputSettings) { configureScroller() }
+        .onChange(of: mode) { _, newMode in
+            if newMode != .webtoon { scroller.stopAuto() }
+        }
         .onDisappear {
+            scroller.detach()
             setScreenAwake(false)
             libraryManager.flushProgress(context: modelContext)
         }
@@ -160,23 +183,51 @@ struct MangaReaderView: View {
         .ignoresSafeArea()
     }
 
+    /// The strip. Which page is on screen is *read* from the scroll view
+    /// (`onScrollTargetVisibilityChange`) and jumps are one-shot
+    /// (`ScrollViewReader`). There is deliberately no `scrollPosition(id:)`
+    /// binding: that treats the binding as the position of record, so when auto
+    /// scroll, hold-to-scroll or the volume keys move the offset underneath it,
+    /// the next re-render pushes the stale id back and the strip snaps to the
+    /// top of the page it was leaving.
     private var webtoon: some View {
-        ScrollView(.vertical) {
-            LazyVStack(spacing: 0) {
-                ForEach(pages.indices, id: \.self) { index in
-                    MangaPageView(page: pages[index], sourceKey: sourceKey, loader: loader)
-                        .id(index)
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 0) {
+                    ForEach(pages.indices, id: \.self) { index in
+                        MangaPageView(page: pages[index], sourceKey: sourceKey, loader: loader)
+                            .id(index)
+                    }
                 }
+                .scrollTargetLayout()
+                .background(WebtoonScrollBridge(controller: scroller))
             }
-            .scrollTargetLayout()
-        }
-        .scrollPosition(id: $webtoonPosition, anchor: .top)
-        .onAppear { webtoonPosition = currentIndex }
-        .onChange(of: webtoonPosition) { _, index in
-            if let index, pages.indices.contains(index) { currentIndex = index }
+            // Low threshold: a page taller than the screen can never be half visible.
+            .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.05) { visible in
+                guard !isRestoringPosition, let top = visible.min(),
+                      pages.indices.contains(top), top != currentIndex else { return }
+                currentIndex = top
+            }
+            .onAppear {
+                webtoonProxy = proxy
+                restoreWebtoonPosition(proxy)
+            }
         }
         .id(chapterURL)
         .ignoresSafeArea()
+    }
+
+    /// Scroll to the resume page without the first visibility report (page 0)
+    /// overwriting it.
+    private func restoreWebtoonPosition(_ proxy: ScrollViewProxy) {
+        let target = currentIndex
+        guard target > 0 else { return }
+        isRestoringPosition = true
+        Task { @MainActor in
+            proxy.scrollTo(target, anchor: .top)
+            try? await Task.sleep(for: .milliseconds(350))
+            isRestoringPosition = false
+        }
     }
 
     private func errorView(_ message: String) -> some View {
@@ -279,6 +330,13 @@ struct MangaReaderView: View {
                     }
                 }
             }
+            if mode == .webtoon {
+                Button(
+                    scroller.isAutoScrolling ? "Stop auto scroll" : "Start auto scroll",
+                    systemImage: scroller.isAutoScrolling ? "pause.circle" : "play.circle"
+                ) { toggleAutoScroll() }
+            }
+            Button("Reader settings…", systemImage: "gearshape") { showReaderSettings = true }
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 17, weight: .semibold))
@@ -337,21 +395,14 @@ struct MangaReaderView: View {
         .accessibilityLabel(label)
     }
 
-    private var dismissSwipe: some Gesture {
-        DragGesture(minimumDistance: 30)
-            .onEnded { value in
-                guard !isDismissing, value.startLocation.x > readerWidth - 36,
-                      value.translation.width < -100,
-                      abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
-                isDismissing = true
-                dismiss()
-            }
-    }
-
     // MARK: - Loading
 
     private func loadChapter() async {
         let requestedURL = chapterURL
+        // Progress writes are deferred while reading; a chapter change is a
+        // natural place to land them.
+        libraryManager.flushProgress(context: modelContext)
+        scroller.stopAuto()
         isLoading = true
         pages = []
         errorMessage = nil
@@ -457,6 +508,78 @@ struct MangaReaderView: View {
         Task { await loader.prefetch(pages, current: index, sourceKey: sourceKey) }
     }
 
+    // MARK: - Scrolling and volume keys
+
+    private func configureScroller() {
+        scroller.autoSpeed = inputSettings.autoScrollSpeed
+        scroller.hold = inputSettings.hold
+        scroller.isHoldEnabled = inputSettings.holdScrollEnabled
+        scroller.onReachedEnd = {
+            // Out of pages: bring the controls back so the next chapter is one tap away.
+            setChrome(.control)
+        }
+    }
+
+    private func toggleAutoScroll() {
+        if scroller.isAutoScrolling {
+            scroller.stopAuto()
+        } else {
+            // Hide the controls so the page is what is on screen.
+            setChrome(.focus)
+            scroller.startAuto()
+        }
+    }
+
+    /// Volume up goes back and volume down goes forward, unless inverted.
+    private func handleVolumeKey(_ key: VolumeKey) {
+        let forward = inputSettings.isForward(key)
+        if mode == .webtoon {
+            scroller.scrollScreen(forward: forward)
+        } else {
+            turnPage(forward: forward)
+        }
+    }
+
+    @ViewBuilder
+    private var volumeKeys: some View {
+        if inputSettings.volumeKeys {
+            VolumeKeyHost(onPress: handleVolumeKey)
+                .frame(width: 1, height: 1)
+        }
+    }
+
+    /// Auto scroll's stop button and the hold-to-scroll speed readout.
+    private var scrollOverlays: some View {
+        VStack {
+            if let speed = scroller.holdSpeed {
+                Text("\(Int(speed)) pt/s")
+                    .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.top, 60)
+                    .transition(.opacity)
+            }
+            Spacer()
+            if scroller.isAutoScrolling {
+                Button { scroller.stopAuto() } label: {
+                    Label("Auto scroll", systemImage: "pause.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, chrome.isControl ? 96 : 28)
+                .accessibilityLabel("Stop auto scroll")
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: scroller.holdSpeed != nil)
+        .allowsHitTesting(scroller.isAutoScrolling)
+    }
+
     // MARK: - Chapter navigation
 
     private func hasChapter(offset: Int) -> Bool {
@@ -472,25 +595,28 @@ struct MangaReaderView: View {
     private func seekPage(_ index: Int) {
         guard pages.indices.contains(index) else { return }
         currentIndex = index
-        if mode == .webtoon { webtoonPosition = index }
+        if mode == .webtoon { webtoonProxy?.scrollTo(index, anchor: .top) }
     }
 
-    /// Pager: left and right thirds turn the page, the middle toggles chrome.
-    /// In right-to-left mode the zones swap, matching the swipe direction the
-    /// pager itself uses. Webtoon has no zones — every tap toggles.
-    private func handleTap(at x: CGFloat) {
-        guard mode == .pager else {
-            toggleControls()
-            return
-        }
+    /// The series' tap-zone layout decides between previous, next and the
+    /// controls. Paged mode turns the page (right-to-left swaps the sides);
+    /// webtoon scrolls a screenful, and reading direction does not apply to a
+    /// vertical strip.
+    private func handleTap(at point: CGPoint) {
+        // The finger lifting after a hold-to-scroll is not a tap.
+        guard !scroller.justHeld else { return }
 
-        let third = readerWidth / 3
-        if x < third {
-            turnPage(forward: direction == .rightToLeft)
-        } else if x > readerWidth - third {
-            turnPage(forward: direction != .rightToLeft)
-        } else {
-            toggleControls()
+        let preferences = seriesSettings.resolved
+        let isPager = mode == .pager
+        switch preferences.tapZones.action(
+            at: point,
+            in: readerSize,
+            inverted: preferences.invertTapZones,
+            rightToLeft: isPager && direction == .rightToLeft
+        ) {
+        case .previous: isPager ? turnPage(forward: false) : scroller.scrollScreen(forward: false)
+        case .next: isPager ? turnPage(forward: true) : scroller.scrollScreen(forward: true)
+        case .menu: toggleControls()
         }
     }
 

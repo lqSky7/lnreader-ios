@@ -1,5 +1,6 @@
 // V2ReaderSettingsChecks.swift - Per-series reader settings, headless.
 
+import CoreGraphics
 import Foundation
 
 @main
@@ -16,8 +17,17 @@ struct V2ReaderSettingsChecks {
         checkResetClearsStorage()
         checkMakeDefault()
         checkForwardCompatibleDecoding()
+        checkTapZoneOverrides()
+        checkTapZones()
+        checkTapZoneReversal()
+        checkHoldSpeed()
+        checkScrollStep()
+        checkHoldHaptics()
+        checkVolumeDetector()
+        checkControlSettingsDecoding()
         print("PASS: reader settings — defaults, per-field override, default propagation, "
-            + "persistence, series isolation, reset, make default, decoding old data")
+            + "persistence, series isolation, reset, make default, decoding old data; "
+            + "tap zones, reversal, hold speed, scroll step, volume detection, control settings")
     }
 
     private static func freshDefaults() -> UserDefaults {
@@ -29,7 +39,8 @@ struct V2ReaderSettingsChecks {
 
     private static func checkDefaultsWhenNothingStored() {
         let settings = MangaSeriesSettings(key: "s::a", defaults: freshDefaults())
-        precondition(settings.resolved == MangaReaderPreferences(readingMode: .pager, direction: .leftToRight),
+        precondition(settings.resolved == MangaReaderPreferences(readingMode: .pager, direction: .leftToRight,
+                                                                  tapZones: .standard, invertTapZones: false),
                      "built-in defaults")
         precondition(!settings.hasOverrides, "nothing overridden")
     }
@@ -97,10 +108,164 @@ struct V2ReaderSettingsChecks {
         // Fields added later are optional, so data written before them loads,
         // and data with fields this build does not know does not break it.
         let defaults = freshDefaults()
-        defaults.set(Data(#"{"readingMode":"webtoon","tapZones":"lShaped"}"#.utf8), forKey: "mangareader.s::a")
+        defaults.set(Data(#"{"readingMode":"webtoon","futureSetting":"x"}"#.utf8), forKey: "mangareader.s::a")
         let settings = MangaSeriesSettings(key: "s::a", defaults: defaults)
         precondition(settings.resolved.readingMode == .webtoon, "known field decoded despite an unknown one")
         defaults.set(Data("{}".utf8), forKey: "mangareader.s::b")
         precondition(!MangaSeriesSettings(key: "s::b", defaults: defaults).hasOverrides, "empty object loads")
+    }
+
+    // MARK: - Tap zones
+
+    private static let screen = CGSize(width: 300, height: 600)
+
+    private static func tap(_ layout: MangaTapZoneLayout, _ x: CGFloat, _ y: CGFloat,
+                            inverted: Bool = false, rtl: Bool = false) -> MangaTapAction {
+        layout.action(at: CGPoint(x: x, y: y), in: screen, inverted: inverted, rightToLeft: rtl)
+    }
+
+    private static func checkTapZoneOverrides() {
+        let defaults = freshDefaults()
+        defaults.set("kindlish", forKey: MangaReaderSettingsKey.tapZones)
+        let settings = MangaSeriesSettings(key: "s::a", defaults: defaults)
+        precondition(settings.resolved.tapZones == .kindlish, "default layout comes from the global key")
+        settings.setTapZones(.edge)
+        settings.setInvertTapZones(true)
+        let reloaded = MangaSeriesSettings(key: "s::a", defaults: defaults)
+        precondition(reloaded.resolved.tapZones == .edge && reloaded.resolved.invertTapZones,
+                     "layout and invert persist per series")
+        precondition(MangaSeriesSettings(key: "s::b", defaults: defaults).resolved.tapZones == .kindlish,
+                     "another series keeps the default")
+    }
+
+    private static func checkTapZones() {
+        precondition(tap(.standard, 50, 300) == .previous, "standard: left third")
+        precondition(tap(.standard, 150, 300) == .menu, "standard: middle")
+        precondition(tap(.standard, 250, 300) == .next, "standard: right third")
+
+        precondition(tap(.lShaped, 150, 50) == .previous, "L: top band goes back")
+        precondition(tap(.lShaped, 50, 300) == .previous, "L: left band goes back")
+        precondition(tap(.lShaped, 250, 300) == .next, "L: right band goes forward")
+        precondition(tap(.lShaped, 150, 550) == .next, "L: bottom band goes forward")
+        precondition(tap(.lShaped, 150, 300) == .menu, "L: centre is the menu")
+
+        precondition(tap(.kindlish, 150, 20) == .menu, "kindle: top strip is the menu")
+        precondition(tap(.kindlish, 50, 300) == .previous, "kindle: left third goes back")
+        precondition(tap(.kindlish, 150, 300) == .next, "kindle: the rest goes forward")
+
+        precondition(tap(.edge, 20, 300) == .previous, "edge: left strip")
+        precondition(tap(.edge, 280, 300) == .next, "edge: right strip")
+        precondition(tap(.edge, 150, 300) == .menu, "edge: the rest is the menu")
+
+        for x in [10, 150, 290] as [CGFloat] {
+            precondition(tap(.disabled, x, 300) == .menu, "disabled: every tap is the menu")
+        }
+        precondition(MangaTapZoneLayout.standard.action(at: .zero, in: .zero) == .menu,
+                     "an unmeasured reader never turns a page")
+    }
+
+    private static func checkTapZoneReversal() {
+        precondition(tap(.standard, 50, 300, rtl: true) == .next, "right-to-left swaps the sides")
+        precondition(tap(.standard, 50, 300, inverted: true) == .next, "invert swaps the sides")
+        precondition(tap(.standard, 50, 300, inverted: true, rtl: true) == .previous,
+                     "invert on a right-to-left series cancels out")
+        precondition(tap(.standard, 150, 300, inverted: true, rtl: true) == .menu, "the menu zone never moves")
+        precondition(tap(.disabled, 50, 300, inverted: true) == .menu, "disabled stays disabled")
+    }
+
+    // MARK: - Scrolling
+
+    private static func checkHoldSpeed() {
+        var hold = HoldScrollConfig()
+        hold.baseSpeed = 200
+        hold.speedPerPoint = 2
+        hold.minSpeed = 50
+        hold.maxSpeed = 600
+        precondition(hold.speed(forDrag: 0) == 200, "no drag keeps the base speed")
+        precondition(hold.speed(forDrag: -50) == 300, "up increases by default")
+        precondition(hold.speed(forDrag: 50) == 100, "down decreases by default")
+        precondition(hold.speed(forDrag: -1000) == 600, "capped at the maximum")
+        precondition(hold.speed(forDrag: 1000) == 50, "floored at the minimum")
+        hold.upIncreases = false
+        precondition(hold.speed(forDrag: 50) == 300, "direction can be inverted: down increases")
+        precondition(hold.speed(forDrag: -50) == 100, "direction can be inverted: up decreases")
+        hold.minSpeed = 900
+        precondition(hold.speed(forDrag: 0) == 600 && hold.lower == 600,
+                     "an inverted min/max pair collapses instead of trapping the speed")
+    }
+
+    private static func checkScrollStep() {
+        let step = ScrollStep.advance(offset: 100, speed: 60, dt: 0.5, maxOffset: 1000)
+        precondition(abs(step.offset - 106) < 0.0001 && !step.reachedEnd,
+                     "dt is clamped to one frame gap so a stall cannot jump")
+        let steady = ScrollStep.advance(offset: 100, speed: 120, dt: 1.0 / 60, maxOffset: 1000)
+        precondition(abs(steady.offset - 102) < 0.0001, "120 pt/s over a 60 Hz frame is 2 pt")
+        let end = ScrollStep.advance(offset: 999, speed: 300, dt: 0.05, maxOffset: 1000)
+        precondition(end.offset == 1000 && end.reachedEnd, "stops exactly at the end")
+        let already = ScrollStep.advance(offset: 1000, speed: 100, dt: 0.016, maxOffset: 1000)
+        precondition(already.offset == 1000 && already.reachedEnd, "already at the end")
+        let short = ScrollStep.advance(offset: 40, speed: 100, dt: 0.016, maxOffset: 0)
+        precondition(short.offset == 0 && short.reachedEnd, "content shorter than the screen never scrolls")
+        let idle = ScrollStep.advance(offset: 10, speed: 0, dt: 0.016, maxOffset: 100)
+        precondition(idle.offset == 10 && !idle.reachedEnd, "zero speed does not move")
+    }
+
+    private static func checkHoldHaptics() {
+        var hold = HoldScrollConfig()
+        hold.baseSpeed = 200
+        hold.speedPerPoint = 1
+        hold.minSpeed = 100
+        hold.maxSpeed = 400
+        var tracker = HoldHapticTracker(startSpeed: 200, config: hold)
+        precondition(tracker.update(speed: 205, config: hold) == nil, "within a step: silent")
+        precondition(tracker.update(speed: 245, config: hold) == .tick, "crossing a step ticks")
+        precondition(tracker.update(speed: 250, config: hold) == nil, "no second tick inside a step")
+        precondition(tracker.update(speed: 190, config: hold) == .tick, "slowing down ticks too")
+        precondition(tracker.update(speed: 100, config: hold) == .limit, "arriving at the minimum is firmer")
+        precondition(tracker.update(speed: 100, config: hold) == nil, "staying at the limit is silent")
+        precondition(tracker.update(speed: 130, config: hold) == .tick, "leaving the limit resumes ticks")
+        precondition(tracker.update(speed: 400, config: hold) == .limit, "arriving at the maximum is firmer")
+        var atLimit = HoldHapticTracker(startSpeed: 100, config: hold)
+        precondition(atLimit.update(speed: 100, config: hold) == nil, "starting on a limit does not fire it")
+        precondition(HoldScrollConfig().haptics, "haptics are on by default")
+        precondition(MangaControlSettings(rawValue: #"{"hold":{"baseSpeed":90}}"#)?.hold.haptics == true,
+                     "saved settings from before haptics existed get the default")
+    }
+
+    // MARK: - Volume keys
+
+    private static func checkVolumeDetector() {
+        var detector = VolumeKeyDetector(target: 0.5)
+        precondition(detector.consume(0.5625) == .up, "a higher volume is volume up")
+        precondition(detector.consume(0.5) == nil, "the reset to the target is not a press")
+        precondition(detector.consume(0.4375) == .down, "a lower volume is volume down")
+        precondition(detector.consume(0.5) == nil, "reset again")
+        precondition(detector.consume(0.5625) == .up && detector.consume(0.5) == nil,
+                     "repeated presses each count once")
+        precondition(detector.consume(0.5) == nil, "no change is no press")
+
+        let settings = MangaControlSettings()
+        precondition(!settings.isForward(.up) && settings.isForward(.down), "up goes back, down goes forward")
+        var inverted = settings
+        inverted.volumeKeysInverted = true
+        precondition(inverted.isForward(.up) && !inverted.isForward(.down), "invert swaps the buttons")
+    }
+
+    // MARK: - Stored control settings
+
+    private static func checkControlSettingsDecoding() {
+        var settings = MangaControlSettings()
+        settings.volumeKeys = true
+        settings.hold.baseSpeed = 333
+        settings.hold.upIncreases = false
+        precondition(MangaControlSettings(rawValue: settings.rawValue) == settings, "round trip")
+
+        let old = MangaControlSettings(rawValue: #"{"volumeKeys":true}"#)
+        precondition(old?.volumeKeys == true && old?.autoScrollSpeed == 60 && old?.hold == HoldScrollConfig(),
+                     "a missing field keeps its default instead of discarding what was saved")
+        precondition(MangaControlSettings(rawValue: "not json") == nil, "garbage falls back to the default")
+        let partialHold = MangaControlSettings(rawValue: #"{"hold":{"baseSpeed":90}}"#)
+        precondition(partialHold?.hold.baseSpeed == 90 && partialHold?.hold.maxSpeed == 1500,
+                     "a partial hold block keeps defaults for the rest")
     }
 }
