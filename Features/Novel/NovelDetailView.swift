@@ -101,6 +101,7 @@ struct NovelDetailView: View {
                         chapters: pagedChapters,
                         totalCount: allChapters.count,
                         filteredCount: filteredChapters.count,
+                        showsAllChapters: showsAllChapters,
                         sourceKey: sourceKey,
                         selectedRange: $selectedRange,
                         selectedFilter: $selectedFilter,
@@ -202,8 +203,20 @@ struct NovelDetailView: View {
         }
     }
 
+    /// Newest first, ordered by chapter number.
+    ///
+    /// `sourceOrder` is whatever the source listed — MangaFire hands back
+    /// newest-first while most novel sources go oldest-first — so it cannot be
+    /// used to sort. The parsed number can.
+    private var orderedChapters: [ChapterDisplay] {
+        allChapters.sorted { lhs, rhs in
+            if lhs.sortNumber != rhs.sortNumber { return lhs.sortNumber > rhs.sortNumber }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
+        }
+    }
+
     private var filteredChapters: [ChapterDisplay] {
-        var result = allChapters
+        var result = orderedChapters
         switch selectedFilter {
         case .all: break
         case .unread: result = result.filter { $0.unread }
@@ -211,41 +224,52 @@ struct NovelDetailView: View {
         case .bookmarked: result = result.filter { $0.bookmarked }
         }
         if !chapterSearch.isEmpty {
+            let query = chapterSearch.trimmingCharacters(in: .whitespaces)
             result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(chapterSearch) || String($0.position + 1) == chapterSearch.trimmingCharacters(in: .whitespaces)
+                $0.name.localizedCaseInsensitiveContains(query)
+                    || ($0.chapterNumber.map { String(Int($0)) } == query)
             }
         }
         return result
     }
 
+    /// Manga sources report every chapter at once, so the list shows all of
+    /// them. Novels keep the windowed preview: their sources paginate, and a
+    /// 2000-chapter web novel should not render 2000 rows on the detail screen.
+    private var showsAllChapters: Bool {
+        (localEntry?.kind ?? sourceEntry?.kind ?? .novel) == .manga
+    }
+
     private var pagedChapters: [ChapterDisplay] {
         let list = filteredChapters
         guard !list.isEmpty else { return [] }
+        if showsAllChapters { return list }
 
         if !chapterSearch.isEmpty || selectedFilter != .all { return Array(list.prefix(50)) }
         switch selectedRange {
         case .first:
-            return Array(list.prefix(10))
-
-        case .last:
+            // Oldest chapters — the end of a newest-first list.
             return Array(list.suffix(10))
 
+        case .last:
+            // Newest chapters.
+            return Array(list.prefix(10))
+
         case .progress:
-            // Find the latest read chapter in the entire book
             let readChapters = allChapters.filter { !$0.unread || $0.isInProgress }
             let targetIndex: Int
 
-            if !readChapters.isEmpty,
-               let maxRead = readChapters.max(by: { $0.position < $1.position }) {
+            if let maxRead = readChapters.max(by: { $0.sortNumber < $1.sortNumber }) {
                 if let idx = list.firstIndex(where: { $0.path == maxRead.path }) {
                     targetIndex = idx
-                } else if let idx = list.firstIndex(where: { $0.position >= maxRead.position }) {
+                } else if let idx = list.firstIndex(where: { $0.sortNumber <= maxRead.sortNumber }) {
                     targetIndex = idx
                 } else {
                     targetIndex = list.count - 1
                 }
             } else {
-                targetIndex = 0
+                // Nothing read yet: start at the oldest chapter.
+                targetIndex = list.count - 1
             }
 
             let totalCount = list.count

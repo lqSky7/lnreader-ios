@@ -361,3 +361,18 @@ manga reader the control state is a Liquid Glass top bar (chapter, `Ch. 200 · 3
 page pill that returns to focus); every control is `.glassEffect(.regular.interactive())`.
 The novel reader already used glass buttons and now uses the same state machine.
 
+## Slice 12 — chapter ordering and manga lists
+
+`sourceOrder` is whatever the source listed. MangaFire returns newest-first; most novel
+sources go oldest-first, so the list was ordering by an index that means different things
+per source — "First" showed the newest chapters for manga.
+
+- `ChapterDisplay.sortNumber` is the ordering key: the parsed chapter number, falling back
+  to `sourceOrder + 1` only when the title carries no number. The list sorts by it
+  descending (newest first), and "First" / "Latest" / "Continue" are defined against that.
+- Manga entries show **every** chapter inline, with no range picker and no "All chapters"
+  sheet: manga sources report the full list at once, so windowing it was busywork. Novels
+  keep the windowed preview, because their sources paginate and a 2000-chapter web novel
+  should not render 2000 rows on the detail screen.
+- Chapter search now matches the parsed number rather than `position + 1`.
+

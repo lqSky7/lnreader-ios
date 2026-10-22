@@ -11,6 +11,9 @@ struct ChapterListView: View {
     let chapters: [ChapterDisplay]
     let totalCount: Int
     let filteredCount: Int
+    /// Manga sources hand over the whole chapter list at once, so there is
+    /// nothing to page through — show all of it.
+    var showsAllChapters = false
     let sourceKey: String
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
@@ -21,6 +24,7 @@ struct ChapterListView: View {
 
     private var isFiltered: Bool { selectedFilter != .all || !searchText.isEmpty }
     private var rangeDescription: String {
+        if showsAllChapters { return "\(totalCount) chapters" }
         guard let first = chapters.first, let last = chapters.last else { return "No chapters" }
         return "\(first.position + 1)–\(last.position + 1) of \(totalCount)"
     }
@@ -63,7 +67,7 @@ struct ChapterListView: View {
                 .transition(.opacity.combined(with: .offset(y: -4)))
             }
 
-            if !isFiltered {
+            if !isFiltered && !showsAllChapters {
                 Picker("Chapter range", selection: $selectedRange) {
                     Text("Continue").tag(ChapterRange.progress)
                     Text("First").tag(ChapterRange.first)
@@ -84,14 +88,16 @@ struct ChapterListView: View {
                 .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
             }
 
-            Button { showDirectory = true } label: {
-                HStack {
-                    Label(isFiltered && filteredCount > chapters.count ? "See all \(filteredCount) results" : "All \(totalCount) chapters", systemImage: "list.bullet.rectangle")
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
-                }.font(.subheadline.weight(.medium)).padding(.vertical, 12)
-                .contentShape(Rectangle())
-            }.buttonStyle(.plain)
+            if !showsAllChapters {
+                Button { showDirectory = true } label: {
+                    HStack {
+                        Label(isFiltered && filteredCount > chapters.count ? "See all \(filteredCount) results" : "All \(totalCount) chapters", systemImage: "list.bullet.rectangle")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }.font(.subheadline.weight(.medium)).padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            }
         }
         .padding(.horizontal)
         .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showSearchField)
@@ -122,6 +128,10 @@ struct ChapterDisplay: Identifiable, Hashable {
     let isInProgress: Bool
     let position: Int
     let chapterNumber: Double?
+    /// Ordering key that does not depend on how the source listed the chapters.
+    /// MangaFire returns newest-first, most novel sources oldest-first, so
+    /// `position` is not comparable across sources — the number is.
+    let sortNumber: Double
     let sourceKey: String
     let entryURL: String?
     /// Which reader opens this chapter. Needed because a browse result has no
@@ -140,6 +150,9 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.isInProgress = chapter.isInProgress
         self.position = chapter.sourceOrder
         self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
+        self.sortNumber = chapter.chapterNumber > 0
+            ? chapter.chapterNumber
+            : Double(chapter.sourceOrder + 1)
         self.sourceKey = chapter.entry?.sourceKey ?? ""
         self.entryURL = chapter.entry?.url
         self.kind = chapter.entry?.kind ?? .novel
@@ -163,6 +176,10 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.isInProgress = false
         self.position = position
         self.chapterNumber = sourceChapter.chapterNumber >= 0 ? sourceChapter.chapterNumber : nil
+        let parsed = sourceChapter.chapterNumber > 0
+            ? sourceChapter.chapterNumber
+            : ChapterRecognition.parseChapterNumber(sourceChapter.name)
+        self.sortNumber = parsed > 0 ? parsed : Double(position + 1)
         self.sourceKey = sourceKey
         self.entryURL = entryURL
         self.kind = kind
