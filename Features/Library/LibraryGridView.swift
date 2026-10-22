@@ -1,6 +1,7 @@
 // LibraryGridView.swift
 // Adaptive grid layout for novel covers in the library.
 
+import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 

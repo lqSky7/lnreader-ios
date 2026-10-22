@@ -264,7 +264,7 @@ enum WebViewCapture {
         private var challengeShown = false
 
         /// How long a person gets to complete a verification.
-        fileprivate static let challengeAllowance: TimeInterval = 180
+        nonisolated fileprivate static let challengeAllowance: TimeInterval = 180
 
         private func watchDeadline() async {
             while !Task.isCancelled && !finished {

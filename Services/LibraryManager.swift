@@ -435,7 +435,9 @@ final class LibraryManager {
             }
         }
 
-        if unsaved > 0 { try? context.save() }
+        // Flush the last partial batch. Unconditional: `unsaved` is changed inside
+        // `finish`, which the compiler's flow analysis does not see.
+        try? context.save()
         if updateCancelRequested { updateProgress?.wasCancelled = true }
     }
 

@@ -70,7 +70,7 @@ enum BundledExtensions {
             else { continue }
 
             if !ExtensionStore.isInstalled(info.pkg) {
-                try? ExtensionStore.install(info, bundle: bundled)
+                _ = try? ExtensionStore.install(info, bundle: bundled)
                 continue
             }
 
@@ -80,7 +80,7 @@ enum BundledExtensions {
                stored.repoBaseURL == nil, stored.versionId < info.versionId {
                 var upgraded = info
                 upgraded.iconAsset = info.iconAsset ?? stored.iconAsset
-                try? ExtensionStore.install(upgraded, bundle: bundled)
+                _ = try? ExtensionStore.install(upgraded, bundle: bundled)
                 continue
             }
 
@@ -93,7 +93,7 @@ enum BundledExtensions {
 
             var repaired = stored
             repaired.iconAsset = info.iconAsset
-            try? ExtensionStore.install(repaired, bundle: installedBundle)
+            _ = try? ExtensionStore.install(repaired, bundle: installedBundle)
         }
     }
 }

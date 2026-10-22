@@ -166,6 +166,13 @@ struct MangaPageView: View {
         }
     }
 
+    /// Width of the screen this app is on, without the deprecated `UIScreen.main`.
+    private static var screenWidth: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.screen.bounds.width }
+            .first ?? 390
+    }
+
     private func load() async {
         let requestedURL = page.url
         didFail = false
@@ -183,7 +190,7 @@ struct MangaPageView: View {
             guard !Task.isCancelled else { return }
             let decoded = await PageDecode.decode(
                 data,
-                targetWidth: UIScreen.main.bounds.width * displayScale,
+                targetWidth: Self.screenWidth * displayScale,
                 screenScale: displayScale
             )
             guard !Task.isCancelled else { return }

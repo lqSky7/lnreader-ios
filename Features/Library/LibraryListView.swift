@@ -1,6 +1,7 @@
 // LibraryListView.swift
 // Compact list layout alternative for the library.
 
+import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
