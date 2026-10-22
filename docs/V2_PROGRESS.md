@@ -19,7 +19,7 @@ touches `default.store`, so the old data stays recoverable on disk.
 | 3. Downloads | Unified manager, CBZ/folder, ComicInfo, background continuation | Not started |
 | 4. E2E backup + cloud | `.lnbk`, Keychain key, blob endpoints | Not started |
 | 5. AniList | Tracker framework, auto-update, offline queue | Not started |
-| 6. Updates & polish | `ChapterSourceSync`, restrictions, BG refresh | Partially: update merge runs on v2 models |
+| 6. Updates & polish | `ChapterSourceSync`, restrictions, BG refresh | **`ChapterSourceSync` + `ChapterRecognition` landed**; scheduling not started |
 
 The Kotlin/JS transpiler route is the chosen one for sources (plan §3.3), so broad
 extension coverage stays the goal and `BuiltinSource` is only the emergency fallback.
@@ -174,15 +174,36 @@ Notes:
   installing and uninstalling is a registry concern; it will move to `ExtensionRepo` when
   the repo/trust work lands.
 
-## Slice 4 — next
+## Slice 4 — chapter list sync (landed)
 
-1. **`ChapterSourceSync`** (plan §8): dedupe, `chapterNumber` parsing via a port of
-   `ChapterRecognition`, delete-missing, and a background `@ModelActor` for batching.
-   Today `LibraryManager.applyUpdate` adds and updates but never removes.
-2. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
+| File | What it is |
+|---|---|
+| `Services/Sources/ChapterRecognition.swift` | Port of Yokai's `ChapterRecognition` (Apache-2.0): `Ch.4.a` → 4.1, `404 extravol002` → 404.99, `The 1st Night` → 1, `Foo` → -1 |
+| `Services/Sources/ChapterSourceSync.swift` | Merges a fetched chapter list into an entry: match by URL, `sourceOrder` from the list index, `dateFetch` on new chapters, returns `(added, updated, removed)` |
+| `LibraryManager.applyUpdate` | Now delegates the chapter merge to `ChapterSourceSync` instead of duplicating it |
+
+Decisions worth knowing:
+
+- **Delete-missing is guarded.** A chapter the source stopped listing is deleted only
+  when the user has no stake in it — unread, unbookmarked, no history. Tachiyomi deletes
+  unconditionally and loses the state of a chapter the site merely renamed; keeping the
+  row means a re-added chapter comes back still read. The plan asks for "delete missing",
+  and this satisfies it for the case it was meant for (junk chapters) without the data loss.
+- **Numbers are parsed, not trusted.** A source number `> -1` wins; otherwise the title is
+  parsed once at insert and again if a stored chapter still has `-1`. Both kinds need this:
+  manga sorting and the AniList update both compare numbers.
+- **Reference tests are ported, not invented.** `tests/V2ChapterSyncChecks.swift` carries
+  Yokai's `ChapterRecognitionTest` cases verbatim (40 of them) plus merge behaviour against
+  an in-memory store, so the port can be diffed against upstream.
+
+## Slice 5 — next
+
+1. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
    fingerprint pinning. This is the entry point for the Mihon path.
-3. **Manga reader** (plan §4) with a stub `MangaSource` so the pager and webtoon viewers
+2. **Manga reader** (plan §4) with a stub `MangaSource` so the pager and webtoon viewers
    can be built before the transpiler exists.
-4. **Downloads** (plan §5).
+3. **Downloads** (plan §5).
+4. **Library update scheduling** (plan §8): `BGAppRefreshTask`, per-entry restrictions
+   (Wi-Fi, charging, skip completed), and batching through a background `@ModelActor`.
 5. **Filter UI** on browse, now that `FilterState` exists.
 

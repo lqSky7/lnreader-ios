@@ -79,10 +79,13 @@ final class LibraryManager {
         context: ModelContext
     ) {
         for (index, sourceChapter) in chapters.enumerated() {
+            let number = sourceChapter.chapterNumber > -1
+                ? sourceChapter.chapterNumber
+                : ChapterRecognition.parseChapterNumber(sourceChapter.name, mangaTitle: entry.title)
             let chapter = Chapter(
                 url: sourceChapter.url,
                 name: sourceChapter.name,
-                chapterNumber: sourceChapter.chapterNumber,
+                chapterNumber: number,
                 sourceOrder: index
             )
             chapter.scanlator = sourceChapter.scanlator
@@ -269,16 +272,17 @@ final class LibraryManager {
 
     /// Merge source metadata and a chapter list into a stored entry.
     ///
-    /// Chapters are matched by URL. Existing rows keep their read state and
-    /// their source order is refreshed; new rows are stamped with `dateFetch`
-    /// so they show up in Updates.
+    /// Metadata is overwritten from the source; the chapter list goes through
+    /// `ChapterSourceSync`, which matches by URL, keeps read state, stamps new
+    /// chapters for Updates and prunes chapters the source dropped.
+    @discardableResult
     func applyUpdate(
         _ entry: Entry,
         details: SourceEntry,
         chapters: [SourceChapter],
         context: ModelContext,
         saveImmediately: Bool = true
-    ) {
+    ) -> ChapterSyncResult {
         if !details.title.isEmpty { entry.title = details.title }
         if let thumbnail = details.thumbnailURL { entry.thumbnailURL = thumbnail }
         if let summary = details.description, !summary.isEmpty { entry.summary = summary }
@@ -288,40 +292,12 @@ final class LibraryManager {
         entry.status = details.status
         entry.lastUpdate = .now
 
-        // O(n) lookup; the old `first(where:)` inside the loop was O(n²) and
-        // painful for 2000-chapter books on every refresh.
-        var existingByURL: [String: Chapter] = [:]
-        existingByURL.reserveCapacity(entry.chapters.count)
-        for chapter in entry.chapters {
-            existingByURL[chapter.url] = chapter
-        }
-
-        for (index, sourceChapter) in chapters.enumerated() {
-            if let existing = existingByURL[sourceChapter.url] {
-                existing.name = sourceChapter.name
-                existing.chapterNumber = sourceChapter.chapterNumber
-                existing.scanlator = sourceChapter.scanlator
-                existing.dateUpload = sourceChapter.dateUpload
-                existing.sourceOrder = index
-            } else {
-                let chapter = Chapter(
-                    url: sourceChapter.url,
-                    name: sourceChapter.name,
-                    chapterNumber: sourceChapter.chapterNumber,
-                    sourceOrder: index
-                )
-                chapter.scanlator = sourceChapter.scanlator
-                chapter.dateUpload = sourceChapter.dateUpload
-                // Marks the chapter as new, which is what Updates reads.
-                chapter.dateFetch = .now
-                chapter.entry = entry
-                context.insert(chapter)
-            }
-        }
+        let result = ChapterSourceSync.merge(chapters, into: entry, context: context)
 
         if saveImmediately {
             try? context.save()
         }
+        return result
     }
 
     /// Mark every "new chapter" badge as seen.
