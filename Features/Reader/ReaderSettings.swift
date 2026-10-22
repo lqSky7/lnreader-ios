@@ -166,6 +166,7 @@ struct ReaderSettings: View {
                     themesGrid
                     
                     Toggle("Paper texture", isOn: Binding(get: { localGrainIntensity > 0 }, set: { localGrainIntensity = $0 ? 10 : 0 }))
+                        .tint(AppTheme.controlFill)
                     if localGrainIntensity > 0 {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("GRAIN INTENSITY")

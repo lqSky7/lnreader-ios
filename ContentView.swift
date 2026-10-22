@@ -42,6 +42,7 @@ struct ContentView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
+                libraryManager.flushProgress(context: modelContext)
                 LibraryMaintenance.schedule()
                 LibraryMaintenance.scheduleDownloads()
             } else if phase == .active {
@@ -82,6 +83,11 @@ struct ContentView: View {
             // The HTTP stack gets its Cloudflare solver before any source is browsed.
             await HTTPClient.shared.setCloudflareSolver(WebKitCloudflareSolver())
             if autoUpdateOnLaunch {
+                // A library update is two requests per book plus a merge pass on
+                // the main actor. Starting it inside the launch task means the
+                // first scroll of the session competes with it. Give the first
+                // frame and the first tap a clear run.
+                try? await Task.sleep(for: .seconds(2))
                 await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager, automatic: true)
             }
         }

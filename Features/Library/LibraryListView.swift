@@ -121,9 +121,14 @@ struct InteractiveListRow: View {
 struct LibraryListRow: View {
     var transitionNamespace: Namespace.ID? = nil
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
+    @Environment(\.modelContext) private var modelContext
     let novel: Entry
     var isEditing: Bool = false
     var onDelete: () -> Void = {}
+
+    /// Cached counts; see `LibraryChapterCounts`. Reading `novel.unreadCount`
+    /// here resolved the whole chapter relationship per row, three times over.
+    @State private var counts: LibraryChapterCounts.Counts?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -160,9 +165,9 @@ struct LibraryListRow: View {
                 }
 
                 HStack(spacing: 12) {
-                    Label("\(novel.totalChapterCount)", systemImage: "list.number")
-                    if showUnreadBadges && novel.unreadCount > 0 {
-                        Label("\(novel.unreadCount)", systemImage: "eye.slash")
+                    Label("\(counts?.total ?? 0)", systemImage: "list.number")
+                    if showUnreadBadges, let unread = counts?.unread, unread > 0 {
+                        Label("\(unread)", systemImage: "eye.slash")
                     }
                 }
                 .font(Typography.small)
@@ -174,5 +179,11 @@ struct LibraryListRow: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .frame(minHeight: LayoutConstants.listRowHeight)
+        .task(id: novel.persistentModelID) {
+            if let cached = LibraryChapterCounts.shared.cached(novel.persistentModelID) {
+                counts = cached
+            }
+            counts = await LibraryChapterCounts.shared.counts(for: novel, container: modelContext.container)
+        }
     }
 }

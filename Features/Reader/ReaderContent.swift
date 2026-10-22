@@ -278,6 +278,7 @@ import WebKit
                 let bottomOffset = 120.0 + verticalPadding
                 
                 let js = """
+                window.__lnrEnsureFont && window.__lnrEnsureFont('\(fontFamily)');
                 document.body.style.fontFamily = "'\(fontFamily)', 'Georgia', serif";
                 document.body.style.fontSize = '\(fontSize)px';
                 document.body.style.lineHeight = '\(lineHeight)';
@@ -540,6 +541,7 @@ import WebKit
                 let bottomOffset = 120.0 + verticalPadding
                 
                 let js = """
+                window.__lnrEnsureFont && window.__lnrEnsureFont('\(fontFamily)');
                 document.body.style.fontFamily = "'\(fontFamily)', 'Georgia', serif";
                 document.body.style.fontSize = '\(fontSize)px';
                 document.body.style.lineHeight = '\(lineHeight)';
@@ -634,6 +636,14 @@ extension ReaderContent {
         let topOffset = 136.0 + verticalPadding
         let bottomOffset = 120.0 + verticalPadding
 
+        // Only fetch the web font when it is actually the selected family.
+        // This used to be unconditional, which put a stylesheet request to a
+        // third-party CDN in `<head>` on every chapter load — a render-blocking
+        // network round trip before the first line of text could paint.
+        let fontStylesheet: String = fontFamily.localizedCaseInsensitiveContains("dyslexic")
+            ? #"<link href="https://fonts.cdnfonts.com/css/open-dyslexic" rel="stylesheet">"#
+            : ""
+
         var commentsSection = ""
         if !comments.isEmpty {
             commentsSection = """
@@ -659,7 +669,7 @@ extension ReaderContent {
             <html>
             <head>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <link href="https://fonts.cdnfonts.com/css/open-dyslexic" rel="stylesheet">
+            \(fontStylesheet)
             <style>
             :root {
                 color-scheme: light dark;
@@ -1001,6 +1011,25 @@ extension ReaderContent {
                 }
                 return false;
             };
+            </script>
+            <script>
+            // The web font is only linked when the family needs it. Changing
+            // the family from the settings sheet does not reload the document,
+            // so add or drop the stylesheet here instead of blocking the
+            // initial paint for everyone.
+            window.__lnrEnsureFont = function(family) {
+                var needsFont = /dyslexic/i.test(family);
+                var existing = document.getElementById("lnr-remote-font");
+                if (needsFont && !existing) {
+                    var link = document.createElement("link");
+                    link.id = "lnr-remote-font";
+                    link.rel = "stylesheet";
+                    link.href = "https://fonts.cdnfonts.com/css/open-dyslexic";
+                    document.head.appendChild(link);
+                } else if (!needsFont && existing) {
+                    existing.remove();
+                }
+            }
             </script>
             <script>
             window.loadMoreComments = function() {

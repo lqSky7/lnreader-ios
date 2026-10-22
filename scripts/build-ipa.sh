@@ -7,6 +7,9 @@
 #
 # Output: LNReader-<version>-unsigned.ipa in the repository root
 #
+# That is `lnreader-ios/`, and it is where the file belongs — the parent folder
+# is not a build output directory. Do not copy it up there.
+#
 # The IPA is NOT signed. Sideloadly, AltStore or Xcode re-sign it with your own
 # certificate; an unsigned bundle will not install on its own.
 #

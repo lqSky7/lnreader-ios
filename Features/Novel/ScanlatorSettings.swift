@@ -26,15 +26,19 @@ final class ScanlatorSettings {
         self.value = Self.load(key: key, defaults: defaults)
     }
 
-    var isEnabled: Bool { value.enabled }
+    var isPriorityEnabled: Bool { value.priorityEnabled }
 
-    func setEnabled(_ enabled: Bool) {
-        mutate { $0.enabled = enabled }
+    /// True when any rule is in effect — priority merging or a hidden scanlator.
+    var hasActiveRules: Bool { value.hasActiveRules }
+
+    func setPriorityEnabled(_ enabled: Bool) {
+        mutate { $0.priorityEnabled = enabled }
     }
 
-    func setEnabled(_ scanlator: String, _ enabled: Bool) {
+    /// Show or hide one scanlator's chapters. Independent of priority merging.
+    func setVisible(_ scanlator: String, _ visible: Bool) {
         mutate { value in
-            if enabled {
+            if visible {
                 value.disabled.removeAll { $0 == scanlator }
             } else if !value.disabled.contains(scanlator) {
                 value.disabled.append(scanlator)
@@ -95,7 +99,7 @@ extension ScanlatorRules {
         _ preference: ScanlatorPreference,
         to chapters: [ChapterDisplay]
     ) -> [ChapterDisplay] {
-        guard preference.enabled else { return chapters }
+        guard preference.hasActiveRules else { return chapters }
 
         let items = chapters.map {
             Item(number: $0.chapterNumber, scanlator: $0.scanlator)

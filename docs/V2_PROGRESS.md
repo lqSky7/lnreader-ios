@@ -1,7 +1,7 @@
 # v2 rewrite — status
 
-**Updated** 2026-10-22 · **Branch** `feat/v2-rewrite-manga` · **Version** 2.0.0 (build 3)
-· **Latest update** Novel/manga offline chapters, scheduled updates, and encrypted local backup/restore
+**Updated** 2026-10-23 · **Branch** `feat/v2-rewrite-manga` · **Version** 2.0.0 (build 3)
+· **Latest update** Performance pass: library counts, reader save storm, cover decoding
 
 The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end, and puts
 every source behind one protocol so a JS plugin and a transpiled extension are the same
@@ -32,6 +32,7 @@ touches `default.store`, so the old data stays recoverable on disk.
 | Trackers | **Deferred** | User's call |
 | Migration (`.tachibk`, bridge) | **Deferred** | User's call; fresh installs start empty |
 | Backup / restore (`.lnbk`) | **Local v2 format implemented; device check pending** | Authenticated encrypted snapshots, recovery key, merge restore; protobuf/cloud interoperability remains deferred |
+| Performance | **Pass done; device trace pending** | Library counts cached off-main, reader writes coalesced, covers downsampled; see [PERFORMANCE.md](PERFORMANCE.md) |
 
 ## Landed
 
@@ -108,6 +109,28 @@ touches `default.store`, so the old data stays recoverable on disk.
 - **Sample source:** removed the offline sample manga source, its startup registration,
   and its Xcode project references.
 
+## UX pass
+
+- **Swiping switches kinds.** The Library kind picker and the Browse source switcher both
+  looked like tabs but did nothing on swipe. Both are now paged containers bound to the
+  same `@AppStorage` key, with the chrome pinned above the pager so a swipe moves only the
+  content: the picker, the Browse switcher and the search field stay put and animate. Each
+  Library page has its own empty state, so a filter that matches nothing no longer claims
+  the whole library is empty. Category chips stay inside the page — they filter the grid,
+  so they are content.
+- **Browse's floating search button is an overlay**, not a bottom safe-area inset. The
+  inset reserved a strip that nothing painted, which showed as a black bar under the list;
+  the list now reserves scroll room with `.contentMargins` instead.
+- **Add to Library answers immediately.** It used to require the details request to have
+  finished — before that, taps were dropped with no feedback. It now seeds from the browse
+  row, shows a spinner and disables itself while writing, and animates to "In Library"
+  with a haptic. Details and the chapter list are fetched concurrently instead of in
+  series, and the chapter list says "Loading chapters…" instead of "No chapters yet".
+- **Launch update is deferred** by two seconds so the first frame and first tap are not
+  competing with a library-wide refresh.
+- **Risk:** the Library pager hosts drag-and-drop reordering; long-press drag is expected
+  to cancel the pager's pan, but that needs a device check.
+
 ## Open issues
 
 1. **MangaFire captcha.** A `403 {"error":"captcha_required"}` from the API surfaces as an
@@ -147,6 +170,7 @@ are separate from the implemented local `.lnbk` snapshot.
 | `scripts/check-v2-extensions.sh` | Bundle through the real host against a localhost fixture |
 | `scripts/check-v2-scanlators.sh` | Dedup/hide rules, hidden-winner fallback |
 | `scripts/try-mangafire.sh` | Live MangaFire through the host (network required) |
+| `scripts/profile-hotpaths.sh` | Library counts, progress writes, chapter rows and ordering at library scale |
 
 Device builds come from `./scripts/build-ipa.sh` (`release` for a Release build, `--checks`
 to typecheck first). It builds, packages and sanity-checks the archive:
@@ -167,14 +191,21 @@ which is fragile once re-signed.
   sources oldest-first; the index means different things per source.
 - **Manga sources report the whole chapter list**, so the detail screen shows all of it.
   Novels keep the windowed preview because their sources paginate.
-- **Scanlator preferences live in UserDefaults**, keyed by `sourceKey::url`. A schema
-  migration for a view preference is not worth it.
+- **Scanlator rules live in UserDefaults**, keyed by `sourceKey::url`. A schema
+  migration for a view preference is not worth it. Hiding and priority are
+  **independent**: hiding applies on its own, priority only merges duplicate
+  chapter numbers. The stored key for the priority toggle is still `enabled`.
 - **Tap zones are a simultaneous gesture, never an overlay.** An overlay above a scroll view
   eats the drag.
 - **`JSExtensionHost` is synchronous by design.** The JS thread blocks during `http.get`, so
   bundles are straight-line code and a transpiler can emit plain calls.
 - **MangaFire's "token" is upstream code, not a secret.** `VrfSigner.kt` is three
   substitution stages over the sorted query string; ported byte for byte it returns 200.
+- **No relationship counts in a `body`.** `Entry.unreadCount` faults every chapter
+  row. Read `LibraryChapterCounts` (a cached `fetchCount`) or count off-main.
+  Measured at 37 ms per grid cell, 4.8 s for a 120-book library, per body pass.
+- **No `save()` from scroll or progress callbacks.** Mutate and let
+  `LibraryManager.flushProgress` land it; a save re-runs every `@Query` in the app.
 
 ## Gotchas for the next session
 

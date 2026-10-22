@@ -68,6 +68,16 @@ struct HistoryView: View {
 
     // MARK: - Filtering & Grouping
 
+    /// One formatter for the whole screen. `Date.formatted` builds a format
+    /// style per call, and grouping by the fully formatted string put every row
+    /// in a section of its own.
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
     private var filteredHistory: [History] {
         if searchText.isEmpty { return history }
         return history.filter { item in
@@ -79,10 +89,14 @@ struct HistoryView: View {
     }
 
     private var groupedHistory: [(key: String, value: [History])] {
-        let grouped = Dictionary(grouping: filteredHistory) { item in
-            item.lastRead.formatted
+        let calendar = Calendar.current
+        var buckets: [Date: [History]] = [:]
+        for item in filteredHistory {
+            buckets[calendar.startOfDay(for: item.lastRead), default: []].append(item)
         }
-        return grouped.sorted { $0.key > $1.key }
+        return buckets.keys.sorted(by: >).map { day in
+            (Self.dayFormatter.string(from: day), buckets[day] ?? [])
+        }
     }
 
     // MARK: - Actions

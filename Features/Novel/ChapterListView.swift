@@ -17,6 +17,9 @@ struct ChapterListView: View {
     /// Per-entry scanlator priority, when the parent owns one.
     var scanlatorSettings: ScanlatorSettings? = nil
     let sourceKey: String
+    /// The chapter list is still being fetched. Without this the screen said
+    /// "No chapters yet" while the request was in flight.
+    var isLoading: Bool = false
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
@@ -62,7 +65,7 @@ struct ChapterListView: View {
                     Button {
                         showScanlators = true
                     } label: {
-                        Image(systemName: scanlatorSettings.isEnabled ? "person.2.fill" : "person.2")
+                        Image(systemName: scanlatorSettings.hasActiveRules ? "person.2.fill" : "person.2")
                             .frame(width: 40, height: 40)
                     }
                     .buttonStyle(.glass)
@@ -89,7 +92,16 @@ struct ChapterListView: View {
                 }.pickerStyle(.segmented)
             }
 
-            if chapters.isEmpty {
+            if chapters.isEmpty && isLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading chapters…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 88)
+                .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
+            } else if chapters.isEmpty {
                 ContentUnavailableView(isFiltered ? "No matching chapters" : "No chapters yet", systemImage: "text.magnifyingglass")
             } else {
                 LazyVStack(spacing: 0) {
@@ -145,7 +157,12 @@ struct ChapterDisplay: Identifiable, Hashable {
     let id: String
     let name: String
     let path: String
-    let releaseTime: String?
+    /// Release date, formatted on demand.
+    ///
+    /// It used to be a `String` formatted inside the initializer, which meant
+    /// building and running a date formatter for every chapter in the book —
+    /// thousands of them — to display ten rows.
+    let releaseDate: Date?
     let unread: Bool
     let bookmarked: Bool
     let downloaded: Bool
@@ -165,11 +182,18 @@ struct ChapterDisplay: Identifiable, Hashable {
     /// stored entry to ask.
     let kind: ContentKind
 
+    /// Shared so a row does not rebuild a format style per access.
+    private static let releaseStyle = Date.FormatStyle()
+
+    var releaseTime: String? {
+        releaseDate.map { $0.formatted(Self.releaseStyle) }
+    }
+
     init(chapter: Chapter, position: Int? = nil) {
         self.id = chapter.url
         self.name = chapter.name
         self.path = chapter.url
-        self.releaseTime = chapter.dateUpload?.formatted
+        self.releaseDate = chapter.dateUpload
         self.unread = !chapter.read
         self.bookmarked = chapter.bookmark
         self.downloaded = chapter.isDownloaded
@@ -196,7 +220,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.id = sourceChapter.url
         self.name = sourceChapter.name
         self.path = sourceChapter.url
-        self.releaseTime = sourceChapter.dateUpload?.formatted
+        self.releaseDate = sourceChapter.dateUpload
         self.unread = true
         self.bookmarked = false
         self.downloaded = false

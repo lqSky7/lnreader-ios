@@ -15,6 +15,31 @@ extension View {
         #endif
     }
 
+    /// Steps through `options` on a clearly horizontal swipe.
+    ///
+    /// Replaces a page-style `TabView` nested inside the app's tab bar: that
+    /// built every page up front, re-evaluated all of them on any state change,
+    /// and fought the scroll view for the gesture. This renders one page and
+    /// only reacts when a drag ends, so vertical scrolling is never touched.
+    func horizontalSwipe(
+        selection: Binding<String>,
+        options: [String],
+        isEnabled: Bool = true
+    ) -> some View {
+        simultaneousGesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard isEnabled,
+                          abs(value.translation.width) > 80,
+                          abs(value.translation.width) > abs(value.translation.height) * 2,
+                          let current = options.firstIndex(of: selection.wrappedValue) else { return }
+                    let next = current + (value.translation.width < 0 ? 1 : -1)
+                    guard options.indices.contains(next) else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) { selection.wrappedValue = options[next] }
+                }
+        )
+    }
+
     // MARK: - Keyboard
 
     /// Dismisses the software keyboard.

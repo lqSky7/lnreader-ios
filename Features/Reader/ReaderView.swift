@@ -130,7 +130,13 @@ struct ReaderView: View {
             }
             .onChange(of: ttsManager.manifest?.id) { _, _ in handleManifestChange() }
             .onAppear { FocusModeManager.shared.updateFocusStatus() }
-            .onDisappear { commentsTask?.cancel() }
+            .onDisappear {
+                commentsTask?.cancel()
+                // Reading position is written on a coalescing timer while
+                // scrolling; closing the reader is the moment to make sure the
+                // last few seconds are not lost.
+                libraryManager.flushProgress(context: modelContext)
+            }
     }
 
     // MARK: - View composition

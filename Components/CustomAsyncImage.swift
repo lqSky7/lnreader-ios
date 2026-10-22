@@ -1,6 +1,7 @@
 // CustomAsyncImage.swift
 // Custom AsyncImage component that bypasses default CFNetwork user-agent blocking.
 
+import ImageIO
 import SwiftUI
 
 #if canImport(UIKit)
@@ -21,13 +22,57 @@ extension Image {
     }
 }
 
+/// Decoding helpers for cover art.
+///
+/// `UIImage(data:)` keeps the compressed data and decodes lazily on first
+/// draw — on the main thread, inside the render pass. A 1200×1800 cover
+/// decodes to ~8 MB, and a library grid asks for a dozen at once. Downsampling
+/// with ImageIO decodes once, off the main thread, to the size actually shown.
+enum CoverDecode {
+
+    /// Longest edge of a decoded cover. A grid cell is at most ~200 pt wide
+    /// (600 px at 3×), so a 1200 px cover is 4× the memory for no visible gain.
+    static let defaultMaxPixelSize = 700
+
+    static func image(from data: Data, maxPixelSize: Int = defaultMaxPixelSize) -> PlatformImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+
+        // `ShouldCacheImmediately` decodes now rather than at draw time, which
+        // is the whole point: the work happens on whatever executor we are on.
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return PlatformImage(cgImage: cgImage)
+    }
+
+    /// Bytes the decoded image occupies, for `NSCache` cost accounting.
+    static func cost(of image: PlatformImage) -> Int {
+        #if canImport(UIKit)
+        let size = image.size
+        let scale = image.scale
+        #else
+        let size = image.size
+        let scale: CGFloat = 1
+        #endif
+        return max(Int(size.width * scale * size.height * scale * 4), 1)
+    }
+}
+
 /// Simple in-memory cache to prevent redundant image downloads.
 final class ImageCache {
     static let shared: NSCache<NSURL, PlatformImage> = {
         let cache = NSCache<NSURL, PlatformImage>()
-        // ~200 covers at ~1MB decoded each. Evicts under pressure automatically.
+        // Cost is set from the decoded pixel size on every insert, so this is a
+        // real byte budget rather than a count that happens to be bounded.
         cache.countLimit = 200
-        cache.totalCostLimit = 200 * 1024 * 1024
+        cache.totalCostLimit = 96 * 1024 * 1024
         return cache
     }()
 
@@ -51,6 +96,10 @@ final class ImageCache {
             lock.unlock()
         }
         return try await task.value
+    }
+
+    static func store(_ image: PlatformImage, for key: NSURL) {
+        shared.setObject(image, forKey: key, cost: CoverDecode.cost(of: image))
     }
 }
 
@@ -135,11 +184,11 @@ struct CustomAsyncImage: View {
                 }
                 
                 let data = try Data(contentsOf: fileURL)
-                guard let image = PlatformImage(data: data) else {
+                guard let image = CoverDecode.image(from: data) else {
                     phase = .failure(URLError(.cannotDecodeContentData))
                     return
                 }
-                ImageCache.shared.setObject(image, forKey: url as NSURL)
+                ImageCache.store(image, for: url as NSURL)
                 phase = .success(Image(platformImage: image))
             } catch {
                 print("❌ [CustomAsyncImage] Failed to load local cover: \(error.localizedDescription) for URL \(url)")
@@ -163,14 +212,14 @@ struct CustomAsyncImage: View {
                 let (data, response) = try await CoverNetwork.session.data(for: request)
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode),
-                      let image = PlatformImage(data: data) else {
+                      let image = CoverDecode.image(from: data) else {
                     throw URLError(.badServerResponse)
                 }
                 return image
             }
 
             // Cache for future loads
-            ImageCache.shared.setObject(downloadedImage, forKey: key)
+            ImageCache.store(downloadedImage, for: key)
 
             phase = .success(Image(platformImage: downloadedImage))
         } catch {

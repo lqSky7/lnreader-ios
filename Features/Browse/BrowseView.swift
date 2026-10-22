@@ -54,11 +54,7 @@ struct BrowseView: View {
                         title: plugin.name
                     )
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if kind == .novels { globalSearchButton }
-                }
                 .task { await loadPlugins() }
-                .refreshable { await loadPlugins(forceRefresh: true) }
                 .overlay {
                     if kind == .novels && pluginManager.isLoading && pluginManager.plugins.isEmpty {
                         LoadingView(message: "Fetching sources...")
@@ -130,19 +126,16 @@ struct BrowseView: View {
     }
 
     private var globalSearchButton: some View {
-        HStack {
-            Spacer()
-            NavigationLink {
-                GlobalSearchView()
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 19, weight: .semibold))
-                    .frame(width: 54, height: 54)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .accessibilityLabel("Global Search")
+        NavigationLink {
+            GlobalSearchView()
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 19, weight: .semibold))
+                .frame(width: 54, height: 54)
+                .glassEffect(.regular.interactive(), in: .circle)
         }
-        .padding(.horizontal, 20)
+        .accessibilityLabel("Global Search")
+        .padding(.trailing, 20)
         .padding(.bottom, 10)
     }
 
@@ -153,18 +146,44 @@ struct BrowseView: View {
     // MARK: - Content
 
     private var content: some View {
-        List {
-            browseControls
-                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 12, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-
-            if kind == .novels {
-                novelSourcesContent
-            } else {
-                mangaSourcesContent
-            }
+        // The switcher and search field are chrome, not content: they sit above
+        // the pager so a swipe moves only the source list. Paging the whole
+        // screen made every swipe drag a duplicate of the controls with it.
+        Group {
+            if kind == .novels { novelsPage } else { mangaPage }
         }
+        .horizontalSwipe(selection: $kindRaw, options: BrowseKind.allCases.map(\.rawValue))
+        // `safeAreaInset`, not a VStack: the list has to know the header is
+        // there, otherwise it adds its own navigation-bar inset and leaves a
+        // gap between the search field and the first row.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            browseControls
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 10)
+                .background(Color(uiColor: .systemBackground))
+        }
+        // An overlay, not a safe-area inset: an inset on the pager reserved a
+        // strip that nothing painted, which is the black bar under the list.
+        .overlay(alignment: .bottomTrailing) {
+            if kind == .novels { globalSearchButton }
+        }
+    }
+
+    private var novelsPage: some View {
+        List {
+            novelSourcesContent
+        }
+        // Room to scroll the last row clear of the floating search button.
+        .contentMargins(.bottom, 96, for: .scrollContent)
+        .refreshable { await loadPlugins(forceRefresh: true) }
+    }
+
+    private var mangaPage: some View {
+        List {
+            mangaSourcesContent
+        }
+        .refreshable { await loadPlugins(forceRefresh: true) }
     }
 
     @ViewBuilder

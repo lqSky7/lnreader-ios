@@ -35,7 +35,16 @@ struct NovelDetailView: View {
     @State private var chapterSearch = ""
     @State private var navigateToChapter: ChapterDisplay? = nil
     @State private var allChapters: [ChapterDisplay] = []
+    /// `allChapters` after scanlator rules and number ordering.
+    ///
+    /// Kept as state, not a computed property: the sort compares localized
+    /// titles and the scanlator pass rebuilds the array, so recomputing it on
+    /// every body evaluation meant two full passes over every chapter each time
+    /// a chip, a search keystroke, or a scroll tick re-rendered the screen.
+    @State private var orderedChapters: [ChapterDisplay] = []
     @State private var showAudioDownloads = false
+    /// True while the entry is being written to the library.
+    @State private var isAddingToLibrary = false
     /// Scanlator priority for this entry, loaded from its own defaults key.
     @State private var scanlatorSettings: ScanlatorSettings
 
@@ -73,8 +82,10 @@ struct NovelDetailView: View {
                     cover: displayCover,
                     status: localEntry?.status ?? details?.status ?? .unknown,
                     inLibrary: localEntry?.inLibrary ?? false,
+                    isAddingToLibrary: isAddingToLibrary,
                     onToggleLibrary: toggleLibrary,
                     hasStartedReading: hasStartedReading,
+                    canStartReading: !allChapters.isEmpty,
                     onContinueReading: continueReading
                 )
 
@@ -112,6 +123,7 @@ struct NovelDetailView: View {
                         showsAllChapters: showsAllChapters,
                         scanlatorSettings: scanlatorSettings,
                         sourceKey: sourceKey,
+                        isLoading: isLoading,
                         selectedRange: $selectedRange,
                         selectedFilter: $selectedFilter,
                         searchText: $chapterSearch
@@ -153,6 +165,9 @@ struct NovelDetailView: View {
         }
         .onChange(of: entry) { refreshChapters() }
         .onChange(of: localEntry) { refreshChapters() }
+        // Scanlator priority changes the merge/hide result, so the ordered list
+        // has to be rebuilt — it is no longer a computed property.
+        .onChange(of: scanlatorSettings.value) { rebuildOrderedChapters() }
         .task { await fetchDetails() }
     }
 
@@ -182,7 +197,10 @@ struct NovelDetailView: View {
                 do {
                     let fetched = try context.fetch(descriptor)
                     let mapped = fetched.map { ChapterDisplay(chapter: $0) }
-                    await MainActor.run { self.allChapters = mapped }
+                    await MainActor.run {
+                        self.allChapters = mapped
+                        self.rebuildOrderedChapters()
+                    }
                 } catch {
                     print("⚠️ Failed to fetch chapters on background context: \(error)")
                     await MainActor.run {
@@ -194,6 +212,7 @@ struct NovelDetailView: View {
                             }
                             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
                         }
+                        self.rebuildOrderedChapters()
                     }
                 }
             }
@@ -209,6 +228,7 @@ struct NovelDetailView: View {
                 )
             }
             self.allChapters = mapped
+            rebuildOrderedChapters()
         }
     }
 
@@ -217,11 +237,11 @@ struct NovelDetailView: View {
     /// `sourceOrder` is whatever the source listed — MangaFire hands back
     /// newest-first while most novel sources go oldest-first — so it cannot be
     /// used to sort. The parsed number can.
-    private var orderedChapters: [ChapterDisplay] {
+    private func rebuildOrderedChapters() {
         // Merge and hide by scanlator before ordering, so the list shows what
         // the user actually asked for.
         let base = ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
-        return base.sorted { lhs, rhs in
+        orderedChapters = base.sorted { lhs, rhs in
             if lhs.sortNumber != rhs.sortNumber { return lhs.sortNumber > rhs.sortNumber }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
         }
@@ -371,8 +391,12 @@ struct NovelDetailView: View {
             let entry = localEntry.map(Self.sourceEntry(from:))
                 ?? sourceEntry
                 ?? SourceEntry(sourceKey: sourceKey, kind: .novel, url: url, title: "")
-            let fetchedDetails = try await source.details(entry)
-            let chapters = try await source.chapters(entry)
+            // Two independent requests: run them together so the screen is not
+            // waiting on two round trips in series.
+            async let pendingDetails = source.details(entry)
+            async let pendingChapters = source.chapters(entry)
+            let fetchedDetails = try await pendingDetails
+            let chapters = try await pendingChapters
 
             details = fetchedDetails
             sourceChapters = chapters
@@ -404,22 +428,33 @@ struct NovelDetailView: View {
     }
 
     private func toggleLibrary() {
-        if let localEntry {
-            if localEntry.inLibrary {
-                libraryManager.removeFromLibrary(entry: localEntry, context: modelContext)
-            } else {
-                localEntry.inLibrary = true
-                try? modelContext.save()
-            }
-        } else if let details {
+        guard !isAddingToLibrary else { return }
+
+        // Removing is local and instant.
+        if let localEntry, localEntry.inLibrary {
+            libraryManager.removeFromLibrary(entry: localEntry, context: modelContext)
+            refreshChapters()
+            return
+        }
+
+        // Adding has to work the moment the screen opens, not only after the
+        // details request lands. A browse result already carries everything the
+        // library row needs, so seed from it and let `fetchDetails` merge the
+        // chapter list when it arrives.
+        let seed: SourceEntry? = localEntry.map(Self.sourceEntry(from:)) ?? details ?? sourceEntry
+        guard let seed else { return }
+
+        isAddingToLibrary = true
+        Task { @MainActor in
             let added = libraryManager.addToLibrary(
-                entry: details,
+                entry: seed,
                 chapters: sourceChapters,
                 context: modelContext
             )
             localEntry = added
+            isAddingToLibrary = false
+            refreshChapters()
         }
-        refreshChapters()
     }
 
     private func openReader(_ chapter: ChapterDisplay) {

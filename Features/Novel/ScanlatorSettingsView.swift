@@ -1,8 +1,15 @@
-// ScanlatorSettingsView.swift - Priority and visibility for scanlators.
+// ScanlatorSettingsView.swift - Visibility and priority for scanlators.
 //
-// One toggle turns the feature on. It reveals the scanlator list: drag to set
-// priority (which scanlator wins when two chapters share a number), and switch a
-// row off to hide that scanlator's chapters.
+// Two independent features, deliberately not nested:
+//
+// - Hiding: switch a scanlator off and its chapters disappear from the list.
+//   This works on its own.
+// - Priority: merge chapters that share a number, keeping the scanlator highest
+//   in the list. Only then does the order matter, so only then can rows be
+//   dragged.
+//
+// The list used to be hidden entirely behind the priority toggle, which made
+// "just hide this scanlator" impossible.
 
 import SwiftUI
 
@@ -18,36 +25,45 @@ struct ScanlatorSettingsView: View {
         settings.orderedScanlators(from: scanlators)
     }
 
+    private var isPriorityOn: Bool { settings.isPriorityEnabled }
+
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Toggle("Priority scanlator", isOn: enabledBinding)
+                    Toggle("Priority scanlator", isOn: priorityBinding)
+                        .tint(AppTheme.controlFill)
                 } footer: {
-                    Text(settings.isEnabled
-                        ? "Chapters with the same number are merged, keeping the scanlator highest in this list. Turn a scanlator off to hide its chapters."
-                        : "Merge duplicate chapters by scanlator, and choose which scanlator wins.")
+                    Text(isPriorityOn
+                        ? "Chapters with the same number are merged, keeping the scanlator highest in this list. Drag to reorder."
+                        : "Merge duplicate chapters by scanlator, and choose which scanlator wins. Hiding works either way.")
                 }
 
-                if settings.isEnabled {
-                    Section("Scanlators") {
-                        if rows.isEmpty {
-                            Text("No scanlators in this chapter list yet.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(rows, id: \.self) { name in
-                                row(name)
-                            }
-                            .onMove { source, destination in
-                                var order = rows
-                                order.move(fromOffsets: source, toOffset: destination)
-                                settings.setPriority(order)
-                            }
+                Section {
+                    if rows.isEmpty {
+                        Text("No scanlators in this chapter list yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(rows, id: \.self) { name in
+                            row(name)
+                        }
+                        .onMove { source, destination in
+                            var order = rows
+                            order.move(fromOffsets: source, toOffset: destination)
+                            settings.setPriority(order)
                         }
                     }
+                } header: {
+                    Text("Scanlators")
+                } footer: {
+                    Text(isPriorityOn
+                        ? "Top of the list wins. Switch one off to hide it."
+                        : "Switch one off to hide its chapters.")
                 }
             }
-            .environment(\.editMode, settings.isEnabled ? .constant(.active) : .constant(.inactive))
+            // Dragging only means something when priority merging is on, so edit
+            // mode follows that toggle — visibility does not.
+            .environment(\.editMode, .constant(isPriorityOn ? .active : .inactive))
             .navigationTitle("Scanlators")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -60,10 +76,12 @@ struct ScanlatorSettingsView: View {
 
     private func row(_ name: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "line.3.horizontal")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
+            if isPriorityOn {
+                Image(systemName: "line.3.horizontal")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayName(name))
@@ -79,6 +97,7 @@ struct ScanlatorSettingsView: View {
 
             Toggle("Show \(displayName(name))", isOn: visibleBinding(name))
                 .labelsHidden()
+                .tint(AppTheme.controlFill)
         }
     }
 
@@ -87,17 +106,17 @@ struct ScanlatorSettingsView: View {
         name.prefix(1).uppercased() + name.dropFirst()
     }
 
-    private var enabledBinding: Binding<Bool> {
+    private var priorityBinding: Binding<Bool> {
         Binding(
-            get: { settings.isEnabled },
-            set: { settings.setEnabled($0) }
+            get: { settings.isPriorityEnabled },
+            set: { settings.setPriorityEnabled($0) }
         )
     }
 
     private func visibleBinding(_ name: String) -> Binding<Bool> {
         Binding(
             get: { !settings.value.disabled.contains(name) },
-            set: { settings.setEnabled(name, $0) }
+            set: { settings.setVisible(name, $0) }
         )
     }
 }

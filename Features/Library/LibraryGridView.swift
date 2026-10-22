@@ -129,10 +129,15 @@ struct InteractiveGridCell: View {
 struct NovelGridCell: View {
     var transitionNamespace: Namespace.ID? = nil
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
+    @Environment(\.modelContext) private var modelContext
     let novel: Entry
     let displayMode: DisplayMode
     var isEditing: Bool = false
     var onDelete: () -> Void = {}
+
+    /// Counts come from a cached `fetchCount`, never from walking the entry's
+    /// chapter array — see `LibraryChapterCounts`.
+    @State private var counts: LibraryChapterCounts.Counts?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -152,8 +157,8 @@ struct NovelGridCell: View {
                     }
                 }
 
-                if showUnreadBadges && novel.unreadCount > 0 && !isEditing {
-                    BadgeView(count: novel.unreadCount)
+                if showUnreadBadges, !isEditing, let unread = counts?.unread, unread > 0 {
+                    BadgeView(count: unread)
                         .padding(6)
                 }
             }
@@ -177,6 +182,12 @@ struct NovelGridCell: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+        .task(id: novel.persistentModelID) {
+            if let cached = LibraryChapterCounts.shared.cached(novel.persistentModelID) {
+                counts = cached
+            }
+            counts = await LibraryChapterCounts.shared.counts(for: novel, container: modelContext.container)
         }
     }
 }

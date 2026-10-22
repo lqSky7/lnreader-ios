@@ -34,6 +34,12 @@ struct MangaReaderView: View {
     @State private var isLoadingChapters = false
     @State private var chapterListError: String?
     @State private var chapterSourceEntry: SourceEntry?
+    /// `chapterChoices` after scanlator rules.
+    ///
+    /// State, not a computed property: `hasChapter` asks for it twice per body
+    /// evaluation, and rebuilding it means mapping every chapter plus a
+    /// scanlator pass — over the whole list, for every tap and page turn.
+    @State private var navigable: [SourceChapter] = []
     @State private var webtoonPosition: Int?
     @State private var readerWidth: CGFloat = 0
     @State private var currentIndex = 0
@@ -104,8 +110,12 @@ struct MangaReaderView: View {
         }
         .sheet(isPresented: $showChapterSheet) { chapterSheet }
         .onAppear { setScreenAwake(true) }
-        .onDisappear { setScreenAwake(false) }
+        .onDisappear {
+            setScreenAwake(false)
+            libraryManager.flushProgress(context: modelContext)
+        }
         .onChange(of: currentIndex) { _, index in handlePageChange(index) }
+        .onChange(of: scanlatorSettings.value) { rebuildNavigable() }
         .onChange(of: modeRaw) { _, _ in
             // Re-run the layout without refetching the page list.
             chrome = .control
@@ -376,6 +386,7 @@ struct MangaReaderView: View {
             }
             return lhs.sourceOrder < rhs.sourceOrder
         }
+        rebuildNavigable()
     }
 
     private func loadChapterChoices() async {
@@ -393,6 +404,7 @@ struct MangaReaderView: View {
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
             chapterSourceEntry = try? await source.details(entry)
+            rebuildNavigable()
         } catch {
             chapterListError = error.localizedDescription
         }
@@ -496,12 +508,14 @@ struct MangaReaderView: View {
         }
     }
 
-    private var navigableChapters: [SourceChapter] {
+    private var navigableChapters: [SourceChapter] { navigable }
+
+    private func rebuildNavigable() {
         let choices = chapterChoices
         let items = choices.map {
             ScanlatorRules.Item(number: $0.chapterNumber > 0 ? $0.chapterNumber : nil, scanlator: $0.scanlator)
         }
-        return ScanlatorRules.keptIndices(for: items, preference: scanlatorSettings.value).map { choices[$0] }
+        navigable = ScanlatorRules.keptIndices(for: items, preference: scanlatorSettings.value).map { choices[$0] }
     }
 
     private var chapterSheet: some View {

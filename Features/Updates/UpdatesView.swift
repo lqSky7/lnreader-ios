@@ -99,12 +99,33 @@ struct UpdatesView: View {
 
     // MARK: - Grouping
 
-    /// Group chapters by their update date (formatted as relative date).
+    /// One formatter for the whole screen; `Date.formatted` allocates a style
+    /// per call, and the fully formatted string made every row its own section.
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    /// Group chapters by the day they were fetched.
     private var groupedUpdates: [(key: String, value: [Chapter])] {
-        let grouped = Dictionary(grouping: recentChapters) { chapter -> String in
-            guard let date = chapter.dateFetch else { return "Unknown" }
-            return date.formatted
+        let calendar = Calendar.current
+        var buckets: [Date: [Chapter]] = [:]
+        var undated: [Chapter] = []
+        for chapter in recentChapters {
+            guard let date = chapter.dateFetch else {
+                undated.append(chapter)
+                continue
+            }
+            buckets[calendar.startOfDay(for: date), default: []].append(chapter)
         }
-        return grouped.sorted { $0.key > $1.key }
+        var groups = buckets.keys.sorted(by: >).map { day in
+            (Self.dayFormatter.string(from: day), buckets[day] ?? [])
+        }
+        if !undated.isEmpty {
+            groups.append(("Unknown", undated))
+        }
+        return groups
     }
 }

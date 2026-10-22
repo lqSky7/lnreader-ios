@@ -19,6 +19,31 @@ final class LibraryManager {
     /// Whether a library-wide update is in progress.
     private(set) var isUpdating = false
 
+    // MARK: - Progress persistence
+    //
+    // Reading position changes on every scroll tick (the reader debounces its
+    // JS scroll listener by 300 ms). Saving each one costs a SQLite write plus
+    // a store-change notification, and that notification re-runs every `@Query`
+    // in the app — the library's entry query included, which re-sorts and
+    // re-walks chapter arrays. Doing that four times a second while the user
+    // scrolls is what made the reader stutter.
+    //
+    // So: mutate the model in memory immediately (the UI stays live) and let
+    // the write coalesce. `flushProgress` is called when the reader closes or
+    // the app backgrounds, so the window where a crash loses position is the
+    // same few seconds the reader was already tolerant of.
+
+    /// Minimum gap between two progress writes.
+    static let progressSaveInterval: Duration = .seconds(3)
+
+    /// Timestamp bump inside `History` / `Entry` is only useful at a coarse
+    /// granularity — nothing reads it below a minute.
+    private static let timestampRefreshInterval: TimeInterval = 60
+
+    private var pendingProgressSave = false
+    private var progressSaveTask: Task<Void, Never>?
+    private var lastProgressSave = Date.distantPast
+
     // MARK: - Adding and removing
 
     /// Add an entry to the library, or return the existing row.
@@ -133,6 +158,7 @@ final class LibraryManager {
     ) {
         let finished = chapter.read && chapter.progress >= 100
         let clamped = min(max(percent, 0), 100)
+        let wasRead = chapter.read
 
         if finished {
             chapter.paragraphIndex = clamped >= Int(Chapter.finishedThreshold) ? 0 : paragraphIndex
@@ -145,10 +171,64 @@ final class LibraryManager {
             chapter.paragraphIndex = paragraphIndex
         }
 
-        // Keep the history row's timestamp current without creating one.
-        chapter.history?.lastRead = .now
-        chapter.entry?.lastReadAt = .now
+        // A chapter flipping to read is the one change the library cares about.
+        if chapter.read != wasRead { LibraryChapterCounts.shared.invalidate() }
 
+        touchTimestamps(chapter)
+        scheduleProgressSave(context)
+    }
+
+    /// Refresh the "recently read" timestamps, but not on every scroll tick.
+    ///
+    /// `Entry.lastReadAt` is a cached column that the library sorts on, so
+    /// rewriting it 4×/second invalidates the library query for no benefit:
+    /// nothing distinguishes two reads one second apart.
+    private func touchTimestamps(_ chapter: Chapter) {
+        let now = Date.now
+        if let history = chapter.history {
+            if now.timeIntervalSince(history.lastRead) > Self.timestampRefreshInterval {
+                history.lastRead = now
+            }
+        }
+        if let entry = chapter.entry {
+            if let lastReadAt = entry.lastReadAt,
+               now.timeIntervalSince(lastReadAt) <= Self.timestampRefreshInterval {
+                return
+            }
+            entry.lastReadAt = now
+        }
+    }
+
+    /// Coalesce a progress write. Safe to call as often as the reader likes.
+    private func scheduleProgressSave(_ context: ModelContext) {
+        pendingProgressSave = true
+        guard progressSaveTask == nil else { return }
+
+        // First write after an idle stretch lands immediately, so closing the
+        // reader right after opening it still persists.
+        if Date.now.timeIntervalSince(lastProgressSave) >= 3 {
+            flushProgress(context: context)
+            return
+        }
+
+        progressSaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.progressSaveInterval)
+            guard let self, !Task.isCancelled else { return }
+            self.progressSaveTask = nil
+            self.flushProgress(context: context)
+        }
+    }
+
+    /// Write any pending reading progress now.
+    ///
+    /// Called when a reader closes and when the app backgrounds, so the
+    /// coalescing window never outlives the screen that produced it.
+    func flushProgress(context: ModelContext) {
+        progressSaveTask?.cancel()
+        progressSaveTask = nil
+        guard pendingProgressSave else { return }
+        pendingProgressSave = false
+        lastProgressSave = .now
         try? context.save()
     }
 
@@ -164,6 +244,7 @@ final class LibraryManager {
         context: ModelContext
     ) {
         let update = MangaProgress.update(pageIndex: pageIndex, pageCount: pageCount)
+        let wasRead = chapter.read
 
         chapter.lastPageRead = update.lastPageRead
         chapter.pagesLeft = update.pagesLeft
@@ -172,10 +253,10 @@ final class LibraryManager {
             chapter.read = true
         }
 
-        chapter.history?.lastRead = .now
-        chapter.entry?.lastReadAt = .now
+        if chapter.read != wasRead { LibraryChapterCounts.shared.invalidate() }
 
-        try? context.save()
+        touchTimestamps(chapter)
+        scheduleProgressSave(context)
     }
 
     // MARK: - Network state
@@ -328,6 +409,7 @@ final class LibraryManager {
         entry.lastUpdate = .now
 
         let result = ChapterSourceSync.merge(chapters, into: entry, context: context)
+        LibraryChapterCounts.shared.invalidate()
 
         if saveImmediately {
             try? context.save()
@@ -344,6 +426,92 @@ final class LibraryManager {
             }
             try? context.save()
         }
+    }
+}
+
+// MARK: - Library chapter counts
+
+/// Cached per-entry chapter totals for the library.
+///
+/// `Entry.unreadCount` and `Entry.totalChapterCount` resolve the `chapters`
+/// relationship, which faults every chapter row for that entry. A grid cell
+/// asks for both, three times over (`totalChapterCount`, `unreadCount > 0`,
+/// `unreadCount`), and sorting by unread asks for them for every entry. With a
+/// few hundred books that is tens of thousands of row faults per body pass —
+/// the single largest cost in library scrolling and sorting.
+///
+/// This counts with `fetchCount` (a SQL `COUNT`, not a materialised array) on a
+/// background context, caches the answer per entry, and lets cells read it
+/// synchronously. Nothing is stored on the model, so the count cannot drift
+/// from the chapters themselves — it is only ever a cached read of them.
+@MainActor
+final class LibraryChapterCounts {
+
+    static let shared = LibraryChapterCounts()
+
+    struct Counts: Equatable, Sendable {
+        var total = 0
+        var unread = 0
+    }
+
+    /// How long a count is trusted. Short enough that finishing a chapter shows
+    /// up once the reader closes, long enough that scrolling never re-queries.
+    private let ttl: TimeInterval = 5
+
+    private var cache: [PersistentIdentifier: (counts: Counts, at: Date)] = [:]
+    private var inFlight: [PersistentIdentifier: Task<Counts, Never>] = [:]
+    /// Bumped by `invalidate()` so a count that started before a change cannot
+    /// write a stale answer back into the cache.
+    private var generation = 0
+
+    private init() {}
+
+    /// Synchronous read for body code. `nil` means "not known yet".
+    func cached(_ id: PersistentIdentifier) -> Counts? {
+        guard let entry = cache[id],
+              Date.now.timeIntervalSince(entry.at) < ttl
+        else { return nil }
+        return entry.counts
+    }
+
+    func invalidate() {
+        generation &+= 1
+        cache.removeAll()
+    }
+
+    func counts(for entry: Entry, container: ModelContainer) async -> Counts {
+        let id = entry.persistentModelID
+        if let cached = cached(id) { return cached }
+        if let running = inFlight[id] { return await running.value }
+
+        let url = entry.url
+        let sourceKey = entry.sourceKey
+        let startGeneration = generation
+
+        let task = Task.detached(priority: .userInitiated) { () -> Counts in
+            let context = ModelContext(container)
+            do {
+                let inEntry = #Predicate<Chapter> {
+                    $0.entry?.url == url && $0.entry?.sourceKey == sourceKey
+                }
+                let unreadInEntry = #Predicate<Chapter> {
+                    $0.entry?.url == url && $0.entry?.sourceKey == sourceKey && !$0.read
+                }
+                let total = try context.fetchCount(FetchDescriptor<Chapter>(predicate: inEntry))
+                let unread = try context.fetchCount(FetchDescriptor<Chapter>(predicate: unreadInEntry))
+                return Counts(total: total, unread: unread)
+            } catch {
+                return Counts()
+            }
+        }
+
+        inFlight[id] = task
+        let counts = await task.value
+        inFlight[id] = nil
+        if startGeneration == generation {
+            cache[id] = (counts, .now)
+        }
+        return counts
     }
 }
 

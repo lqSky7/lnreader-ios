@@ -42,7 +42,7 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
-                if filteredNovels.isEmpty {
+                if novels.isEmpty {
                     EmptyStateView(
                         icon: "books.vertical",
                         title: "Your Library is Empty",
@@ -51,36 +51,22 @@ struct LibraryView: View {
                         action: { showFileImporter = true }
                     )
                 } else {
-                    ScrollView {
+                    // The picker is chrome and stays put; only the grid pages.
+                    // Paging the whole screen made a swipe drag a duplicate of
+                    // the picker along with the books.
+                    Group {
                         if showsKindPicker {
-                            Picker("Content", selection: $kindFilterRaw) {
-                                ForEach(LibraryKindFilter.allCases) { option in
-                                    Text(option.title).tag(option.rawValue)
+                            libraryPager
+                                // `safeAreaInset`, not a VStack: the scroll view
+                                // has to know the picker is above it, or it adds
+                                // its own navigation-bar inset and leaves a gap.
+                                .safeAreaInset(edge: .top, spacing: 0) {
+                                    kindPicker
+                                        .background(Color(uiColor: .systemBackground))
                                 }
-                            }
-                            .pickerStyle(.segmented)
-                            .padding(.horizontal)
-                            .padding(.top, 4)
+                        } else {
+                            libraryPage(.all)
                         }
-
-                        if !categories.isEmpty {
-                            CategoryTabView(
-                                categories: categories,
-                                selectedCategory: $selectedCategory
-                            )
-                            .padding(.horizontal)
-                        }
-
-                        libraryContent
-                    }
-                    .immediateScrollTouches()
-                    .onDrop(of: [UTType.text], isTargeted: nil) { _ in
-                        guard draggedItem != nil else { return false }
-                        draggedItem = nil
-                        return true
-                    }
-                    .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                     }
                 }
             }
@@ -174,14 +160,80 @@ struct LibraryView: View {
 
     // MARK: - Content
 
+    /// Only the selected kind is built; the segmented control and the swipe both move it.
+    private var libraryPager: some View {
+        libraryPage(LibraryKindFilter(rawValue: kindFilterRaw) ?? .all)
+            .horizontalSwipe(
+                selection: $kindFilterRaw,
+                options: LibraryKindFilter.allCases.map(\.rawValue),
+                isEnabled: !isEditingLibrary
+            )
+    }
+
+    private var kindPicker: some View {
+        Picker("Content", selection: $kindFilterRaw) {
+            ForEach(LibraryKindFilter.allCases) { option in
+                Text(option.title).tag(option.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+
+    /// The scrollable content for one kind: category chips, then the grid.
+    private func libraryPage(_ kind: LibraryKindFilter) -> some View {
+        let items = filteredNovels(for: kind)
+
+        return ScrollView {
+            if !categories.isEmpty {
+                CategoryTabView(
+                    categories: categories,
+                    selectedCategory: $selectedCategory
+                )
+                .padding(.horizontal)
+            }
+
+            if items.isEmpty {
+                emptyPage(kind)
+            } else {
+                libraryContent(items)
+            }
+        }
+        .immediateScrollTouches()
+        .onDrop(of: [UTType.text], isTargeted: nil) { _ in
+            guard draggedItem != nil else { return false }
+            draggedItem = nil
+            return true
+        }
+        .refreshable {
+            await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
+        }
+    }
+
+    /// An empty page is normal when only one kind is in the library, so say
+    /// which one is empty instead of pretending the library has nothing.
+    private func emptyPage(_ kind: LibraryKindFilter) -> some View {
+        let isFiltering = !searchText.isEmpty || selectedCategory != nil
+        return EmptyStateView(
+            icon: isFiltering ? "magnifyingglass" : "books.vertical",
+            title: isFiltering ? "No Matches" : "No \(kind.title)",
+            subtitle: isFiltering
+                ? "Nothing here matches the current search or category."
+                : "Add \(kind.title.lowercased()) from Browse and it will show up here."
+        )
+        .padding(.top, 60)
+    }
+
     /// Split out of `body`: two 15-line cell constructors inline pushed the
     /// view builder past what the type checker will infer in reasonable time.
     @ViewBuilder
-    private var libraryContent: some View {
+    private func libraryContent(_ items: [Entry]) -> some View {
         if displayMode == .list {
             LibraryListView(
                 transitionNamespace: bookTransitions,
-                novels: filteredNovels,
+                novels: items,
                 isEditing: isEditingLibrary,
                 draggedItem: $draggedItem,
                 onReorder: handleReorder,
@@ -192,7 +244,7 @@ struct LibraryView: View {
         } else {
             LibraryGridView(
                 transitionNamespace: bookTransitions,
-                novels: filteredNovels,
+                novels: items,
                 displayMode: displayMode,
                 isEditing: isEditingLibrary,
                 draggedItem: $draggedItem,
@@ -223,19 +275,22 @@ struct LibraryView: View {
 
     // MARK: - Filtering & Sorting
 
-    private var kindFilter: LibraryKindFilter {
-        LibraryKindFilter(rawValue: kindFilterRaw) ?? .all
-    }
-
     /// Only offer the split when the library actually holds both kinds.
     private var showsKindPicker: Bool {
-        novels.contains { $0.kind == .novel } && novels.contains { $0.kind == .manga }
+        var sawNovel = false
+        var sawManga = false
+        for entry in novels {
+            if entry.kind == .novel { sawNovel = true } else { sawManga = true }
+            if sawNovel && sawManga { return true }
+        }
+        return false
     }
 
-    private var filteredNovels: [Entry] {
+    /// Entries for one page: kind, then category, then search, then sort.
+    private func filteredNovels(for kind: LibraryKindFilter) -> [Entry] {
         var result = novels
 
-        switch kindFilter {
+        switch kind {
         case .all: break
         case .novels: result = result.filter { $0.kind == .novel }
         case .manga: result = result.filter { $0.kind == .manga }
@@ -263,8 +318,11 @@ struct LibraryView: View {
         let needsCounts = (sortOrder == .unread || sortOrder == .totalChapters)
         if needsCounts {
             for novel in novels {
-                unreadByID[novel.persistentModelID] = novel.unreadCount
-                totalByID[novel.persistentModelID] = novel.totalChapterCount
+                // Prefer the cached `fetchCount`; fall back to the relationship
+                // walk only for entries the cache has not seen yet.
+                let cached = LibraryChapterCounts.shared.cached(novel.persistentModelID)
+                unreadByID[novel.persistentModelID] = cached?.unread ?? novel.unreadCount
+                totalByID[novel.persistentModelID] = cached?.total ?? novel.totalChapterCount
             }
         }
         let sorted: [Entry]
