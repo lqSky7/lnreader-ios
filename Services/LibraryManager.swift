@@ -19,6 +19,23 @@ final class LibraryManager {
     /// Whether a library-wide update is in progress.
     private(set) var isUpdating = false
 
+    /// What the current (or most recent) library update is doing, for the UI.
+    /// Stays set after the update ends so its outcome can be read; the user
+    /// dismisses it.
+    private(set) var updateProgress: LibraryUpdateProgress?
+    private var updateCancelRequested = false
+
+    /// Stop starting new titles. Ones already being fetched finish.
+    func cancelUpdate() {
+        guard isUpdating else { return }
+        updateCancelRequested = true
+        updateProgress?.isCancelling = true
+    }
+
+    func dismissUpdateSummary() {
+        if !isUpdating { updateProgress = nil }
+    }
+
     // MARK: - Progress persistence
     //
     // Reading position changes on every scroll tick (the reader debounces its
@@ -285,64 +302,106 @@ final class LibraryManager {
             await NetworkMonitor.shared.waitForPath()
             if !NetworkMonitor.shared.isOnWiFi() {
                 print("📶 Library update skipped: Wi-Fi only setting is enabled and current network is cellular.")
+                var skipped = LibraryUpdateProgress(total: 0, automatic: automatic)
+                skipped.note = "Skipped: updates are set to Wi-Fi only and this device is not on Wi-Fi."
+                skipped.finishedAt = .now
+                updateProgress = skipped
                 return
             }
         }
 
         isUpdating = true
-        defer { isUpdating = false }
+        updateCancelRequested = false
+        defer {
+            isUpdating = false
+            updateProgress?.finishedAt = .now
+        }
 
         let predicate = #Predicate<Entry> { $0.inLibrary }
         guard let entries = try? context.fetch(FetchDescriptor(predicate: predicate)),
               !entries.isEmpty
         else { return }
 
-        // Fetch all sources concurrently (network-bound, 4 at a time), then
-        // apply SwiftData changes sequentially on the MainActor context.
+        // Fetch sources concurrently (network-bound, 4 at a time) and apply each
+        // result to the store as it arrives, so new chapters show up while a long
+        // update is still running instead of all at the end.
         struct UpdateJob: Sendable {
             let id: PersistentIdentifier
             let sourceKey: String
             let url: String
             let kind: ContentKind
             let title: String
+            let sourceName: String
         }
         struct UpdateWork {
             let source: any CatalogSource
             let job: UpdateJob
         }
         struct UpdateResult: Sendable {
-            let id: PersistentIdentifier
+            let job: UpdateJob
             let details: SourceEntry?
             let chapters: [SourceChapter]
             let error: String?
         }
 
         var pending: [UpdateWork] = []
+        var notInstalled = 0
         for entry in entries where !entry.isLocal {
             guard !Task.isCancelled else { return }
             guard LibraryUpdatePolicy.permits(strategy: entry.updateStrategy, hasFetched: entry.lastUpdate != nil,
                 status: entry.status, hasUnread: entry.hasUnread, automatic: automatic,
                 unreadOnly: UserDefaults.standard.bool(forKey: "updates.unreadOnly"),
                 skipCompleted: UserDefaults.standard.bool(forKey: "updates.skipCompleted")) else { continue }
-            guard let source = sourceManager.source(forKey: entry.sourceKey) else { continue }
+            guard let source = sourceManager.source(forKey: entry.sourceKey) else {
+                notInstalled += 1
+                continue
+            }
             let job = UpdateJob(
                 id: entry.persistentModelID,
                 sourceKey: entry.sourceKey,
                 url: entry.url,
                 kind: entry.kind,
-                title: entry.title
+                title: entry.title,
+                sourceName: source.name
             )
             pending.append(UpdateWork(source: source, job: job))
         }
+        var progress = LibraryUpdateProgress(total: pending.count, automatic: automatic)
+        progress.notInstalled = notInstalled
+        updateProgress = progress
         guard !pending.isEmpty else { return }
 
-        let results = await withTaskGroup(of: UpdateResult.self, returning: [UpdateResult].self) { group in
+        let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.persistentModelID, $0) })
+        var unsaved = 0
+
+        func finish(_ result: UpdateResult) {
+            updateProgress?.inFlight.removeAll { $0 == result.job.title }
+            updateProgress?.completed += 1
+            guard let entry = byID[result.job.id] else { return }
+            if let details = result.details, result.error == nil {
+                let merged = applyUpdate(entry, details: details, chapters: result.chapters,
+                                         context: context, saveImmediately: false)
+                unsaved += 1
+                updateProgress?.newChapters += merged.added
+                if merged.added > 0 { updateProgress?.titlesWithNewChapters += 1 }
+            } else {
+                let message = result.error ?? "unknown error"
+                print("Failed to update \(entry.title): \(message)")
+                updateProgress?.failures.append(.init(
+                    title: result.job.title, source: result.job.sourceName, message: message))
+            }
+            if unsaved >= 10 {
+                try? context.save()
+                unsaved = 0
+            }
+        }
+
+        await withTaskGroup(of: UpdateResult.self) { group in
             let maxConcurrent = 4
             var queue = pending[...]
-            var collected: [UpdateResult] = []
-            collected.reserveCapacity(pending.count)
 
-            func submit(_ work: UpdateWork) {
+            @MainActor func submit(_ work: UpdateWork) {
+                updateProgress?.inFlight.append(work.job.title)
                 group.addTask {
                     let entry = SourceEntry(
                         sourceKey: work.job.sourceKey,
@@ -355,13 +414,10 @@ final class LibraryManager {
                         let details = try await work.source.details(entry)
                         try Task.checkCancellation()
                         let chapters = try await work.source.chapters(entry)
-                        return UpdateResult(
-                            id: work.job.id, details: details, chapters: chapters, error: nil
-                        )
+                        return UpdateResult(job: work.job, details: details, chapters: chapters, error: nil)
                     } catch {
-                        return UpdateResult(
-                            id: work.job.id, details: nil, chapters: [], error: error.localizedDescription
-                        )
+                        return UpdateResult(job: work.job, details: nil, chapters: [],
+                                            error: error.localizedDescription)
                     }
                 }
             }
@@ -370,29 +426,17 @@ final class LibraryManager {
                 submit(queue.removeFirst())
             }
             while let result = await group.next() {
-                collected.append(result)
-                if !queue.isEmpty {
+                finish(result)
+                if updateCancelRequested || Task.isCancelled {
+                    queue.removeAll()
+                } else if !queue.isEmpty {
                     submit(queue.removeFirst())
                 }
             }
-            return collected
         }
 
-        let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.persistentModelID, $0) })
-        var didChange = false
-        for result in results {
-            guard !Task.isCancelled else { return }
-            guard let entry = byID[result.id] else { continue }
-            if let details = result.details, result.error == nil {
-                applyUpdate(entry, details: details, chapters: result.chapters, context: context)
-                didChange = true
-            } else {
-                print("Failed to update \(entry.title): \(result.error ?? "unknown error")")
-            }
-        }
-        if didChange {
-            try? context.save()
-        }
+        if unsaved > 0 { try? context.save() }
+        if updateCancelRequested { updateProgress?.wasCancelled = true }
     }
 
     /// Merge source metadata and a chapter list into a stored entry.
@@ -436,6 +480,37 @@ final class LibraryManager {
             try? context.save()
         }
     }
+}
+
+// MARK: - Update progress
+
+/// A snapshot of a library update, shown by `LibraryUpdateBanner`.
+struct LibraryUpdateProgress: Equatable {
+    struct Failure: Equatable, Identifiable {
+        let id = UUID()
+        let title: String
+        let source: String
+        let message: String
+    }
+
+    var total: Int
+    var automatic: Bool
+    var completed = 0
+    var newChapters = 0
+    var titlesWithNewChapters = 0
+    var failures: [Failure] = []
+    /// Titles being fetched right now.
+    var inFlight: [String] = []
+    /// Library titles skipped because their source is not installed.
+    var notInstalled = 0
+    var isCancelling = false
+    var wasCancelled = false
+    var note: String?
+    let startedAt = Date()
+    var finishedAt: Date?
+
+    var isFinished: Bool { finishedAt != nil }
+    var fraction: Double { total == 0 ? 1 : Double(completed) / Double(total) }
 }
 
 // MARK: - Library chapter counts

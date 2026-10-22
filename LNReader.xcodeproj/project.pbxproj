@@ -153,6 +153,7 @@
 		ABCD26890000000000000102 /* Services/Backup/MihonBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000102 /* Services/Backup/MihonBackup.swift */; };
 		ABCD26890000000000000103 /* Utilities/Gzip.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000103 /* Utilities/Gzip.swift */; };
 		ABCD26890000000000000104 /* Resources/allmanga.js in Resources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000104 /* Resources/allmanga.js */; };
+		ABCD26890000000000000200 /* Features/Updates/LibraryUpdateBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000200 /* Features/Updates/LibraryUpdateBanner.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -300,6 +301,7 @@
 		ABCD26880000000000000102 /* Services/Backup/MihonBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Backup/MihonBackup.swift; sourceTree = SOURCE_ROOT; };
 		ABCD26880000000000000103 /* Utilities/Gzip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utilities/Gzip.swift; sourceTree = SOURCE_ROOT; };
 		ABCD26880000000000000104 /* Resources/allmanga.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Resources/allmanga.js; sourceTree = SOURCE_ROOT; };
+		ABCD26880000000000000200 /* Features/Updates/LibraryUpdateBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Updates/LibraryUpdateBanner.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -464,6 +466,7 @@
 				ABCD26880000000000000102 /* Services/Backup/MihonBackup.swift */,
 				ABCD26880000000000000103 /* Utilities/Gzip.swift */,
 				ABCD26880000000000000104 /* Resources/allmanga.js */,
+				ABCD26880000000000000200 /* Features/Updates/LibraryUpdateBanner.swift */,
 				ABCD26880000000000000003 /* Features/More/OfflineLibraryView.swift */,
 				ABCD26880000000000000002 /* Services/LibraryMaintenance.swift */,
 				ABCD26880000000000000001 /* Services/LibraryBackup.swift */,
@@ -767,6 +770,7 @@
 				ABCD26890000000000000101 /* Services/Backup/ProtobufReader.swift in Sources */,
 				ABCD26890000000000000102 /* Services/Backup/MihonBackup.swift in Sources */,
 				ABCD26890000000000000103 /* Utilities/Gzip.swift in Sources */,
+				ABCD26890000000000000200 /* Features/Updates/LibraryUpdateBanner.swift in Sources */,
 				ABCD26890000000000000004 /* Services/OfflineChapters.swift in Sources */,
 				ABCD26890000000000000003 /* Features/More/OfflineLibraryView.swift in Sources */,
 				ABCD26890000000000000002 /* Services/LibraryMaintenance.swift in Sources */,

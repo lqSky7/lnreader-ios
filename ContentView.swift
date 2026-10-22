@@ -40,6 +40,7 @@ struct ContentView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .modifier(UpdateBannerHost(isActive: libraryManager.updateProgress != nil))
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
                 libraryManager.flushProgress(context: modelContext)
@@ -89,6 +90,22 @@ struct ContentView: View {
                 // frame and the first tap a clear run.
                 try? await Task.sleep(for: .seconds(2))
                 await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager, automatic: true)
+            }
+        }
+    }
+}
+
+/// Puts the library update banner where the system provides a slot for it: the
+/// tab bar accessory on iOS 26.1+, a bottom inset before that.
+private struct UpdateBannerHost: ViewModifier {
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.1, *) {
+            content.tabViewBottomAccessory(isEnabled: isActive) { LibraryUpdateBanner() }
+        } else {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
+                if isActive { LibraryUpdateBanner().background(.bar) }
             }
         }
     }
