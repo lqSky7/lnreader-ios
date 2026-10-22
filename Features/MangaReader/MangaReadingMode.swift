@@ -3,7 +3,7 @@
 import SwiftUI
 
 /// Paged (one screen at a time) or continuous strip.
-enum MangaReadingMode: String, CaseIterable, Identifiable {
+enum MangaReadingMode: String, Codable, CaseIterable, Identifiable {
     case pager
     case webtoon
 
@@ -25,7 +25,7 @@ enum MangaReadingMode: String, CaseIterable, Identifiable {
 }
 
 /// Which way a page turn advances in paged mode.
-enum MangaPagingDirection: String, CaseIterable, Identifiable {
+enum MangaPagingDirection: String, Codable, CaseIterable, Identifiable {
     case leftToRight
     case rightToLeft
 

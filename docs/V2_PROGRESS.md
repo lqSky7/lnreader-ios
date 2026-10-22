@@ -36,13 +36,13 @@ touches `default.store`, so the old data stays recoverable on disk.
 
 ## Roadmap — Mihon / Yokai parity
 
-Everything here is **Planned** (nothing started). Ordered by dependency, not by size: the
+Ordered by dependency, not by size: the
 per-series settings store comes first because reader modes, filters and incognito all read it.
 
 | # | Feature | State | Depends on |
 |---|---|---|---|
-| R1 | Per-series reader settings store | Planned | — |
-| R2 | Per-series read mode (pager / webtoon / direction) | Planned | R1 |
+| R1 | Per-series reader settings store | **Implemented; device check pending** | — |
+| R2 | Per-series read mode (pager / webtoon / direction) | **Implemented; device check pending** | R1 |
 | R3 | Tap-zone layouts | Planned | R1 |
 | R4 | Volume-key page turns | Planned | R1 |
 | R5 | Auto scroll | Planned | R1 |
@@ -61,7 +61,18 @@ per-series settings store comes first because reader modes, filters and incognit
 - **R1 settings store.** One resolved-settings struct: series override ➝ global default.
   Keep it in UserDefaults keyed by `sourceKey::url`, like scanlator rules, not in the
   schema — it is a view preference. Everything below reads through it.
-- **R2 read mode.** Today `manga.readingMode` / `manga.pagingDirection` are global
+- **R1 as built.** `MangaReaderSettings.swift`: `MangaReaderOverrides` (optional fields, so
+  adding a setting never breaks saved data), `MangaReaderPreferences` (resolved values) and
+  `MangaSeriesSettings` (the persisted `@Observable` store, key `mangareader.<sourceKey>::<url>`).
+  Overrides win field by field; a series that never overrode a field follows the global default,
+  and an empty override set is removed rather than stored. Later settings are new optional fields
+  on `MangaReaderOverrides`.
+- **R2 as built.** The reader's layout menu now writes the series override. "Use for all series"
+  promotes the series' effective values to the global defaults and drops the override;
+  "Reset to default" appears once a series has overrides. Chapters opened outside a library entry
+  are keyed by chapter URL. Not yet done: a settings screen for the global default (it is only
+  reachable through "Use for all series" for now).
+- **R2 original plan.** Today `manga.readingMode` / `manga.pagingDirection` are global
   `@AppStorage`. Add a "this series" override with a "use default" state, shown in the reader
   options menu. Novels keep their own reader settings; only manga needs this.
 - **R3 tap zones.** Layouts: default (thirds), L-shaped, Kindlish, edge, disabled, plus an
@@ -251,6 +262,7 @@ are separate from the implemented local `.lnbk` snapshot.
 | `scripts/check-v2-page-pipeline.sh` | Cache LRU, loader dedupe, prefetch order, progress |
 | `scripts/check-v2-extensions.sh` | Bundle through the real host against a localhost fixture |
 | `scripts/check-v2-scanlators.sh` | Dedup/hide rules, hidden-winner fallback |
+| `scripts/check-v2-reader-settings.sh` | Per-series reader settings: resolution, persistence, reset, make default |
 | `scripts/try-mangafire.sh` | Live MangaFire through the host (network required) |
 | `scripts/profile-hotpaths.sh` | Library counts, progress writes, chapter rows and ordering at library scale |
 

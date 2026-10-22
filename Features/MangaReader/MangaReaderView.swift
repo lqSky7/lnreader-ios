@@ -21,8 +21,11 @@ struct MangaReaderView: View {
     let sourceKey: String
     let entryURL: String?
 
-    @AppStorage("manga.readingMode") private var modeRaw = MangaReadingMode.pager.rawValue
-    @AppStorage("manga.pagingDirection") private var directionRaw = MangaPagingDirection.leftToRight.rawValue
+    /// Layout settings for this series: its own overrides over the global defaults.
+    @State private var seriesSettings: MangaSeriesSettings
+    // Observed so a changed global default re-renders a series that follows it.
+    @AppStorage(MangaReaderSettingsKey.readingMode) private var defaultModeRaw = MangaReadingMode.pager.rawValue
+    @AppStorage(MangaReaderSettingsKey.direction) private var defaultDirectionRaw = MangaPagingDirection.leftToRight.rawValue
 
     @State private var chapterURL: String
     @State private var chapterName: String
@@ -56,14 +59,19 @@ struct MangaReaderView: View {
         self._chapterURL = State(initialValue: chapterURL)
         self._chapterName = State(initialValue: chapterName)
         self._scanlatorSettings = State(initialValue: ScanlatorSettings(key: "\(sourceKey)::\(entryURL ?? "")"))
+        // A chapter opened outside a library entry has no series to remember,
+        // so it is keyed by the chapter instead of sharing one empty-URL key.
+        self._seriesSettings = State(initialValue: MangaSeriesSettings(key: "\(sourceKey)::\(entryURL ?? chapterURL)"))
     }
 
     private var mode: MangaReadingMode {
-        MangaReadingMode(rawValue: modeRaw) ?? .pager
+        _ = defaultModeRaw
+        return seriesSettings.resolved.readingMode
     }
 
     private var direction: MangaPagingDirection {
-        MangaPagingDirection(rawValue: directionRaw) ?? .leftToRight
+        _ = defaultDirectionRaw
+        return seriesSettings.resolved.direction
     }
 
     private var storedChapter: Chapter? {
@@ -116,7 +124,7 @@ struct MangaReaderView: View {
         }
         .onChange(of: currentIndex) { _, index in handlePageChange(index) }
         .onChange(of: scanlatorSettings.value) { rebuildNavigable() }
-        .onChange(of: modeRaw) { _, _ in
+        .onChange(of: mode) { _, _ in
             // Re-run the layout without refetching the page list.
             chrome = .control
         }
@@ -242,16 +250,32 @@ struct MangaReaderView: View {
 
     private var optionsMenu: some View {
         Menu {
-            Picker("Layout", selection: $modeRaw) {
+            Picker("Layout", selection: Binding(
+                get: { mode },
+                set: { seriesSettings.setReadingMode($0) }
+            )) {
                 ForEach(MangaReadingMode.allCases) { readingMode in
                     Label(readingMode.displayName, systemImage: readingMode.iconName)
-                        .tag(readingMode.rawValue)
+                        .tag(readingMode)
                 }
             }
             if mode == .pager {
-                Picker("Direction", selection: $directionRaw) {
+                Picker("Direction", selection: Binding(
+                    get: { direction },
+                    set: { seriesSettings.setDirection($0) }
+                )) {
                     ForEach(MangaPagingDirection.allCases) { option in
-                        Text(option.displayName).tag(option.rawValue)
+                        Text(option.displayName).tag(option)
+                    }
+                }
+            }
+            Section("This series") {
+                Button("Use for all series", systemImage: "square.stack") {
+                    seriesSettings.makeDefault()
+                }
+                if seriesSettings.hasOverrides {
+                    Button("Reset to default", systemImage: "arrow.uturn.backward") {
+                        seriesSettings.reset()
                     }
                 }
             }
