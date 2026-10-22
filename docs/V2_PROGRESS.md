@@ -43,10 +43,10 @@ per-series settings store comes first because reader modes, filters and incognit
 |---|---|---|---|
 | R1 | Per-series reader settings store | **Implemented; device check pending** | — |
 | R2 | Per-series read mode (pager / webtoon / direction) | **Implemented; device check pending** | R1 |
-| R3 | Tap-zone layouts | Planned | R1 |
-| R4 | Volume-key page turns | Planned | R1 |
-| R5 | Auto scroll | Planned | R1 |
-| R6 | Hold to scroll, with swipe-to-change-speed | Planned | R5 |
+| R3 | Tap-zone layouts | **Implemented; device check pending** | R1 |
+| R4 | Volume-key page turns | **Implemented; device check pending** | R1 |
+| R5 | Auto scroll | **Implemented; device check pending** | R1 |
+| R6 | Hold to scroll, with swipe-to-change-speed | **Implemented; device check pending** | R5 |
 | R7 | Library filters | Planned | — |
 | R8 | Library sorts (per category) | Planned | R7 |
 | R9 | Categories: per-category sort, display, update scope | Planned | R7, R8 |
@@ -70,8 +70,8 @@ per-series settings store comes first because reader modes, filters and incognit
 - **R2 as built.** The reader's layout menu now writes the series override. "Use for all series"
   promotes the series' effective values to the global defaults and drops the override;
   "Reset to default" appears once a series has overrides. Chapters opened outside a library entry
-  are keyed by chapter URL. Not yet done: a settings screen for the global default (it is only
-  reachable through "Use for all series" for now).
+  are keyed by chapter URL. The global default is edited from the new Reader settings sheet
+  (options menu → Reader settings…) as well as through "Use for all series".
 - **R2 original plan.** Today `manga.readingMode` / `manga.pagingDirection` are global
   `@AppStorage`. Add a "this series" override with a "use default" state, shown in the reader
   options menu. Novels keep their own reader settings; only manga needs this.
@@ -90,6 +90,46 @@ per-series settings store comes first because reader modes, filters and incognit
   an invert option). Must not use an overlay that eats the scroll view's drag; implement as
   a simultaneous long-press-then-drag gesture and cancel it when the hold ends. Share the
   scroller with R5 so there is one animation driver.
+
+**How R3–R6 were built** (`Features/MangaReader/`):
+
+- **Pure rules** in `MangaReaderControls.swift`, checked headless by
+  `scripts/check-v2-reader-settings.sh`: `MangaTapZoneLayout.action(at:in:…)`,
+  `HoldScrollConfig.speed(forDrag:)`, `ScrollStep.advance`, `VolumeKeyDetector`, and
+  `MangaControlSettings` (one JSON value under `manga.controls`; missing fields keep defaults).
+- **R3 tap zones** — Default, L-shaped, Kindle-style, Edges, Disabled, plus invert. Per series
+  (R1 overrides `tapZones` / `invertTapZones`). Right-to-left and invert are two reversals that
+  cancel. Paged mode only; webtoon taps still toggle the controls.
+- **R4 volume keys** — `VolumeKeyHost`. iOS reports a press only as a change in
+  `AVAudioSession.outputVolume`, so while the reader is open the media volume is parked at 50 %,
+  each change is read as up or down, then the volume is set back to 50 %; the user's volume is
+  restored on leaving and whenever the app resigns active. A hidden `MPVolumeView` suppresses
+  the HUD. Volume up goes back, down goes forward, with an invert option. Paged: one page;
+  webtoon: ~85 % of a screen. This is a global setting, not per series.
+- **R5 auto scroll** — `WebtoonScrollController` drives the strip's `UIScrollView` from a
+  `CADisplayLink` (SwiftUI has no per-frame offset API; SwiftUI's own position tracking follows
+  the offset). Speed in pt/s; the user's finger always wins — it waits for the drag and its
+  momentum to end, then continues. Starts from the options menu, hides the controls, shows a
+  stop button, and brings the controls back at the end of the chapter. Webtoon only; the pager
+  has no equivalent yet.
+- **R6 hold to scroll** — a `UILongPressGestureRecognizer` on the same scroll view (0.3 s). While
+  held, the pan recognizer is disabled so the finger changes the speed instead of dragging the
+  content; swiping up/down raises or lowers speed by `speedPerPoint` pt/s per point, clamped to
+  min/max, and which direction speeds up is a setting. A speed readout shows while holding, and
+  the tap that the lifted finger would otherwise register is suppressed for 0.4 s. Optional
+  haptics (`HoldHapticTracker`): a selection tick per 40 pt/s crossed, a firmer tap on reaching
+  the slowest or fastest speed.
+- **Tap zones apply in webtoon too** (scroll ~85 % of a screen; "Disabled" restores
+  tap-only-toggles). Reading direction does not apply to a vertical strip.
+- **Settings** — `MangaReaderSettingsSheet` (options menu → Reader settings…): layout, direction,
+  tap zones and invert are per series; volume keys, auto scroll speed and every hold-to-scroll
+  value are global.
+
+**Device checks R3–R6 need** (none could be run here — no Simulator runtime, device unavailable):
+the scroll view is actually found from the webtoon content (`WebtoonScrollBridge`); hold works
+without the strip also scrolling and without the lifted finger toggling the controls; auto scroll
+pauses and resumes around a drag; the volume HUD stays hidden, presses register at the ends of
+the range, and the volume is restored after closing the reader or backgrounding the app.
 
 ### Library (R7–R10)
 
@@ -289,6 +329,14 @@ which is fragile once re-signed.
   migration for a view preference is not worth it. Hiding and priority are
   **independent**: hiding applies on its own, priority only merges duplicate
   chapter numbers. The stored key for the priority toggle is still `enabled`.
+- **The webtoon never uses `scrollPosition(id:)`.** It treats the binding as the position of
+  record: when auto scroll, hold-to-scroll or the volume keys move the `UIScrollView` offset
+  underneath it, the next re-render pushed the stale id back and the strip snapped to the top
+  of the page it was leaving. The current page is read with `onScrollTargetVisibilityChange`
+  and jumps are one-shot (`ScrollViewReader`).
+- **Tint switches with `AppTheme.controlFill`, not the accent.** The accent is white in dark
+  mode, which made every `Toggle` solid white.
+- **Settings sheets are partial-height** (`.medium`/`.large` detents), not full-screen modals.
 - **Tap zones are a simultaneous gesture, never an overlay.** An overlay above a scroll view
   eats the drag.
 - **`JSExtensionHost` is synchronous by design.** The JS thread blocks during `http.get`, so
