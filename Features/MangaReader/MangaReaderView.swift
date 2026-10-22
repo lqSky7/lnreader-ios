@@ -6,6 +6,9 @@
 
 import SwiftData
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct MangaReaderView: View {
     @Environment(\.modelContext) private var modelContext
@@ -29,6 +32,7 @@ struct MangaReaderView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showControls = true
+    @State private var showChapterSheet = false
 
     init(sourceKey: String, entryURL: String?, chapterURL: String, chapterName: String) {
         self.sourceKey = sourceKey
@@ -55,8 +59,14 @@ struct MangaReaderView: View {
 
             content
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.18)) { showControls.toggle() }
+                .overlay {
+                    if mode == .pager, !isLoading, errorMessage == nil {
+                        pageTapZones
+                    } else {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { toggleControls() }
+                    }
                 }
 
             if showControls {
@@ -68,6 +78,9 @@ struct MangaReaderView: View {
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .task { await loadChapter() }
+        .sheet(isPresented: $showChapterSheet) { chapterSheet }
+        .onAppear { setScreenAwake(true) }
+        .onDisappear { setScreenAwake(false) }
         .onChange(of: currentIndex) { _, index in handlePageChange(index) }
         .onChange(of: modeRaw) { _, _ in
             // Re-run the layout without refetching the page list.
@@ -179,6 +192,15 @@ struct MangaReaderView: View {
 
             Spacer()
 
+            Button {
+                showChapterSheet = true
+            } label: {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Chapters")
+
             Menu {
                 Picker("Layout", selection: $modeRaw) {
                     ForEach(MangaReadingMode.allCases) { readingMode in
@@ -205,6 +227,28 @@ struct MangaReaderView: View {
     }
 
     private var bottomBar: some View {
+        VStack(spacing: 6) {
+            if pages.count > 1 {
+                Slider(
+                    value: Binding(
+                        get: { Double(currentIndex) },
+                        set: { newValue in
+                            let target = Int(newValue.rounded())
+                            if target != currentIndex { currentIndex = target }
+                        }
+                    ),
+                    in: 0...Double(pages.count - 1),
+                    step: 1
+                )
+                .tint(.white)
+                .padding(.horizontal, 8)
+                .accessibilityLabel("Page")
+            }
+            chapterArrows
+        }
+    }
+
+    private var chapterArrows: some View {
         HStack {
             Button {
                 Task { await moveChapter(by: -1) }
@@ -323,6 +367,100 @@ struct MangaReaderView: View {
         }
         let target = current + offset
         return storedChapters.indices.contains(target)
+    }
+
+    // MARK: - Interaction
+
+    /// Pager only: left and right thirds turn the page, the middle toggles the
+    /// controls. In right-to-left mode the zones swap, matching the swipe
+    /// direction the pager itself uses.
+    private var pageTapZones: some View {
+        HStack(spacing: 0) {
+            tapZone { turnPage(forward: direction == .rightToLeft) }
+            tapZone { toggleControls() }
+            tapZone { turnPage(forward: direction != .rightToLeft) }
+        }
+    }
+
+    private func tapZone(_ action: @escaping () -> Void) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+    }
+
+    private func turnPage(forward: Bool) {
+        let target = currentIndex + (forward ? 1 : -1)
+        guard pages.indices.contains(target) else { return }
+        currentIndex = target
+    }
+
+    private func toggleControls() {
+        withAnimation(.easeInOut(duration: 0.18)) { showControls.toggle() }
+    }
+
+    /// Reading should not be interrupted by the idle timer.
+    private func setScreenAwake(_ awake: Bool) {
+        #if canImport(UIKit)
+        UIApplication.shared.isIdleTimerDisabled = awake
+        #endif
+    }
+
+    // MARK: - Chapter sheet
+
+    private var chapterSheet: some View {
+        NavigationStack {
+            Group {
+                if storedChapters.isEmpty {
+                    ContentUnavailableView(
+                        "No chapters yet",
+                        systemImage: "list.bullet",
+                        description: Text("Add this title to your library to navigate its chapters here.")
+                    )
+                } else {
+                    List(storedChapters) { chapter in
+                        Button {
+                            showChapterSheet = false
+                            Task { await jumpToChapter(chapter) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(chapter.name)
+                                        .font(.subheadline)
+                                        .lineLimit(2)
+                                    if !chapter.read {
+                                        Text("Unread")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if chapter.url == chapterURL {
+                                    Image(systemName: "book.fill")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .navigationTitle("Chapters")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showChapterSheet = false }
+                }
+            }
+        }
+    }
+
+    private func jumpToChapter(_ chapter: Chapter) async {
+        guard chapter.url != chapterURL else { return }
+        chapterURL = chapter.url
+        chapterName = chapter.name
+        currentIndex = 0
+        await loadChapter()
     }
 
     private func moveChapter(by offset: Int) async {

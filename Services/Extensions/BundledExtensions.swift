@@ -20,6 +20,7 @@ enum BundledExtensions {
             lang: "en",
             versionId: 1,
             iconURL: nil,
+            iconAsset: "MangaFireIcon",
             kind: .manga,
             repoBaseURL: nil,
             installedAt: .distantPast
@@ -31,18 +32,33 @@ enum BundledExtensions {
         pkg == "all.mangafire" ? "mangafire" : nil
     }
 
-    /// Copy any bundled extension that is not installed yet into the store.
+    /// Copy any bundled extension that is not installed yet into the store, and
+    /// backfill metadata that older builds did not write.
     ///
-    /// Installed copies are left alone: a user who updates an extension from a
-    /// repository must not be rolled back by the version in the binary.
+    /// Installed *bundles* are left alone: a user who updated an extension from
+    /// a repository must not be rolled back by the version in the binary.
     static func installMissing() {
-        for info in all where !ExtensionStore.isInstalled(info.pkg) {
+        for info in all {
             guard let name = resourceName(for: info.pkg),
                   let url = Bundle.main.url(forResource: name, withExtension: "js"),
-                  let bundle = try? String(contentsOf: url, encoding: .utf8)
+                  let bundled = try? String(contentsOf: url, encoding: .utf8)
             else { continue }
 
-            try? ExtensionStore.install(info, bundle: bundle)
+            if !ExtensionStore.isInstalled(info.pkg) {
+                try? ExtensionStore.install(info, bundle: bundled)
+                continue
+            }
+
+            // Already installed: only repair missing metadata (e.g. an icon
+            // added in a later build), keeping the installed bundle bytes.
+            guard let stored = ExtensionStore.installed().first(where: { $0.pkg == info.pkg }),
+                  stored.iconAsset == nil, info.iconAsset != nil,
+                  let installedBundle = ExtensionStore.bundle(for: info.pkg)
+            else { continue }
+
+            var repaired = stored
+            repaired.iconAsset = info.iconAsset
+            try? ExtensionStore.install(repaired, bundle: installedBundle)
         }
     }
 }

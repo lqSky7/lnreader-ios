@@ -5,6 +5,7 @@ import SwiftData
 import SwiftUI
 
 struct UpdatesView: View {
+    @Environment(ReaderRouter.self) private var readerRouter
     @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
     @Environment(SourceManager.self) private var sourceManager
@@ -35,20 +36,19 @@ struct UpdatesView: View {
                         ForEach(groupedUpdates, id: \.key) { date, chapters in
                             Section(date) {
                                 ForEach(chapters) { chapter in
-                                    NavigationLink {
-                                        ChapterReader(
+                                    Button {
+                                        readerRouter.open(
                                             sourceKey: chapter.entry?.sourceKey ?? "",
                                             entryURL: chapter.entry?.url,
                                             kind: chapter.entry?.kind ?? .novel,
                                             chapterURL: chapter.url,
                                             chapterName: chapter.name
                                         )
-                                        .id(chapter.url)
-                                        .bookZoom(from: chapter.persistentModelID, in: chapterTransitions)
                                     } label: {
                                         UpdateRow(chapter: chapter)
-                                            .bookTransitionSource(chapter.persistentModelID, in: chapterTransitions)
+                                            .contentShape(Rectangle())
                                     }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }

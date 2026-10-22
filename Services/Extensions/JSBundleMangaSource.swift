@@ -25,6 +25,7 @@ final class JSBundleMangaSource: MangaSource {
     var name: String { manifest.name }
     var lang: String { manifest.lang }
     var iconURL: String? { manifest.iconURL }
+    var iconAsset: String? { manifest.iconAsset }
     var supportsLatest: Bool { host.supportsLatest }
 
     func popular(page: Int, filters: FilterState) async throws -> EntriesPage {

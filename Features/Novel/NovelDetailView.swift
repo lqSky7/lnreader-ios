@@ -12,6 +12,7 @@ struct NovelDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
+    @Environment(ReaderRouter.self) private var readerRouter
 
     /// Stored entry, when opened from the library or from a search hit that is
     /// already in the library.
@@ -129,16 +130,12 @@ struct NovelDetailView: View {
                 coverURL: displayCover
             )
         }
-        .navigationDestination(item: $navigateToChapter) { chapter in
-            ChapterReader(
-                sourceKey: sourceKey,
-                entryURL: localEntry?.url ?? sourceEntry?.url,
-                kind: localEntry?.kind ?? sourceEntry?.kind ?? .novel,
-                chapterURL: chapter.path,
-                chapterName: chapter.name
-            )
-            .id(chapter.path)
-            .bookZoom(from: "continue", in: chapterTransition)
+        // The reader is a full-screen window of its own; this screen only
+        // decides which chapter to open.
+        .onChange(of: navigateToChapter) { _, chapter in
+            guard let chapter else { return }
+            openReader(chapter)
+            navigateToChapter = nil
         }
         .onAppear {
             syncLocalEntry()
@@ -387,6 +384,15 @@ struct NovelDetailView: View {
             localEntry = added
         }
         refreshChapters()
+    }
+
+    private func openReader(_ chapter: ChapterDisplay) {
+        readerRouter.open(
+            chapter,
+            sourceKey: sourceKey,
+            entryURL: localEntry?.url ?? sourceEntry?.url,
+            kind: localEntry?.kind ?? sourceEntry?.kind ?? .novel
+        )
     }
 
     private func continueReading() {

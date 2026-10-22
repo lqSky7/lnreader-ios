@@ -337,3 +337,18 @@ Kotlin/JS translation layer: a Kotlin/JS implementation of the Mihon API surface
 plus OkHttp and Jsoup shims, so an extension's Kotlin compiles unchanged and the
 transpiler only has to emit it. That repository is `../lnreader-extensions`.
 
+## Slice 9 — UX pass (landed)
+
+From device feedback on the first MangaFire build.
+
+| Change | Why |
+|---|---|
+| `ReaderRouter` + one `fullScreenCover` at the root | The reader was pushed onto whichever `NavigationStack` you came from, so it read as a modal with the tab bar's state behind it. Now anything that opens a chapter asks the router and the reader is its own window. |
+| `SourceIconView`, `iconAsset` on sources | Extension rows showed a generic SF Symbol. Bundled extensions carry an asset-catalog icon; installed ones use their repository `iconUrl`. |
+| Library kind filter | Novels and manga were mixed in one list. A segmented control appears when the library holds both kinds, and the choice is remembered. |
+| Reader: chapter sheet, page scrubber, tap zones, keep-awake | The pager had only swipe and two arrow buttons. Left/right thirds now turn pages (swapped in RTL), the middle toggles controls, a slider scrubs the chapter, and the screen no longer sleeps mid-page. |
+
+`BundledExtensions.installMissing()` now also repairs missing metadata (an icon added in a
+later build) without touching an installed bundle's bytes, so an extension updated from a
+repository is never rolled back by the copy in the binary.
+

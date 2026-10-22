@@ -28,6 +28,7 @@ struct LibraryView: View {
     @AppStorage("general.defaultSortDirection") private var sortDirection: SortDirection = .descending
     @AppStorage("general.defaultDisplayMode") private var displayMode: DisplayMode = .comfortable
     @AppStorage("general.confirmRemove") private var confirmRemove = true
+    @AppStorage("library.kindFilter") private var kindFilterRaw = LibraryKindFilter.all.rawValue
 
     @State private var isEditingLibrary = false
     @State private var draggedItem: Entry? = nil
@@ -51,6 +52,17 @@ struct LibraryView: View {
                     )
                 } else {
                     ScrollView {
+                        if showsKindPicker {
+                            Picker("Content", selection: $kindFilterRaw) {
+                                ForEach(LibraryKindFilter.allCases) { option in
+                                    Text(option.title).tag(option.rawValue)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .padding(.horizontal)
+                            .padding(.top, 4)
+                        }
+
                         if !categories.isEmpty {
                             CategoryTabView(
                                 categories: categories,
@@ -211,8 +223,23 @@ struct LibraryView: View {
 
     // MARK: - Filtering & Sorting
 
+    private var kindFilter: LibraryKindFilter {
+        LibraryKindFilter(rawValue: kindFilterRaw) ?? .all
+    }
+
+    /// Only offer the split when the library actually holds both kinds.
+    private var showsKindPicker: Bool {
+        novels.contains { $0.kind == .novel } && novels.contains { $0.kind == .manga }
+    }
+
     private var filteredNovels: [Entry] {
         var result = novels
+
+        switch kindFilter {
+        case .all: break
+        case .novels: result = result.filter { $0.kind == .novel }
+        case .manga: result = result.filter { $0.kind == .manga }
+        }
 
         if let category = selectedCategory {
             result = result.filter { $0.categories.contains(category) }
@@ -307,5 +334,22 @@ struct LibraryView: View {
         for (index, id) in order.enumerated() { byID[id]?.libraryOrder = index }
         try? modelContext.save()
         if clearOrder { editingOrder = [] }
+    }
+}
+
+/// Library split between light novels and manga.
+enum LibraryKindFilter: String, CaseIterable, Identifiable {
+    case all
+    case novels
+    case manga
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .novels: "Novels"
+        case .manga: "Manga"
+        }
     }
 }

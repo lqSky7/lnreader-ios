@@ -130,6 +130,8 @@
 		DE9F26EF7BEE71CCF351DAE3 /* JSExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */; };
 		EA13C552BF9AAFEEA6AEB31F /* BundledExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6399BD2DC044398F328154 /* BundledExtensions.swift */; };
 		E5D4E8732498C5D9250BD862 /* mangafire.js in Resources */ = {isa = PBXBuildFile; fileRef = E25DCEA50E9B876EBE1378C5 /* mangafire.js */; };
+		0C1F88D43CB0872BBEFD8D36 /* SourceIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */; };
+		B00394AC973379A2DB10AF2B /* ReaderRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -255,6 +257,8 @@
 		803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSExtensionHost.swift; sourceTree = "<group>"; };
 		EE6399BD2DC044398F328154 /* BundledExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledExtensions.swift; sourceTree = "<group>"; };
 		E25DCEA50E9B876EBE1378C5 /* mangafire.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Resources/mangafire.js; sourceTree = "<group>"; };
+		3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceIconView.swift; sourceTree = "<group>"; };
+		F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderRouter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -290,6 +294,7 @@
 				179854008F9437120FBDEDDB /* GlassCard.swift */,
 				3C527A04CDCEF84E8DEA8EFB /* LoadingView.swift */,
 				1760A05DBF7E612169B36D46 /* NovelCoverView.swift */,
+				3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -320,6 +325,7 @@
 				671E0339A11D5257190D9382 /* ReaderToolbar.swift */,
 				003CA6699D27A4A3DCAFD2EF /* ReaderView.swift */,
 				0A83CC9BB2AEC8F3766BF2EC /* ChapterReader.swift */,
+				F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */,
 			);
 			path = Reader;
 			sourceTree = "<group>";
@@ -803,6 +809,8 @@
 				B152D4A75103710108D37FA5 /* JSBundleMangaSource.swift in Sources */,
 				DE9F26EF7BEE71CCF351DAE3 /* JSExtensionHost.swift in Sources */,
 				EA13C552BF9AAFEEA6AEB31F /* BundledExtensions.swift in Sources */,
+				0C1F88D43CB0872BBEFD8D36 /* SourceIconView.swift in Sources */,
+				B00394AC973379A2DB10AF2B /* ReaderRouter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

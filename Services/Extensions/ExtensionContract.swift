@@ -17,6 +17,8 @@ struct ExtensionManifest: Identifiable, Hashable, Sendable {
     let lang: String
     let versionId: Int
     let iconURL: String?
+    /// Asset-catalog name when the icon ships inside the app.
+    var iconAsset: String? = nil
     /// Where the JS bundle lives, relative to the repository base URL.
     let bundlePath: String
     /// Which kind of content it serves.

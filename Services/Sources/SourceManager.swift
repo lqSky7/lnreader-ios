@@ -92,6 +92,7 @@ final class SourceManager {
                 lang: installed.lang,
                 versionId: installed.versionId,
                 iconURL: installed.iconURL,
+                iconAsset: installed.iconAsset,
                 bundlePath: "\(installed.pkg).js",
                 kind: installed.kind
             )

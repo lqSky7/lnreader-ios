@@ -30,7 +30,10 @@ struct BrowseView: View {
                             NavigationLink {
                                 SourceDetailView(sourceKey: source.key, title: source.name)
                             } label: {
-                                Label(source.name, systemImage: source.kind.symbolName)
+                                HStack(spacing: 12) {
+                                    SourceIconView(source: source, size: 30)
+                                    Text(source.name)
+                                }
                             }
                         }
                     }

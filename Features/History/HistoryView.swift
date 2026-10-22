@@ -5,6 +5,7 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
+    @Environment(ReaderRouter.self) private var readerRouter
     @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \History.lastRead, order: .reverse)
@@ -27,20 +28,19 @@ struct HistoryView: View {
                             Section(date) {
                                 ForEach(entries) { item in
                                     if let chapter = item.chapter {
-                                        NavigationLink {
-                                            ChapterReader(
+                                        Button {
+                                            readerRouter.open(
                                                 sourceKey: chapter.entry?.sourceKey ?? "",
                                                 entryURL: chapter.entry?.url,
                                                 kind: chapter.entry?.kind ?? .novel,
                                                 chapterURL: chapter.url,
                                                 chapterName: chapter.name
                                             )
-                                            .id(chapter.url)
-                                            .bookZoom(from: item.persistentModelID, in: chapterTransitions)
                                         } label: {
                                             HistoryRow(history: item)
-                                                .bookTransitionSource(item.persistentModelID, in: chapterTransitions)
+                                                .contentShape(Rectangle())
                                         }
+                                        .buttonStyle(.plain)
                                     }
                                 }
                                 .onDelete { offsets in

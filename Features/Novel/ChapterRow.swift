@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct ChapterRow: View {
+    @Environment(ReaderRouter.self) private var readerRouter
     @Namespace private var chapterTransition
     @ObservedObject private var audioLibrary = TTSOfflineLibrary.shared
     @State private var showAudioDownloads = false
@@ -15,16 +16,13 @@ struct ChapterRow: View {
     private var audioCount: Int { audioLibrary.downloads(bookId: bookID, chapterId: chapter.path).filter(\.isAvailable).count }
 
     var body: some View {
-        NavigationLink {
-            ChapterReader(
+        Button {
+            readerRouter.open(
+                chapter,
                 sourceKey: sourceKey,
                 entryURL: entry?.url ?? chapter.entryURL,
-                kind: entry?.kind ?? chapter.kind,
-                chapterURL: chapter.path,
-                chapterName: chapter.name
+                kind: entry?.kind ?? chapter.kind
             )
-            .id(chapter.path)
-            .bookZoom(from: chapter.path, in: chapterTransition)
         } label: {
             HStack(spacing: 12) {
                 // Unread indicator dot

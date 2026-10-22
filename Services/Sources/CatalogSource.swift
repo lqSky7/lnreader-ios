@@ -18,6 +18,8 @@ protocol CatalogSource: Identifiable, Sendable {
     /// Language tag or display name the source reports (e.g. `"English"`).
     var lang: String { get }
     var iconURL: String? { get }
+    /// Asset-catalog name for sources whose icon ships in the binary.
+    var iconAsset: String? { get }
     /// Whether the source has a distinct "latest" listing.
     var supportsLatest: Bool { get }
 
@@ -40,6 +42,7 @@ extension CatalogSource {
     var id: String { key }
 
     var iconURL: String? { nil }
+    var iconAsset: String? { nil }
     var supportsLatest: Bool { false }
 
     func filters() async throws -> [SourceFilter] { [] }

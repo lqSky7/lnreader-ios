@@ -13,6 +13,8 @@ struct InstalledExtension: Codable, Hashable, Sendable {
     let lang: String
     let versionId: Int
     let iconURL: String?
+    /// Asset-catalog name for bundled icons.
+    var iconAsset: String? = nil
     let kind: ContentKind
     /// Repository this came from, for update checks. `nil` for bundled ones.
     let repoBaseURL: String?

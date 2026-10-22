@@ -14,6 +14,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("general.autoUpdateOnLaunch") private var autoUpdateOnLaunch = true
     @State private var selectedTab: AppTab = .library
+    @State private var readerRouter = ReaderRouter()
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -38,6 +39,24 @@ struct ContentView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .environment(readerRouter)
+        // The reader is its own window: anything that opens a chapter goes
+        // through the router, and this is the single place it is presented.
+        .fullScreenCover(
+            item: Binding(
+                get: { readerRouter.request },
+                set: { readerRouter.request = $0 }
+            )
+        ) { request in
+            ChapterReader(
+                sourceKey: request.sourceKey,
+                entryURL: request.entryURL,
+                kind: request.kind,
+                chapterURL: request.chapterURL,
+                chapterName: request.chapterName
+            )
+            .environment(readerRouter)
+        }
         .task {
             await syncManager.loadSession()
             // v2 source registry mirrors the installed LN plugins, and refreshes

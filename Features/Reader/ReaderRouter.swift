@@ -1,0 +1,55 @@
+// ReaderRouter.swift - Opens the reader as its own full-screen window.
+//
+// The reader used to be pushed onto whichever NavigationStack the user came
+// from, which made it look like a modal and kept the tab bar's navigation state
+// around it. Now anything that opens a chapter asks this router, and the root
+// view presents one full-screen cover.
+
+import Observation
+import SwiftUI
+
+struct ReaderRequest: Identifiable, Hashable {
+    let id = UUID()
+    let sourceKey: String
+    let entryURL: String?
+    let kind: ContentKind
+    let chapterURL: String
+    let chapterName: String
+}
+
+@Observable
+@MainActor
+final class ReaderRouter {
+
+    var request: ReaderRequest?
+
+    func open(
+        sourceKey: String,
+        entryURL: String?,
+        kind: ContentKind,
+        chapterURL: String,
+        chapterName: String
+    ) {
+        request = ReaderRequest(
+            sourceKey: sourceKey,
+            entryURL: entryURL,
+            kind: kind,
+            chapterURL: chapterURL,
+            chapterName: chapterName
+        )
+    }
+
+    func open(_ chapter: ChapterDisplay, sourceKey: String, entryURL: String?, kind: ContentKind) {
+        open(
+            sourceKey: sourceKey,
+            entryURL: entryURL,
+            kind: kind,
+            chapterURL: chapter.path,
+            chapterName: chapter.name
+        )
+    }
+
+    func close() {
+        request = nil
+    }
+}
