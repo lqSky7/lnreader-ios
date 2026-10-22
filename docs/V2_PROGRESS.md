@@ -15,7 +15,7 @@ touches `default.store`, so the old data stays recoverable on disk.
 | 0a. Bridge build | `LNBackupSchema`, `LegacyBackupConverter`, "Export for v2" | Deferred with migration |
 | 0b. v2 foundations | Versioned schema, new store, source protocols, HTTP client, repo/trust | **Landed** |
 | 1. Extension spike | `lnreader-source-compat`, Kotlin/JS build, JSC threads, parse benchmarks | **Path chosen: Kotlin/JS.** Spike itself not started |
-| 2. Browse + reader MVP | Repo UI, manga browse, entry detail, pager + webtoon, `PageLoader` | **Read path ported to v2**; manga reader not started |
+| 2. Browse + reader MVP | Repo UI, manga browse, entry detail, pager + webtoon, `PageLoader` | **Browse + detail on v2**; manga reader not started |
 | 3. Downloads | Unified manager, CBZ/folder, ComicInfo, background continuation | Not started |
 | 4. E2E backup + cloud | `.lnbk`, Keychain key, blob endpoints | Not started |
 | 5. AniList | Tracker framework, auto-update, offline queue | Not started |
@@ -152,18 +152,37 @@ is the only store the app opens.
 ./scripts/check-v2-foundation.sh  # status mapping, identity, filters, dates, HTTP values
 ```
 
-## Slice 3 — next
+## Slice 3 — browse on the source layer (landed)
 
-1. **Browse on `SourceManager`.** `SourceDetailView` and `GlobalSearchView` still call
-   `PluginManager` + `PluginNovelRef` directly; move them to `CatalogSource` and
-   `SourceEntry`, including filters via `FilterState`. That also deletes the last
-   `PluginNovel*` types from the UI layer.
-2. **`ChapterSourceSync`** (plan §8): dedupe, `chapterNumber` parsing via a port of
+The UI no longer knows what a JS plugin is. `Services/Plugins/` is now referenced only
+by `LNPluginSource` (the adapter) and by `PluginManager` (install/uninstall), which is
+what the plan wants: one implementation behind `CatalogSource`.
+
+| File | Change |
+|---|---|
+| `SourceDetailView` | Takes a registry entry only to derive the source key; popular/search/pagination go through `NovelSource` and `EntriesPage` |
+| `GlobalSearchView` | Iterates `sourceManager.novelSources` and calls `search(query:page:filters:)` |
+| `BrowseEntryCell` | Renders `SourceEntry` instead of `PluginNovelRef` |
+| `NovelDetailView` | Opened with `sourceEntry:` straight from search results |
+
+Notes:
+
+- **Filters are plumbed but not surfaced.** Calls pass `FilterState()` (empty), which the
+  adapter turns into "no filter values" — the same behaviour v1 had with `nil`. A filter
+  sheet can now be added without touching the call sites.
+- **Browse is still the extension manager.** `BrowseView` keeps `PluginManager` because
+  installing and uninstalling is a registry concern; it will move to `ExtensionRepo` when
+  the repo/trust work lands.
+
+## Slice 4 — next
+
+1. **`ChapterSourceSync`** (plan §8): dedupe, `chapterNumber` parsing via a port of
    `ChapterRecognition`, delete-missing, and a background `@ModelActor` for batching.
    Today `LibraryManager.applyUpdate` adds and updates but never removes.
-3. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
+2. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
    fingerprint pinning. This is the entry point for the Mihon path.
-4. **Manga reader** (plan §4) with a stub `MangaSource` so the pager and webtoon viewers
+3. **Manga reader** (plan §4) with a stub `MangaSource` so the pager and webtoon viewers
    can be built before the transpiler exists.
-5. **Downloads** (plan §5).
+4. **Downloads** (plan §5).
+5. **Filter UI** on browse, now that `FilterState` exists.
 
