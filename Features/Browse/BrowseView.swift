@@ -1,97 +1,202 @@
 // BrowseView.swift
-// Main browse screen for discovering and managing source plugins.
+// Sources, split by kind: light novels and manga are separate catalogues.
+//
+// Novels come from the JS plugin registry, manga from installed extension
+// bundles, so the two lists have different sections and different empty states.
+// A segmented control switches between them in place, which is the native iOS
+// pattern for two peer lists.
 
 import SwiftUI
+
+/// Which catalogue the browse screen is showing.
+enum BrowseKind: String, CaseIterable, Identifiable {
+    case novels
+    case manga
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .novels: "Light Novels"
+        case .manga: "Manga"
+        }
+    }
+
+    var contentKind: ContentKind {
+        switch self {
+        case .novels: .novel
+        case .manga: .manga
+        }
+    }
+}
 
 struct BrowseView: View {
     @Environment(PluginManager.self) private var pluginManager
     @Environment(SourceManager.self) private var sourceManager
+
+    @AppStorage("browse.kind") private var kindRaw = BrowseKind.novels.rawValue
     @State private var searchText = ""
     @State private var selectedLanguage: String?
 
+    private var kind: BrowseKind {
+        BrowseKind(rawValue: kindRaw) ?? .novels
+    }
+
+    private var kindBinding: Binding<BrowseKind> {
+        Binding(
+            get: { BrowseKind(rawValue: kindRaw) ?? .novels },
+            set: { kindRaw = $0.rawValue }
+        )
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                if !installedPlugins.isEmpty {
-                    Section("Installed Sources") {
-                        ForEach(installedPlugins) { plugin in
-                            NavigationLink(value: plugin) {
-                                SourceCard(plugin: plugin, isInstalled: true) {
-                                    pluginManager.uninstallPlugin(id: plugin.id)
-                                }
-                            }
-                        }
-                    }
+            content
+                .navigationTitle("Browse")
+                .searchable(text: $searchText, prompt: searchPrompt)
+                .safeAreaInset(edge: .top, spacing: 0) { kindPicker }
+                .navigationDestination(for: PluginListItem.self) { plugin in
+                    SourceDetailView(
+                        sourceKey: SourceKey.make(kind: .novel, id: plugin.id),
+                        title: plugin.name
+                    )
                 }
-
-                if !extensionSources.isEmpty {
-                    Section("Extensions") {
-                        ForEach(extensionSources, id: \.key) { source in
+                .toolbar {
+                    if kind == .novels {
+                        ToolbarItem(placement: .primaryAction) {
                             NavigationLink {
-                                SourceDetailView(sourceKey: source.key, title: source.name)
+                                GlobalSearchView()
                             } label: {
-                                HStack(spacing: 12) {
-                                    SourceIconView(source: source, size: 30)
-                                    Text(source.name)
-                                }
+                                Label("Global Search", systemImage: "magnifyingglass")
                             }
                         }
                     }
                 }
-
-                if !pluginManager.availableLanguages.isEmpty {
-                    Section("Language") {
-                        languageFilterRow
+                .task { await loadPlugins() }
+                .refreshable { await loadPlugins(forceRefresh: true) }
+                .overlay {
+                    if kind == .novels && pluginManager.isLoading && pluginManager.plugins.isEmpty {
+                        LoadingView(message: "Fetching sources...")
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
                 }
+        }
+    }
 
-                Section("Available Sources") {
-                    ForEach(availablePlugins) { plugin in
-                        SourceCard(plugin: plugin, isInstalled: false) {
-                            Task {
-                                try? await pluginManager.installPlugin(id: plugin.id)
+    // MARK: - Kind picker
+
+    private var kindPicker: some View {
+        Picker("Catalogue", selection: kindBinding) {
+            ForEach(BrowseKind.allCases) { option in
+                Text(option.title).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
+    private var searchPrompt: String {
+        kind == .novels ? "Search novel sources" : "Search manga sources"
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        switch kind {
+        case .novels: novelSourcesList
+        case .manga: mangaSourcesList
+        }
+    }
+
+    private var novelSourcesList: some View {
+        List {
+            if !installedPlugins.isEmpty {
+                Section("Installed Sources") {
+                    ForEach(installedPlugins) { plugin in
+                        NavigationLink(value: plugin) {
+                            SourceCard(plugin: plugin, isInstalled: true) {
+                                pluginManager.uninstallPlugin(id: plugin.id)
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Browse")
-            .searchable(text: $searchText, prompt: "Search sources")
-            .navigationDestination(for: PluginListItem.self) { plugin in
-                SourceDetailView(
-                    sourceKey: SourceKey.make(kind: .novel, id: plugin.id),
-                    title: plugin.name
-                )
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    NavigationLink {
-                        GlobalSearchView()
-                    } label: {
-                        Label("Global Search", systemImage: "magnifyingglass")
-                    }
+
+            if !pluginManager.availableLanguages.isEmpty {
+                Section("Language") {
+                    languageFilterRow
                 }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
-            .task { await loadPlugins() }
-            .refreshable { await loadPlugins(forceRefresh: true) }
-            .overlay {
-                if pluginManager.isLoading && pluginManager.plugins.isEmpty {
-                    LoadingView(message: "Fetching sources...")
+
+            Section("Available Sources") {
+                ForEach(availablePlugins) { plugin in
+                    SourceCard(plugin: plugin, isInstalled: false) {
+                        Task {
+                            try? await pluginManager.installPlugin(id: plugin.id)
+                        }
+                    }
                 }
             }
         }
     }
 
+    private var mangaSourcesList: some View {
+        List {
+            if mangaSources.isEmpty {
+                Section {
+                    ContentUnavailableView(
+                        "No manga sources",
+                        systemImage: "books.vertical",
+                        description: Text("Install an extension bundle to read manga.")
+                    )
+                }
+            } else {
+                Section("Installed Extensions") {
+                    ForEach(mangaSources, id: \.key) { source in
+                        NavigationLink {
+                            SourceDetailView(sourceKey: source.key, title: source.name)
+                        } label: {
+                            mangaRow(source)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func mangaRow(_ source: any CatalogSource) -> some View {
+        HStack(spacing: 12) {
+            SourceIconView(source: source, size: 36)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(source.name)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if !source.lang.isEmpty {
+                        Text(source.lang.uppercased())
+                    }
+                    if !source.supportsLatest {
+                        Text("·")
+                        Text("Popular only")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
     // MARK: - Filtering
 
-    /// Everything that is not a JS novel plugin or a local import: bundled
-    /// sources and installed extension bundles.
-    private var extensionSources: [any CatalogSource] {
-        sourceManager.allSources.filter { source in
-            !SourceKey.isLN(source.key) && source.key != SourceKey.local
-        }
+    private var mangaSources: [any CatalogSource] {
+        let all = sourceManager.sources(of: .manga)
+        guard !searchText.isEmpty else { return all }
+        return all.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
     private var installedPlugins: [PluginListItem] {

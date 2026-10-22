@@ -398,3 +398,15 @@ Decisions:
   one's chapter is kept rather than the number disappearing entirely.
 - **Unnumbered chapters are never merged** — there is nothing to match them on.
 
+## Slice 14 — Browse splits by kind
+
+Sources for novels and manga are different catalogues (a JS plugin registry versus installed
+extension bundles), so the Browse screen now switches between them with a segmented control
+pinned under the navigation bar — the native iOS pattern for two peer lists.
+
+- **Light Novels**: installed sources, language filter, available sources, and global search.
+- **Manga**: installed extensions with their icons, language and "Popular only" capability.
+  Global search is hidden here because it searches novel sources; the manga side gets one
+  when the repository browser lands.
+- The choice is remembered (`browse.kind`), and search filters the visible catalogue.
+
