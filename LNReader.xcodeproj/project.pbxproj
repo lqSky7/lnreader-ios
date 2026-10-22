@@ -148,6 +148,8 @@
 		F950BF2E752CF657B8C0E55B /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3F1BA3EBA23C4DD838C9A2 /* HTTPClient.swift */; };
 		FA024401BCB08F7E6C64FBFE /* HistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9C09B8F93F66D136B578B /* HistoryRow.swift */; };
 		FD91FA952D879AFFD81F3ED3 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788EA87FDCBD419221019BB2 /* Constants.swift */; };
+		ABCD26890000000000000100 /* Services/Extensions/WebViewCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000100 /* Services/Extensions/WebViewCapture.swift */; };
+		ABCD26890000000000000104 /* Resources/allmanga.js in Resources */ = {isa = PBXBuildFile; fileRef = ABCD26880000000000000104 /* Resources/allmanga.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -290,6 +292,8 @@
 		FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSSettingsView.swift; sourceTree = "<group>"; };
 		FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassOverlay.swift; sourceTree = "<group>"; };
 		FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsView.swift; sourceTree = "<group>"; };
+		ABCD26880000000000000100 /* Services/Extensions/WebViewCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Extensions/WebViewCapture.swift; sourceTree = SOURCE_ROOT; };
+		ABCD26880000000000000104 /* Resources/allmanga.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Resources/allmanga.js; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -449,6 +453,8 @@
 		4E9A3C0519D5DA61AAFF8372 /* More */ = {
 			isa = PBXGroup;
 			children = (
+				ABCD26880000000000000100 /* Services/Extensions/WebViewCapture.swift */,
+				ABCD26880000000000000104 /* Resources/allmanga.js */,
 				ABCD26880000000000000003 /* Features/More/OfflineLibraryView.swift */,
 				ABCD26880000000000000002 /* Services/LibraryMaintenance.swift */,
 				ABCD26880000000000000001 /* Services/LibraryBackup.swift */,
@@ -737,6 +743,7 @@
 				0518E7BC7FF5DA15E6F1CB52 /* AppIcon.icon in Resources */,
 				DF964DDA1C4FB131E160580E /* Assets.xcassets in Resources */,
 				E5D4E8732498C5D9250BD862 /* Resources/mangafire.js in Resources */,
+				ABCD26890000000000000104 /* Resources/allmanga.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -747,6 +754,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ABCD26890000000000000100 /* Services/Extensions/WebViewCapture.swift in Sources */,
 				ABCD26890000000000000004 /* Services/OfflineChapters.swift in Sources */,
 				ABCD26890000000000000003 /* Features/More/OfflineLibraryView.swift in Sources */,
 				ABCD26890000000000000002 /* Services/LibraryMaintenance.swift in Sources */,

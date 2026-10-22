@@ -29,6 +29,7 @@ xcrun swiftc -parse-as-library -swift-version 5 -disable-sandbox \
   Services/Network/Interceptors.swift \
   Services/Network/HTTPClient.swift \
   Services/Extensions/ExtensionContract.swift \
+  Services/Extensions/WebViewCapture.swift \
   Services/Extensions/JSExtensionHost.swift \
   Services/Extensions/JSBundleMangaSource.swift \
   Utilities/DateParsing.swift \

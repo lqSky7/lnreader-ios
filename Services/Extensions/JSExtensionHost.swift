@@ -66,73 +66,89 @@ final class JSExtensionHost: @unchecked Sendable {
         else {
             throw HostError.missingExtension
         }
+
+        name = extensionObject.objectForKeyedSubscript("name")?.toString() ?? "Extension"
+        language = extensionObject.objectForKeyedSubscript("lang")?.toString() ?? ""
+        let latest = extensionObject.objectForKeyedSubscript("latest")
+        supportsLatest = latest != nil && !(latest?.isUndefined ?? true)
     }
 
     // MARK: - Metadata
 
+    // Read once at load. The UI asks for these on the main thread, and the host
+    // queue can be held for seconds by a slow call, so they must not touch it.
+
     /// `extension.name`, or a fallback when the bundle omits it.
-    var name: String {
-        queue.sync {
-            context.objectForKeyedSubscript("extension")?
-                .objectForKeyedSubscript("name")?.toString() ?? "Extension"
-        }
-    }
-
-    var language: String {
-        queue.sync {
-            context.objectForKeyedSubscript("extension")?
-                .objectForKeyedSubscript("lang")?.toString() ?? ""
-        }
-    }
-
-    var supportsLatest: Bool {
-        queue.sync {
-            guard let object = context.objectForKeyedSubscript("extension") else { return false }
-            let latest = object.objectForKeyedSubscript("latest")
-            return latest != nil && !(latest?.isUndefined ?? true)
-        }
-    }
+    private(set) var name = "Extension"
+    private(set) var language = ""
+    private(set) var supportsLatest = false
 
     // MARK: - Calls
 
     /// Invoke a bundle method and decode its JSON result.
+    ///
+    /// Blocks the caller until the host queue has run it. Fine for tests; app code
+    /// should use `callAsync`.
     func call(_ method: String, _ arguments: [Any] = []) throws -> Any {
-        try queue.sync {
-            // Handles are only valid for the duration of one call.
-            nodes.removeAll(keepingCapacity: true)
-            nextHandle = 1
+        try queue.sync { try callOnQueue(method, arguments) }
+    }
 
-            guard let object = context.objectForKeyedSubscript("extension") else {
-                throw HostError.missingExtension
+    /// Same, without holding the caller's thread.
+    ///
+    /// A call can run for many seconds (rate limits, retries, a web view waiting
+    /// for a person). Parking Swift's cooperative threads on that starves every
+    /// other `await` in the app, so the wait is a continuation and only the
+    /// host's own queue thread is occupied.
+    func callAsync(_ method: String, _ arguments: [Any] = []) async throws -> Any {
+        let box = ArgumentBox(arguments)
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                do {
+                    continuation.resume(returning: try self.callOnQueue(method, box.value))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
-            let function = object.objectForKeyedSubscript(method)
-            guard let function, !function.isUndefined else {
-                throw HostError.missingMethod(method)
-            }
+        }
+    }
 
-            let value = function.call(withArguments: arguments)
-            if let exception = context.exception {
-                context.exception = nil
-                throw HostError.script(exception.toString() ?? "unknown")
-            }
-            guard let value, !value.isUndefined, !value.isNull else {
-                throw HostError.parse("\(method) returned nothing")
-            }
+    private func callOnQueue(_ method: String, _ arguments: [Any]) throws -> Any {
+        // Handles are only valid for the duration of one call.
+        nodes.removeAll(keepingCapacity: true)
+        nextHandle = 1
 
-            // Round-trip through JSON so Swift never has to interpret JSValues.
-            guard let stringify = context.objectForKeyedSubscript("JSON")?
-                .objectForKeyedSubscript("stringify"),
-                  let json = stringify.call(withArguments: [value])?.toString(),
-                  let data = json.data(using: .utf8)
-            else {
-                throw HostError.parse("\(method) returned a value that is not JSON-serialisable")
-            }
+        guard let object = context.objectForKeyedSubscript("extension") else {
+            throw HostError.missingExtension
+        }
+        let function = object.objectForKeyedSubscript(method)
+        guard let function, !function.isUndefined else {
+            throw HostError.missingMethod(method)
+        }
 
-            do {
-                return try JSONSerialization.jsonObject(with: data, options: [.allowFragments])
-            } catch {
-                throw HostError.parse(String(describing: error))
-            }
+        let started = Date()
+        let value = function.call(withArguments: arguments)
+        print("⏱ \(sourceKey).\(method) took \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
+        if let exception = context.exception {
+            context.exception = nil
+            throw HostError.script(exception.toString() ?? "unknown")
+        }
+        guard let value, !value.isUndefined, !value.isNull else {
+            throw HostError.parse("\(method) returned nothing")
+        }
+
+        // Round-trip through JSON so Swift never has to interpret JSValues.
+        guard let stringify = context.objectForKeyedSubscript("JSON")?
+            .objectForKeyedSubscript("stringify"),
+              let json = stringify.call(withArguments: [value])?.toString(),
+              let data = json.data(using: .utf8)
+        else {
+            throw HostError.parse("\(method) returned a value that is not JSON-serialisable")
+        }
+
+        do {
+            return try JSONSerialization.jsonObject(with: data, options: [.allowFragments])
+        } catch {
+            throw HostError.parse(String(describing: error))
         }
     }
 
@@ -164,6 +180,16 @@ final class JSExtensionHost: @unchecked Sendable {
             self?.attribute(handle: handle, name: name) ?? ""
         }
 
+        let sleep: @convention(block) (Double) -> Void = { milliseconds in
+            // Capped so a runaway bundle cannot park the host queue.
+            Thread.sleep(forTimeInterval: min(max(milliseconds, 0), 15_000) / 1000)
+        }
+        let webview: @convention(block) (String) -> String = { options in
+            WebViewCapture.captureBlocking(optionsJSON: options)
+        }
+
+        context.setObject(sleep, forKeyedSubscript: "__nativeSleep" as NSString)
+        context.setObject(webview, forKeyedSubscript: "__nativeWebView" as NSString)
         context.setObject(get, forKeyedSubscript: "__nativeGet" as NSString)
         context.setObject(post, forKeyedSubscript: "__nativePost" as NSString)
         context.setObject(parse, forKeyedSubscript: "__nativeParse" as NSString)
@@ -192,6 +218,7 @@ final class JSExtensionHost: @unchecked Sendable {
 
         let semaphore = DispatchSemaphore(value: 0)
         let box = ResultBox()
+        let began = Date()
 
         Task.detached(priority: .userInitiated) { [client, sourceKey] in
             defer { semaphore.signal() }
@@ -213,7 +240,11 @@ final class JSExtensionHost: @unchecked Sendable {
             }
         }
 
-        if semaphore.wait(timeout: .now() + 45) == .timedOut {
+        let timedOut = semaphore.wait(timeout: .now() + 45) == .timedOut
+        let outcome = timedOut ? "timed out"
+            : (box.value?["status"].map { "HTTP \($0)" } ?? "error: \(box.value?["error"] ?? "none")")
+        print("🌐 \(method) \(url.prefix(80)) → \(outcome) in \(String(format: "%.1f", Date().timeIntervalSince(began)))s")
+        if timedOut {
             return Self.failure("request timed out")
         }
         return Self.encode(box.value ?? ["error": "no response"])
@@ -275,6 +306,13 @@ final class JSExtensionHost: @unchecked Sendable {
     private static func failure(_ message: String) -> String {
         "{\"error\":\"\(message.replacingOccurrences(of: "\"", with: "'"))\"}"
     }
+}
+
+/// Moves call arguments onto the host queue. They are plain JSON values built
+/// by the caller and not touched afterwards.
+private final class ArgumentBox: @unchecked Sendable {
+    let value: [Any]
+    init(_ value: [Any]) { self.value = value }
 }
 
 /// Carries the response between the detached task and the waiting JS thread.

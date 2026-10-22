@@ -26,6 +26,7 @@ targets:
       - path: Extensions
       - path: Features
       - path: Models
+      - path: Resources
       - path: Services
       - path: Utilities
       - path: Assets.xcassets

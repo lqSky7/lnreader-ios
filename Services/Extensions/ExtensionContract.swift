@@ -58,6 +58,10 @@ struct ExtensionManifest: Identifiable, Hashable, Sendable {
 ///   `{ status, url, body }` or `{ error }`.
 /// - `dom.parse(html)` → handle, `dom.select(handle, css)` → handles,
 ///   `dom.text/html/attr(handle, …)`.
+/// - `sleep(ms)` blocks the JS thread; for rate limits and retry back-off.
+/// - `webview.capture(options)` → `{ message }` or `{ error }`. Loads a page in
+///   a real browser engine and returns the first string the page posts through
+///   `window.__lnrPost`. Options are `WebViewCaptureOptions`.
 ///
 /// Anything a bundle needs beyond that (base64, crypto) it must implement
 /// itself; the host deliberately keeps the surface small.
@@ -88,6 +92,12 @@ enum ExtensionContract {
       text: function (handle) { return __nativeText(handle); },
       html: function (handle) { return __nativeHTML(handle); },
       attr: function (handle, name) { return __nativeAttr(handle, name); }
+    };
+    var sleep = function (ms) { __nativeSleep(ms); };
+    var webview = {
+      capture: function (options) {
+        return JSON.parse(__nativeWebView(JSON.stringify(options)));
+      }
     };
     """
 }

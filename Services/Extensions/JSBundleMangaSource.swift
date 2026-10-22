@@ -29,20 +29,20 @@ final class JSBundleMangaSource: MangaSource {
     var supportsLatest: Bool { host.supportsLatest }
 
     func popular(page: Int, filters: FilterState) async throws -> EntriesPage {
-        try entriesPage(from: host.call("popular", [page]))
+        try entriesPage(from: await host.callAsync("popular", [page]))
     }
 
     func latest(page: Int, filters: FilterState) async throws -> EntriesPage {
         guard supportsLatest else { return try await popular(page: page, filters: filters) }
-        return try entriesPage(from: host.call("latest", [page]))
+        return try entriesPage(from: await host.callAsync("latest", [page]))
     }
 
     func search(query: String, page: Int, filters: FilterState) async throws -> EntriesPage {
-        try entriesPage(from: host.call("search", [query, page]))
+        try entriesPage(from: await host.callAsync("search", [query, page]))
     }
 
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
-        let raw = try host.call("details", [entry.url])
+        let raw = try await host.callAsync("details", [entry.url])
         guard let mapped = Self.entry(from: raw, sourceKey: key, kind: kind) else {
             throw SourceError.parseFailed("details returned no entry for \(entry.url)")
         }
@@ -50,7 +50,7 @@ final class JSBundleMangaSource: MangaSource {
     }
 
     func chapters(_ entry: SourceEntry) async throws -> [SourceChapter] {
-        let raw = try host.call("chapters", [entry.url])
+        let raw = try await host.callAsync("chapters", [entry.url])
         guard let items = raw as? [[String: Any]] else { return [] }
         return items.compactMap(Self.chapter(from:))
     }
@@ -58,7 +58,7 @@ final class JSBundleMangaSource: MangaSource {
     // MARK: MangaSource
 
     func pages(_ chapter: SourceChapter) async throws -> [SourcePage] {
-        let raw = try host.call("pages", [chapter.url])
+        let raw = try await host.callAsync("pages", [chapter.url])
         guard let items = raw as? [[String: Any]] else { return [] }
         return items.enumerated().compactMap { index, item in
             guard let url = item["url"] as? String, !url.isEmpty else { return nil }
@@ -98,9 +98,19 @@ final class JSBundleMangaSource: MangaSource {
             author: object["author"] as? String,
             artist: object["artist"] as? String,
             description: object["description"] as? String,
-            genres: object["genres"] as? [String] ?? [],
+            genres: Self.uniqueGenres(object["genres"] as? [String] ?? []),
             status: EntryStatus.parse(object["status"] as? String)
         )
+    }
+
+    /// Genres are shown in a `ForEach` keyed by their text, so a source that
+    /// repeats one would make SwiftUI misbehave.
+    private static func uniqueGenres(_ genres: [String]) -> [String] {
+        var seen = Set<String>()
+        return genres.compactMap { genre in
+            let trimmed = genre.trimmingCharacters(in: .whitespaces)
+            return trimmed.isEmpty || !seen.insert(trimmed.lowercased()).inserted ? nil : trimmed
+        }
     }
 
     static func chapter(from object: [String: Any]) -> SourceChapter? {

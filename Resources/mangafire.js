@@ -190,10 +190,20 @@ function pageOf(response, page) {
   };
 }
 
-/// `/title/728q1-overgeared` -> `728q1`
+/// Entry URLs come in two shapes. The API's own, `/title/728q1-overgeared`, and
+/// the site's earlier `/manga/overgeared.728q1`, which is what Mihon backups
+/// made before the API still hold. Both resolve to `728q1`.
+function isLegacy(url) {
+  return /^\/manga\//.test(String(url));
+}
+
 function hidOf(url) {
-  var last = String(url).split("/").filter(function (s) { return s.length > 0; }).pop() || "";
-  return last.split("-")[0];
+  var segments = String(url).split("/").filter(function (s) { return s.length > 0; });
+  if (isLegacy(url)) {
+    var slug = segments[1] || "";
+    return slug.substring(slug.lastIndexOf(".") + 1);
+  }
+  return (segments.pop() || "").split("-")[0];
 }
 
 // MARK: - Extension
@@ -245,6 +255,8 @@ var extension = {
 
   chapters: function (url) {
     var hid = hidOf(url);
+    var legacy = isLegacy(url);
+    var prefix = "/manga/" + (String(url).split("/")[2] || "");
     var out = [];
     var page = 1;
     var lastPage = 1;
@@ -261,7 +273,10 @@ var extension = {
       for (var i = 0; i < items.length; i++) {
         var item = items[i];
         out.push({
-          url: "/chapter/" + item.id,
+          // An entry saved under the old URL shape keeps old-shape chapter URLs,
+          // so read state restored from a backup still lines up.
+          url: legacy ? prefix + "/" + item.id + "-chapter-" + item.number + "-" + LANG
+                      : "/chapter/" + item.id,
           name: item.name && item.name.length > 0 ? item.name : ("Chapter " + item.number),
           number: item.number,
           scanlator: item.type,
