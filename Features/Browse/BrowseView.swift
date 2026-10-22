@@ -5,6 +5,7 @@ import SwiftUI
 
 struct BrowseView: View {
     @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @State private var searchText = ""
     @State private var selectedLanguage: String?
 
@@ -18,6 +19,18 @@ struct BrowseView: View {
                                 SourceCard(plugin: plugin, isInstalled: true) {
                                     pluginManager.uninstallPlugin(id: plugin.id)
                                 }
+                            }
+                        }
+                    }
+                }
+
+                if !builtInSources.isEmpty {
+                    Section("Built-in Sources") {
+                        ForEach(builtInSources, id: \.key) { source in
+                            NavigationLink {
+                                SourceDetailView(sourceKey: source.key, title: source.name)
+                            } label: {
+                                Label(source.name, systemImage: source.kind.symbolName)
                             }
                         }
                     }
@@ -44,7 +57,10 @@ struct BrowseView: View {
             .navigationTitle("Browse")
             .searchable(text: $searchText, prompt: "Search sources")
             .navigationDestination(for: PluginListItem.self) { plugin in
-                SourceDetailView(plugin: plugin)
+                SourceDetailView(
+                    sourceKey: SourceKey.make(kind: .novel, id: plugin.id),
+                    title: plugin.name
+                )
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -66,6 +82,12 @@ struct BrowseView: View {
     }
 
     // MARK: - Filtering
+
+    /// Sources compiled into the app (plan §3.5). Installed extensions are
+    /// listed above; these are always present.
+    private var builtInSources: [any CatalogSource] {
+        sourceManager.allSources.filter { SourceKey.isBuiltin($0.key) }
+    }
 
     private var installedPlugins: [PluginListItem] {
         pluginManager.installedPluginsList.filtered(

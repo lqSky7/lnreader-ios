@@ -152,6 +152,32 @@ final class LibraryManager {
         try? context.save()
     }
 
+    /// Record a manga page turn.
+    ///
+    /// Separate from `recordReadingPosition` because a manga chapter is measured
+    /// in pages, not paragraphs, and "finished" means the reader reached the
+    /// last page rather than a percentage threshold.
+    func recordMangaProgress(
+        chapter: Chapter,
+        pageIndex: Int,
+        pageCount: Int,
+        context: ModelContext
+    ) {
+        let update = MangaProgress.update(pageIndex: pageIndex, pageCount: pageCount)
+
+        chapter.lastPageRead = update.lastPageRead
+        chapter.pagesLeft = update.pagesLeft
+        chapter.progress = update.progress
+        if update.finished {
+            chapter.read = true
+        }
+
+        chapter.history?.lastRead = .now
+        chapter.entry?.lastReadAt = .now
+
+        try? context.save()
+    }
+
     // MARK: - Network state
 
     /// Whether the current connection is cellular.

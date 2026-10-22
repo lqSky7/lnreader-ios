@@ -124,6 +124,9 @@ struct ChapterDisplay: Identifiable, Hashable {
     let chapterNumber: Double?
     let sourceKey: String
     let entryURL: String?
+    /// Which reader opens this chapter. Needed because a browse result has no
+    /// stored entry to ask.
+    let kind: ContentKind
 
     init(chapter: Chapter) {
         self.id = chapter.url
@@ -139,9 +142,16 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
         self.sourceKey = chapter.entry?.sourceKey ?? ""
         self.entryURL = chapter.entry?.url
+        self.kind = chapter.entry?.kind ?? .novel
     }
 
-    init(sourceChapter: SourceChapter, position: Int, sourceKey: String = "", entryURL: String? = nil) {
+    init(
+        sourceChapter: SourceChapter,
+        position: Int,
+        sourceKey: String = "",
+        entryURL: String? = nil,
+        kind: ContentKind = .novel
+    ) {
         self.id = sourceChapter.url
         self.name = sourceChapter.name
         self.path = sourceChapter.url
@@ -155,6 +165,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.chapterNumber = sourceChapter.chapterNumber >= 0 ? sourceChapter.chapterNumber : nil
         self.sourceKey = sourceKey
         self.entryURL = entryURL
+        self.kind = kind
     }
 }
 

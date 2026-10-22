@@ -11,8 +11,21 @@ enum SourceKey {
     /// Reserved key for books imported from the Files app.
     static let local = "local"
 
+    /// Prefix for sources compiled into the app rather than installed
+    /// (plan §3.5). Kept separate from `ln:`/`mihon:` so a built-in is never
+    /// mistaken for an installable extension.
+    static let builtinPrefix = "builtin"
+
     static func make(kind: ContentKind, id: String) -> String {
         "\(kind.sourceKeyPrefix):\(id)"
+    }
+
+    static func makeBuiltin(id: String) -> String {
+        "\(builtinPrefix):\(id)"
+    }
+
+    static func isBuiltin(_ key: String) -> Bool {
+        key.hasPrefix("\(builtinPrefix):")
     }
 
     /// The id part of a key. Returns the key unchanged when it has no prefix,

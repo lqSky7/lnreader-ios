@@ -28,11 +28,12 @@ struct HistoryView: View {
                                 ForEach(entries) { item in
                                     if let chapter = item.chapter {
                                         NavigationLink {
-                                            ReaderView(
-                                                chapterPath: chapter.url,
-                                                chapterName: chapter.name,
+                                            ChapterReader(
                                                 sourceKey: chapter.entry?.sourceKey ?? "",
-                                                entryURL: chapter.entry?.url
+                                                entryURL: chapter.entry?.url,
+                                                kind: chapter.entry?.kind ?? .novel,
+                                                chapterURL: chapter.url,
+                                                chapterName: chapter.name
                                             )
                                             .id(chapter.url)
                                             .bookZoom(from: item.persistentModelID, in: chapterTransitions)

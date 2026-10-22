@@ -16,11 +16,12 @@ struct ChapterRow: View {
 
     var body: some View {
         NavigationLink {
-            ReaderView(
-                chapterPath: chapter.path,
-                chapterName: chapter.name,
+            ChapterReader(
                 sourceKey: sourceKey,
-                entryURL: entry?.url ?? chapter.entryURL
+                entryURL: entry?.url ?? chapter.entryURL,
+                kind: entry?.kind ?? chapter.kind,
+                chapterURL: chapter.path,
+                chapterName: chapter.name
             )
             .id(chapter.path)
             .bookZoom(from: chapter.path, in: chapterTransition)

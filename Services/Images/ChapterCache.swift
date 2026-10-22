@@ -14,6 +14,10 @@ import Foundation
 /// that could drift from the contents of the directory.
 actor ChapterCache {
 
+    /// Process-wide cache. One instance so the pager, the webtoon strip and
+    /// downloads share both the bytes and the size accounting.
+    static let shared = ChapterCache()
+
     /// Directory holding the cached images.
     private let directory: URL
     /// Trim threshold in bytes.

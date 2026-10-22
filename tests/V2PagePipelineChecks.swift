@@ -16,8 +16,13 @@ struct V2PagePipelineChecks {
         checkPrefetchOrder()
         checkPrefetchEdges()
         checkNextChapterTrigger()
-        print("PASS: chapter cache (round-trip, LRU eviction, hit refresh, removal) "
-            + "and page prefetch (order, clamping, next-chapter trigger)")
+        try await checkLoaderDeduplicates()
+        try await checkLoaderServesFromCache()
+        try await checkLoaderReadsFileURLs()
+        checkMangaProgress()
+        print("PASS: chapter cache (round-trip, LRU eviction, hit refresh, removal), "
+            + "page prefetch (order, clamping, next-chapter trigger), "
+            + "loader (de-duplication, cache hits, file URLs) and manga progress")
     }
 
     // MARK: - Cache
@@ -157,5 +162,118 @@ struct V2PagePipelineChecks {
         precondition(PagePrefetchPlan.shouldPreloadNextChapter(current: 15, pageCount: 20))
         precondition(PagePrefetchPlan.shouldPreloadNextChapter(current: 19, pageCount: 20))
         precondition(!PagePrefetchPlan.shouldPreloadNextChapter(current: 0, pageCount: 0))
+    }
+
+    // MARK: - Loader
+
+    /// Counts fetches across concurrent callers.
+    private final class FetchCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+
+        func increment() {
+            lock.lock()
+            value += 1
+            lock.unlock()
+        }
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
+    }
+
+    private static func checkLoaderDeduplicates() async throws {
+        let (cache, directory) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let counter = FetchCounter()
+        let loader = PageLoader(cache: cache, fetcher: { page, _ in
+            counter.increment()
+            try await Task.sleep(for: .milliseconds(60))
+            return Data(repeating: 4, count: 128)
+        })
+
+        let page = SourcePage(index: 0, url: "https://cdn.example.com/dupe.jpg")
+
+        // Both callers ask for the same page at the same time.
+        async let first = loader.image(for: page, sourceKey: "builtin:sample")
+        async let second = loader.image(for: page, sourceKey: "builtin:sample")
+        let a = try await first
+        let b = try await second
+
+        precondition(a == b, "both callers get the same bytes")
+        precondition(counter.count == 1, "concurrent requests collapse into one fetch, got \(counter.count)")
+    }
+
+    private static func checkLoaderServesFromCache() async throws {
+        let (cache, directory) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let counter = FetchCounter()
+        let loader = PageLoader(cache: cache, fetcher: { _, _ in
+            counter.increment()
+            return Data(repeating: 5, count: 64)
+        })
+
+        let page = SourcePage(index: 1, url: "https://cdn.example.com/once.jpg")
+        _ = try await loader.image(for: page, sourceKey: "builtin:sample")
+        _ = try await loader.image(for: page, sourceKey: "builtin:sample")
+
+        precondition(counter.count == 1, "second load must come from the cache")
+        let cached = await cache.contains(page.url)
+        precondition(cached)
+    }
+
+    private static func checkLoaderReadsFileURLs() async throws {
+        let (cache, directory) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // A file:// page must never hit the fetcher.
+        let file = directory.appending(path: "page.png")
+        let payload = Data(repeating: 9, count: 32)
+        try payload.write(to: file)
+
+        let counter = FetchCounter()
+        let loader = PageLoader(cache: cache, fetcher: { _, _ in
+            counter.increment()
+            return Data()
+        })
+
+        let page = SourcePage(index: 0, url: file.absoluteString)
+        let data = try await loader.image(for: page, sourceKey: "builtin:sample")
+
+        precondition(data == payload, "file pages are read from disk")
+        precondition(counter.count == 0, "file pages must not go to the network")
+    }
+
+    // MARK: - Manga progress
+
+    private static func checkMangaProgress() {
+        let first = MangaProgress.update(pageIndex: 0, pageCount: 10)
+        precondition(first.progress == 10)
+        precondition(first.pagesLeft == 9)
+        precondition(!first.finished)
+        precondition(first.lastPageRead == 0)
+
+        let middle = MangaProgress.update(pageIndex: 4, pageCount: 10)
+        precondition(middle.progress == 50)
+        precondition(middle.pagesLeft == 5)
+
+        let last = MangaProgress.update(pageIndex: 9, pageCount: 10)
+        precondition(last.progress == 100)
+        precondition(last.pagesLeft == 0)
+        precondition(last.finished, "only the last page finishes a chapter")
+
+        // Out-of-range and empty chapters must not trap or report success.
+        let clamped = MangaProgress.update(pageIndex: 99, pageCount: 10)
+        precondition(clamped.lastPageRead == 9)
+        precondition(clamped.finished)
+
+        let empty = MangaProgress.update(pageIndex: 3, pageCount: 0)
+        precondition(empty.progress == 0)
+        precondition(!empty.finished)
+        precondition(empty.pagesLeft == 0)
     }
 }

@@ -9,7 +9,8 @@ import SwiftUI
 
 struct SourceDetailView: View {
     @Namespace private var bookTransitions
-    let plugin: PluginListItem
+    let sourceKey: String
+    let title: String
     @Environment(SourceManager.self) private var sourceManager
 
     @State private var entries: [SourceEntry] = []
@@ -23,12 +24,9 @@ struct SourceDetailView: View {
         [GridItem(.adaptive(minimum: LayoutConstants.gridItemMinSize), spacing: 12)]
     }
 
-    private var sourceKey: String {
-        SourceKey.make(kind: .novel, id: plugin.id)
-    }
-
-    private var source: (any NovelSource)? {
-        sourceManager.novelSource(forKey: sourceKey)
+    /// `CatalogSource`, not `NovelSource`: browse is identical for both kinds.
+    private var source: (any CatalogSource)? {
+        sourceManager.source(forKey: sourceKey)
     }
 
     var body: some View {
@@ -64,8 +62,8 @@ struct SourceDetailView: View {
             }
             .padding(.horizontal)
         }
-        .navigationTitle(plugin.name)
-        .searchable(text: $searchText, prompt: "Search \(plugin.name)")
+        .navigationTitle(title)
+        .searchable(text: $searchText, prompt: "Search \(title)")
         .onSubmit(of: .search) {
             Task { await search() }
         }
@@ -82,7 +80,7 @@ struct SourceDetailView: View {
         }
         .task { await loadPopular() }
         .toolbar {
-            if let site = CommentSite.site(for: plugin.id) {
+            if let site = CommentSite.site(for: SourceKey.identifier(from: sourceKey)) {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink(destination: NovelFireLoginView(onLoginSuccess: {
                         Task { await loadPopular() }

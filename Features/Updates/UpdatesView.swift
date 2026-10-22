@@ -36,11 +36,12 @@ struct UpdatesView: View {
                             Section(date) {
                                 ForEach(chapters) { chapter in
                                     NavigationLink {
-                                        ReaderView(
-                                            chapterPath: chapter.url,
-                                            chapterName: chapter.name,
+                                        ChapterReader(
                                             sourceKey: chapter.entry?.sourceKey ?? "",
-                                            entryURL: chapter.entry?.url
+                                            entryURL: chapter.entry?.url,
+                                            kind: chapter.entry?.kind ?? .novel,
+                                            chapterURL: chapter.url,
+                                            chapterName: chapter.name
                                         )
                                         .id(chapter.url)
                                         .bookZoom(from: chapter.persistentModelID, in: chapterTransitions)

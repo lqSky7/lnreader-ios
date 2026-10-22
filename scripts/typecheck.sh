@@ -23,6 +23,6 @@ MODDIR=${MODDIR:-/tmp/lnr-mod}
 
 FILES=$(find LNReaderApp.swift ContentView.swift Components Design Extensions Features Models Services Utilities -name "*.swift")
 xcrun swiftc -typecheck -disable-sandbox \
-  -target arm64-apple-ios26.0 -sdk "$SDK" -swift-version 5 -enable-bare-slash-regex \
+  -target arm64-apple-ios26.0 -sdk "$SDK" -swift-version 5 -enable-bare-slash-regex -D DEBUG \
   -I "$MODDIR" -module-name LNReader \
   $FILES

@@ -44,6 +44,11 @@ struct ContentView: View {
             // whenever one is installed or removed.
             pluginManager.onInstalledSourcesChanged = { sourceManager.sync(with: pluginManager) }
             await pluginManager.restoreInstalledPlugins()
+            #if DEBUG
+            // Development aid: an offline source that serves generated pages so
+            // the manga reader can be exercised before extensions exist.
+            sourceManager.register(SampleMangaSource())
+            #endif
             sourceManager.sync(with: pluginManager)
             // The HTTP stack gets its Cloudflare solver before any source is browsed.
             await HTTPClient.shared.setCloudflareSolver(WebKitCloudflareSolver())

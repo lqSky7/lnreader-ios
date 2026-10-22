@@ -15,7 +15,7 @@ touches `default.store`, so the old data stays recoverable on disk.
 | 0a. Bridge build | `LNBackupSchema`, `LegacyBackupConverter`, "Export for v2" | Deferred with migration |
 | 0b. v2 foundations | Versioned schema, new store, source protocols, HTTP client, repo/trust | **Landed** |
 | 1. Extension spike | `lnreader-source-compat`, Kotlin/JS build, JSC threads, parse benchmarks | **Path chosen: Kotlin/JS.** Spike itself not started |
-| 2. Browse + reader MVP | Repo UI, manga browse, entry detail, pager + webtoon, `PageLoader` | **Browse + detail on v2**; manga reader not started |
+| 2. Browse + reader MVP | Repo UI, manga browse, entry detail, pager + webtoon, `PageLoader` | **Pager + webtoon landed**; repo UI pending |
 | 3. Downloads | Unified manager, CBZ/folder, ComicInfo, background continuation | Not started |
 | 4. E2E backup + cloud | `.lnbk`, Keychain key, blob endpoints | Not started |
 | 5. AniList | Tracker framework, auto-update, offline queue | Not started |
@@ -217,16 +217,59 @@ Notes:
 - The check caught a real accounting bug: the size was measured *after* writing the new
   file, so every store double-counted and the cache trimmed one file too early.
 
-## Slice 6 — next
+## Slice 6 — manga reader (landed)
 
-1. **Manga reader UI** (plan §4): `UICollectionView` pager and webtoon viewers, driven by
-   `PagePrefetchPlan`, with `MangaSource` behind a stub source for now.
-2. **`PageLoader`** on top of `ChapterCache`: priority queue, lazy `imageURL` resolution,
-   ImageIO downsampling and tall-page tiling.
-3. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
+| File | What it is |
+|---|---|
+| `Features/MangaReader/MangaReaderView.swift` | Paged or continuous reader, page indicator, chapter navigation, tap-to-hide controls |
+| `Features/MangaReader/MangaPageView.swift` | One page: own load task, own failure state, retry, off-main decoding |
+| `Features/MangaReader/MangaReadingMode.swift` | Paged / webtoon, plus LTR / RTL for paged mode |
+| `Features/MangaReader/MangaProgress.swift` | Page index → progress / pagesLeft / finished, pure |
+| `Features/Reader/ChapterReader.swift` | Routes a chapter to the novel reader or the manga reader by kind |
+| `Services/Images/PageLoader.swift` | Cache → in-flight de-duplication → fetch; `file://` pages read from disk |
+| `Services/Sources/SampleMangaSource.swift` | DEBUG-only built-in source with generated pages, so the reader is testable offline |
+
+### How to try it on device
+
+1. Build and run (Debug).
+2. **Browse → Built-in Sources → Sample Manga (offline) → Aurora Drift.**
+3. Tap **Add to Library** on the detail screen, then open a chapter.
+4. Tap the page to show/hide controls; the menu switches **Paged / Webtoon** and, in
+   paged mode, **Left to right / Right to left**.
+5. Progress is saved per page; finishing the last page marks the chapter read, and
+   History / Updates show it.
+
+The sample source is compiled out of Release builds. It exists so the reader, cache and
+progress can be exercised before the Kotlin/JS extensions land; the same code paths run
+against a real `MangaSource` once one is installed.
+
+### Design notes
+
+- **SwiftUI paging, not `UICollectionView` — for now.** `TabView(.page)` plus a
+  `LazyVStack` covers both layouts with a fraction of the code. The plan calls for
+  `UICollectionView` viewers because double-page spreads, split-wide pages and tiled
+  decoding of very tall images need it; that swap is contained to `MangaReaderView` and
+  `MangaPageView`, and `PagePrefetchPlan` already gives the order either one needs.
+- **Decoding is off the main actor.** A page is a few megabytes compressed; decoding it
+  inline stalls scrolling.
+- **RTL is `layoutDirection`.** SwiftUI's page view reverses its swipe handling from the
+  environment, so no index arithmetic is needed.
+- **`file://` pages skip the network entirely**, which is how local books, CBZ archives
+  and the sample source are served by the same loader.
+
+### Project file
+
+`LNReader.xcodeproj` lists sources individually, so the new files were added to the target
+directly (verified: 112 files on disk, 112 compiled, no stale references). `project.yml`
+remains the source of truth — `xcodegen generate` reproduces the same membership.
+
+## Slice 7 — next
+
+1. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
    fingerprint pinning — the entry point for the Mihon path.
-4. **Downloads** (plan §5).
-5. **Library update scheduling** (plan §8): `BGAppRefreshTask`, per-entry restrictions,
+2. **`UICollectionView` viewers** with double-page/split-wide layouts and tiled decoding
+   for very tall pages, replacing the SwiftUI pager.
+3. **Downloads** (plan §5), reusing `PageLoader` and `ChapterCache`.
+4. **Library update scheduling** (plan §8): `BGAppRefreshTask`, per-entry restrictions,
    batching through a background `@ModelActor`.
-6. **Filter UI** on browse, now that `FilterState` exists.
-
+5. **Filter UI** on browse, now that `FilterState` exists.

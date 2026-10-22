@@ -130,11 +130,12 @@ struct NovelDetailView: View {
             )
         }
         .navigationDestination(item: $navigateToChapter) { chapter in
-            ReaderView(
-                chapterPath: chapter.path,
-                chapterName: chapter.name,
+            ChapterReader(
                 sourceKey: sourceKey,
-                entryURL: localEntry?.url ?? sourceEntry?.url
+                entryURL: localEntry?.url ?? sourceEntry?.url,
+                kind: localEntry?.kind ?? sourceEntry?.kind ?? .novel,
+                chapterURL: chapter.path,
+                chapterName: chapter.name
             )
             .id(chapter.path)
             .bookZoom(from: "continue", in: chapterTransition)
@@ -190,8 +191,15 @@ struct NovelDetailView: View {
                 }
             }
         } else {
+            let kind = localEntry?.kind ?? sourceEntry?.kind ?? .novel
             let mapped = sourceChapters.enumerated().map {
-                ChapterDisplay(sourceChapter: $1, position: $0, sourceKey: sourceKey, entryURL: sourceEntry?.url)
+                ChapterDisplay(
+                    sourceChapter: $1,
+                    position: $0,
+                    sourceKey: sourceKey,
+                    entryURL: sourceEntry?.url,
+                    kind: kind
+                )
             }
             self.allChapters = mapped
         }
@@ -313,7 +321,9 @@ struct NovelDetailView: View {
         syncLocalEntry()
         refreshChapters()
 
-        guard details == nil, let source = sourceManager.novelSource(forKey: sourceKey) else {
+        // `CatalogSource` covers both kinds: details and the chapter list are
+        // shared, only the reader differs.
+        guard details == nil, let source = sourceManager.source(forKey: sourceKey) else {
             isLoading = false
             return
         }
@@ -382,7 +392,12 @@ struct NovelDetailView: View {
     private func continueReading() {
         guard let localEntry, !localEntry.chapters.isEmpty else {
             if let first = sourceChapters.first {
-                navigateToChapter = ChapterDisplay(sourceChapter: first, position: 0, sourceKey: sourceKey)
+                navigateToChapter = ChapterDisplay(
+                    sourceChapter: first,
+                    position: 0,
+                    sourceKey: sourceKey,
+                    kind: sourceEntry?.kind ?? .novel
+                )
             }
             return
         }
