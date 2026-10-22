@@ -1,0 +1,96 @@
+// CatalogSource.swift - What a content source has to implement.
+
+import Foundation
+
+/// Anything that can list, search and describe entries.
+///
+/// Two implementations are planned: `LNPluginSource` (the existing
+/// JavaScriptCore runtime) and `MihonSource` (transpiled Kotlin extensions).
+/// A hand-written `BuiltinSource` for a handful of high-traffic sites fits here
+/// too — see plan §3.5.
+protocol CatalogSource: Identifiable, Sendable {
+
+    /// `"ln:<pluginId>"` or `"mihon:<extensionId>"`. Persisted, so stable.
+    var key: String { get }
+
+    var kind: ContentKind { get }
+    var name: String { get }
+    /// Language tag or display name the source reports (e.g. `"English"`).
+    var lang: String { get }
+    var iconURL: String? { get }
+    /// Whether the source has a distinct "latest" listing.
+    var supportsLatest: Bool { get }
+
+    // MARK: Browsing
+
+    func filters() async throws -> [SourceFilter]
+    func popular(page: Int, filters: FilterState) async throws -> EntriesPage
+    func latest(page: Int, filters: FilterState) async throws -> EntriesPage
+    func search(query: String, page: Int, filters: FilterState) async throws -> EntriesPage
+
+    // MARK: Details
+
+    /// Full metadata for one entry.
+    func details(_ entry: SourceEntry) async throws -> SourceEntry
+    /// Chapter list, newest or oldest per the source's own ordering.
+    func chapters(_ entry: SourceEntry) async throws -> [SourceChapter]
+}
+
+extension CatalogSource {
+    var id: String { key }
+
+    var iconURL: String? { nil }
+    var supportsLatest: Bool { false }
+
+    func filters() async throws -> [SourceFilter] { [] }
+
+    func latest(page: Int, filters: FilterState) async throws -> EntriesPage {
+        throw SourceError.notSupported("latest listing")
+    }
+
+    func popular(page: Int, filters: FilterState) async throws -> EntriesPage {
+        throw SourceError.notSupported("popular listing")
+    }
+
+    /// Default search ignores filters, which is correct for sources that have none.
+    func search(query: String, page: Int, filters: FilterState) async throws -> EntriesPage {
+        throw SourceError.notSupported("search")
+    }
+}
+
+// MARK: - Novel
+
+/// A source that yields chapter HTML, rendered by the existing web reader.
+protocol NovelSource: CatalogSource {
+    func chapterHTML(_ chapter: SourceChapter) async throws -> String
+}
+
+// MARK: - Manga
+
+/// A source that yields ordered image pages, rendered by the manga reader.
+protocol MangaSource: CatalogSource {
+    /// Ordered pages of one chapter. Index 0 is the first page.
+    func pages(_ chapter: SourceChapter) async throws -> [SourcePage]
+
+    /// Absolute image URL, for pages whose URL is produced lazily.
+    func imageURL(_ page: SourcePage) async throws -> String
+
+    /// Fully-formed request for one page, including the headers the CDN needs.
+    func imageRequest(_ page: SourcePage) async throws -> URLRequest
+}
+
+extension MangaSource {
+    func imageURL(_ page: SourcePage) async throws -> String { page.url }
+
+    func imageRequest(_ page: SourcePage) async throws -> URLRequest {
+        let urlString = try await imageURL(page)
+        guard let url = URL(string: urlString) else {
+            throw HTTPError.invalidURL(urlString)
+        }
+        var request = URLRequest(url: url)
+        for (name, value) in page.headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        return request
+    }
+}

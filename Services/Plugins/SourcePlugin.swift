@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Core Data Types
 
 /// Partial novel info returned from search or browse results.
-struct PartialNovel: Identifiable, Hashable, Sendable {
+struct PluginNovelRef: Identifiable, Hashable, Sendable {
     /// Unique identifier derived from the novel's path.
     let id: String
     /// Display name of the novel.
@@ -22,7 +22,7 @@ struct PartialNovel: Identifiable, Hashable, Sendable {
 }
 
 /// Full novel info returned from `parseNovel`.
-struct SourceNovel: Sendable {
+struct PluginNovel: Sendable {
     let name: String
     let path: String
     let cover: String?
@@ -31,13 +31,13 @@ struct SourceNovel: Sendable {
     let author: String?
     let artist: String?
     let status: String?
-    let chapters: [SourceChapter]
+    let chapters: [PluginChapter]
     /// Total number of paginated chapter pages, if the source paginates.
     let totalPages: Int?
 }
 
 /// Chapter info returned from a source plugin.
-struct SourceChapter: Identifiable, Sendable {
+struct PluginChapter: Identifiable, Sendable {
     /// Unique identifier derived from the chapter's path.
     let id: String
     /// Display name of the chapter.
@@ -68,8 +68,8 @@ struct SourceChapter: Identifiable, Sendable {
 }
 
 /// Result from `parsePage` — one page of a paginated chapter list.
-struct SourcePage: Sendable {
-    let chapters: [SourceChapter]
+struct PluginChapterPage: Sendable {
+    let chapters: [PluginChapter]
 }
 
 // MARK: - Image Request Init
@@ -87,7 +87,7 @@ struct ImageRequestInit: Sendable {
 // MARK: - Filter Types
 
 /// A single selectable option within a filter (the value sent to the source).
-struct FilterOption: Sendable, Identifiable, Equatable, Hashable {
+struct PluginFilterOption: Sendable, Identifiable, Equatable, Hashable {
     let label: String
     let value: String
     var id: String { value }
@@ -96,15 +96,15 @@ struct FilterOption: Sendable, Identifiable, Equatable, Hashable {
 /// A filter definition parsed from the plugin's `filters` property.
 enum PluginFilter: Sendable, Identifiable {
     case textInput(key: String, label: String, defaultValue: String)
-    case picker(key: String, label: String, defaultValue: String, options: [FilterOption])
-    case checkboxGroup(key: String, label: String, defaultValues: [String], options: [FilterOption])
+    case picker(key: String, label: String, defaultValue: String, options: [PluginFilterOption])
+    case checkboxGroup(key: String, label: String, defaultValues: [String], options: [PluginFilterOption])
     case switchFilter(key: String, label: String, defaultValue: Bool)
     case excludableCheckboxGroup(
         key: String,
         label: String,
         defaultInclude: [String],
         defaultExclude: [String],
-        options: [FilterOption]
+        options: [PluginFilterOption]
     )
 
     var id: String { key }
@@ -150,8 +150,8 @@ typealias FilterValues = [String: SelectedFilterValue]
 enum PluginSetting: Sendable, Identifiable {
     case text(key: String, label: String, value: String)
     case switchSetting(key: String, label: String, value: Bool)
-    case select(key: String, label: String, value: String, options: [FilterOption])
-    case checkboxGroup(key: String, label: String, values: [String], options: [FilterOption])
+    case select(key: String, label: String, value: String, options: [PluginFilterOption])
+    case checkboxGroup(key: String, label: String, values: [String], options: [PluginFilterOption])
 
     var id: String { key }
 
@@ -203,13 +203,13 @@ protocol SourcePlugin: Identifiable {
         page: Int,
         showLatest: Bool,
         filterValues: FilterValues?
-    ) async throws -> [PartialNovel]
+    ) async throws -> [PluginNovelRef]
 
     /// Search novels by text query with pagination.
-    func searchNovels(query: String, page: Int) async throws -> [PartialNovel]
+    func searchNovels(query: String, page: Int) async throws -> [PluginNovelRef]
 
     /// Fetch full novel details including chapter list.
-    func parseNovel(path: String) async throws -> SourceNovel
+    func parseNovel(path: String) async throws -> PluginNovel
 
     /// Fetch chapter HTML/text content.
     func parseChapter(path: String) async throws -> String
@@ -222,7 +222,7 @@ extension SourcePlugin {
     // MARK: Convenience wrappers
 
     /// Convenience — browse popular novels with no filters (backward-compatible).
-    func popularNovels(page: Int) async throws -> [PartialNovel] {
+    func popularNovels(page: Int) async throws -> [PluginNovelRef] {
         try await popularNovels(page: page, showLatest: false, filterValues: nil)
     }
 
@@ -260,19 +260,19 @@ extension SourcePlugin {
     ///
     /// Default returns an empty page; `JSSourcePlugin` overrides when
     /// the underlying JS plugin exposes `parsePage`.
-    func parsePage(path: String, page: String) async throws -> SourcePage {
-        SourcePage(chapters: [])
+    func parsePage(path: String, page: String) async throws -> PluginChapterPage {
+        PluginChapterPage(chapters: [])
     }
 
     /// Fetch all chapters for a novel concurrently with concurrency throttling.
-    func fetchAllChapters(path: String, totalPages: Int) async throws -> [SourceChapter] {
+    func fetchAllChapters(path: String, totalPages: Int) async throws -> [PluginChapter] {
         #if DEBUG
         print("📚 [\(id)] fetchAllChapters: path=\(path), totalPages=\(totalPages)")
         #endif
         let maxConcurrent = 4
-        var pagesData = [Int: [SourceChapter]]()
+        var pagesData = [Int: [PluginChapter]]()
 
-        try await withThrowingTaskGroup(of: (Int, [SourceChapter]).self) { group in
+        try await withThrowingTaskGroup(of: (Int, [PluginChapter]).self) { group in
             var pageToFetch = 1
 
             // Spawn initial concurrent tasks
@@ -324,14 +324,14 @@ extension SourcePlugin {
         }
 
         // Construct the full chapters list.
-        var allChapters: [SourceChapter] = []
+        var allChapters: [PluginChapter] = []
         let pageRange = 1...totalPages
         let orderedPages = shouldReversePages ? Array(pageRange.reversed()) : Array(pageRange)
 
         for p in orderedPages {
             if let chapters = pagesData[p] {
                 let taggedChapters = chapters.map { ch in
-                    SourceChapter(
+                    PluginChapter(
                         name: ch.name,
                         path: ch.path,
                         chapterNumber: ch.chapterNumber,

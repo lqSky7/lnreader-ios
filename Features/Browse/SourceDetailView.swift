@@ -8,7 +8,7 @@ struct SourceDetailView: View {
     let plugin: PluginListItem
     @Environment(PluginManager.self) private var pluginManager
 
-    @State private var novels: [PartialNovel] = []
+    @State private var novels: [PluginNovelRef] = []
     @State private var searchText = ""
     @State private var currentPage = 1
     @State private var isLoading = false
@@ -102,7 +102,7 @@ struct SourceDetailView: View {
         currentPage += 1
 
         do {
-            let nextPage: [PartialNovel]
+            let nextPage: [PluginNovelRef]
             if isSearching {
                 nextPage = try await source.searchNovels(query: searchText, page: currentPage)
             } else {
@@ -138,7 +138,7 @@ struct SourceDetailView: View {
 // MARK: - Browse Novel Cell
 
 struct BrowseNovelCell: View {
-    let novel: PartialNovel
+    let novel: PluginNovelRef
     var transitionNamespace: Namespace.ID? = nil
 
     var body: some View {

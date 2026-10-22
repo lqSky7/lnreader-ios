@@ -85,7 +85,7 @@ struct SourceSearchResult: Identifiable {
     let id = UUID()
     let pluginId: String
     let pluginName: String
-    let novels: [PartialNovel]
+    let novels: [PluginNovelRef]
 }
 
 // MARK: - Result Section

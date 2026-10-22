@@ -845,9 +845,9 @@ final class JSSourcePlugin: SourcePlugin {
     }
 
     /// Shared helper — parse `options` array from a filter/setting config dict.
-    private static func parseFilterOptions(from config: [String: Any]) -> [FilterOption] {
+    private static func parseFilterOptions(from config: [String: Any]) -> [PluginFilterOption] {
         guard let optsRaw = config["options"] as? [Any] else { return [] }
-        return optsRaw.compactMap { item -> FilterOption? in
+        return optsRaw.compactMap { item -> PluginFilterOption? in
             // NSDictionary bridges to [String: Any] or [AnyHashable: Any]
             let label: String?
             let value: String?
@@ -861,7 +861,7 @@ final class JSSourcePlugin: SourcePlugin {
                 return nil
             }
             guard let l = label, let v = value else { return nil }
-            return FilterOption(label: l, value: v)
+            return PluginFilterOption(label: l, value: v)
         }
     }
 
@@ -871,7 +871,7 @@ final class JSSourcePlugin: SourcePlugin {
         page: Int,
         showLatest: Bool,
         filterValues: FilterValues?
-    ) async throws -> [PartialNovel] {
+    ) async throws -> [PluginNovelRef] {
         var options: [String: Any] = ["showLatestNovels": showLatest]
 
         if let filterValues, !filterValues.isEmpty {
@@ -890,12 +890,12 @@ final class JSSourcePlugin: SourcePlugin {
         return parsePartialNovels(from: result)
     }
 
-    func searchNovels(query: String, page: Int) async throws -> [PartialNovel] {
+    func searchNovels(query: String, page: Int) async throws -> [PluginNovelRef] {
         let result = try await callPluginFunction("searchNovels", args: [query, page])
         return parsePartialNovels(from: result)
     }
 
-    func parseNovel(path: String) async throws -> SourceNovel {
+    func parseNovel(path: String) async throws -> PluginNovel {
         let result = try await callPluginFunction("parseNovel", args: [path])
         return try parseSourceNovel(from: result)
     }
@@ -909,13 +909,13 @@ final class JSSourcePlugin: SourcePlugin {
         return text
     }
 
-    func parsePage(path: String, page: String) async throws -> SourcePage {
+    func parsePage(path: String, page: String) async throws -> PluginChapterPage {
         #if DEBUG
         print("📄 [\(id)] parsePage: path=\(path), page=\(page)")
         #endif
         let result = try await callPluginFunction("parsePage", args: [path, page])
 
-        let chapters: [SourceChapter]
+        let chapters: [PluginChapter]
         if let array = castToDictArray(result.toArray()) {
             #if DEBUG
             print("📄 [\(id)] parsePage result: top-level array with \(array.count) items")
@@ -939,7 +939,7 @@ final class JSSourcePlugin: SourcePlugin {
         #if DEBUG
         print("📄 [\(id)] parsePage returning \(chapters.count) parsed chapters")
         #endif
-        return SourcePage(chapters: chapters)
+        return PluginChapterPage(chapters: chapters)
     }
 
     func resolveUrl(path: String, isNovel: Bool) -> String {
@@ -1107,8 +1107,8 @@ final class JSSourcePlugin: SourcePlugin {
         }
     }
 
-    /// Parse a JSValue array into `[PartialNovel]`.
-    private func parsePartialNovels(from value: JSValue) -> [PartialNovel] {
+    /// Parse a JSValue array into `[PluginNovelRef]`.
+    private func parsePartialNovels(from value: JSValue) -> [PluginNovelRef] {
         guard let array = castToDictArray(value.toArray()) else {
             if let novelsValue = value.forProperty("novels"),
                 let array = castToDictArray(novelsValue.toArray())
@@ -1120,21 +1120,21 @@ final class JSSourcePlugin: SourcePlugin {
         return array.compactMap(parsePartialNovel)
     }
 
-    private func parsePartialNovel(from dict: [String: Any]) -> PartialNovel? {
+    private func parsePartialNovel(from dict: [String: Any]) -> PluginNovelRef? {
         guard let name = dict["name"] as? String,
             let path = dict["path"] as? String
         else {
             return nil
         }
-        return PartialNovel(
+        return PluginNovelRef(
             name: name,
             path: path,
             cover: dict["cover"] as? String
         )
     }
 
-    /// Parse a JSValue into a `SourceNovel`.
-    private func parseSourceNovel(from value: JSValue) throws -> SourceNovel {
+    /// Parse a JSValue into a `PluginNovel`.
+    private func parseSourceNovel(from value: JSValue) throws -> PluginNovel {
         guard let dict = value.toDictionary() as? [String: Any] else {
             throw PluginError.invalidResult("parseNovel did not return an object")
         }
@@ -1155,7 +1155,7 @@ final class JSSourcePlugin: SourcePlugin {
             genres = nil
         }
 
-        let chapters: [SourceChapter]
+        let chapters: [PluginChapter]
         if let chaptersArray = castToDictArray(dict["chapters"]) {
             chapters = chaptersArray.compactMap(parseSourceChapter)
         } else {
@@ -1182,7 +1182,7 @@ final class JSSourcePlugin: SourcePlugin {
         print("📖 [\(id)] parseSourceNovel: totalPages=\(String(describing: totalPages)), chapters=\(chapters.count)")
         #endif
 
-        return SourceNovel(
+        return PluginNovel(
             name: name,
             path: path,
             cover: dict["cover"] as? String,
@@ -1196,7 +1196,7 @@ final class JSSourcePlugin: SourcePlugin {
         )
     }
 
-    private func parseSourceChapter(from dict: [String: Any]) -> SourceChapter? {
+    private func parseSourceChapter(from dict: [String: Any]) -> PluginChapter? {
         guard let name = dict["name"] as? String,
             let path = dict["path"] as? String
         else {
@@ -1212,7 +1212,7 @@ final class JSSourcePlugin: SourcePlugin {
             chapterNumber = nil
         }
 
-        return SourceChapter(
+        return PluginChapter(
             name: name,
             path: path,
             chapterNumber: chapterNumber,

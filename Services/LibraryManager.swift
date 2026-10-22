@@ -17,7 +17,7 @@ final class LibraryManager {
 
     /// Add a novel to the library from source data, inserting into SwiftData.
     func addToLibrary(
-        sourceNovel: SourceNovel,
+        sourceNovel: PluginNovel,
         pluginId: String,
         context: ModelContext
     ) {
@@ -205,7 +205,7 @@ final class LibraryManager {
         }
         guard !pending.isEmpty else { return }
 
-        typealias UpdateResult = (id: PersistentIdentifier, novel: SourceNovel?, error: String?)
+        typealias UpdateResult = (id: PersistentIdentifier, novel: PluginNovel?, error: String?)
         let results = await withTaskGroup(of: UpdateResult.self, returning: [UpdateResult].self) { group in
             let maxConcurrent = 4
             var queue = pending[...]
@@ -221,7 +221,7 @@ final class LibraryManager {
                             print("🔌 [\(work.job.pluginId)] Paginated chapters detected during library update, fetching \(totalPages) pages...")
                             #endif
                             let allChapters = try await work.source.fetchAllChapters(path: work.job.path, totalPages: totalPages)
-                            sourceNovel = SourceNovel(
+                            sourceNovel = PluginNovel(
                                 name: sourceNovel.name,
                                 path: sourceNovel.path,
                                 cover: sourceNovel.cover,
@@ -270,7 +270,7 @@ final class LibraryManager {
     }
 
     /// Update a single novel's chapters and metadata from source.
-    func updateNovel(_ novel: Novel, sourceNovel: SourceNovel, context: ModelContext, saveImmediately: Bool = true) {
+    func updateNovel(_ novel: Novel, sourceNovel: PluginNovel, context: ModelContext, saveImmediately: Bool = true) {
         novel.name = sourceNovel.name
         if let cover = sourceNovel.cover {
             novel.cover = cover

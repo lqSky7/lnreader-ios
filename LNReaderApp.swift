@@ -12,6 +12,7 @@ struct LNReaderApp: App {
     @State private var pluginManager = PluginManager()
     @State private var libraryManager = LibraryManager()
     @State private var syncManager = SyncManager()
+    @State private var sourceManager = SourceManager()
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +21,7 @@ struct LNReaderApp: App {
                 .environment(pluginManager)
                 .environment(libraryManager)
                 .environment(syncManager)
+                .environment(sourceManager)
                 .preferredColorScheme(.dark)
         }
         .modelContainer(for: [

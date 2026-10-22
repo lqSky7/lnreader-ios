@@ -10,6 +10,7 @@ struct ContentView: View {
     @Environment(PluginManager.self) private var pluginManager
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(SyncManager.self) private var syncManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(\.modelContext) private var modelContext
     @AppStorage("general.autoUpdateOnLaunch") private var autoUpdateOnLaunch = true
     @State private var selectedTab: AppTab = .library
@@ -40,6 +41,10 @@ struct ContentView: View {
         .task {
             await syncManager.loadSession()
             await pluginManager.restoreInstalledPlugins()
+            // v2 source registry mirrors the installed LN plugins, and the HTTP
+            // stack gets its Cloudflare solver before any source is browsed.
+            sourceManager.sync(with: pluginManager)
+            await HTTPClient.shared.setCloudflareSolver(WebKitCloudflareSolver())
             if autoUpdateOnLaunch {
                 await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
             }

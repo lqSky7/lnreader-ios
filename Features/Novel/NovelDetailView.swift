@@ -10,12 +10,12 @@ struct NovelDetailView: View {
     @Environment(LibraryManager.self) private var libraryManager
 
     let novel: Novel?
-    let partialNovel: PartialNovel?
+    let partialNovel: PluginNovelRef?
     let pluginId: String
 
     @Namespace private var chapterTransition
     @State private var localNovel: Novel? = nil
-    @State private var sourceNovel: SourceNovel?
+    @State private var sourceNovel: PluginNovel?
     @State private var isLoading = true
     @State private var showFullDescription = false
     @State private var selectedRange: ChapterRange = .progress
@@ -39,7 +39,7 @@ struct NovelDetailView: View {
     }
 
     /// View a novel discovered from browse/search.
-    init(partialNovel: PartialNovel, pluginId: String) {
+    init(partialNovel: PluginNovelRef, pluginId: String) {
         self.novel = nil
         self.partialNovel = partialNovel
         self.pluginId = pluginId
@@ -319,7 +319,7 @@ struct NovelDetailView: View {
                 #if DEBUG
                 print("📖 [\(pluginId)] fetchAllChapters returned \(allChapters.count) total chapters")
                 #endif
-                parsed = SourceNovel(
+                parsed = PluginNovel(
                     name: parsed.name,
                     path: parsed.path,
                     cover: parsed.cover,

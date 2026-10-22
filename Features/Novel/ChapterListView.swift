@@ -106,7 +106,7 @@ struct ChapterListView: View {
 
 // MARK: - Unified Chapter Display
 
-/// Bridges SwiftData Chapter and SourceChapter into a single displayable type.
+/// Bridges SwiftData Chapter and PluginChapter into a single displayable type.
 struct ChapterDisplay: Identifiable, Hashable {
     let id: String
     let name: String
@@ -138,7 +138,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.novelPath = chapter.novel?.path
     }
 
-    init(sourceChapter: SourceChapter, position: Int, pluginId: String = "", novelPath: String? = nil) {
+    init(sourceChapter: PluginChapter, position: Int, pluginId: String = "", novelPath: String? = nil) {
         self.id = sourceChapter.path
         self.name = sourceChapter.name
         self.path = sourceChapter.path
