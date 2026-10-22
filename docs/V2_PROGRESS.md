@@ -352,3 +352,12 @@ From device feedback on the first MangaFire build.
 later build) without touching an installed bundle's bytes, so an extension updated from a
 repository is never rolled back by the copy in the binary.
 
+### Reader states
+
+Both readers now share `ReaderChromeState`: **focus** (content only) and **control**
+(every number and every action). A single tap toggles them, with a light haptic. In the
+manga reader the control state is a Liquid Glass top bar (chapter, `Ch. 200 · 3 / 112 ·
+27%`, chapters, layout) and bottom bar (page scrubber with end labels, chapter arrows,
+page pill that returns to focus); every control is `.glassEffect(.regular.interactive())`.
+The novel reader already used glass buttons and now uses the same state machine.
+

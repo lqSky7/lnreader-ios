@@ -31,7 +31,7 @@ struct MangaReaderView: View {
     @State private var currentIndex = 0
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var showControls = true
+    @State private var chrome: ReaderChromeState = .control
     @State private var showChapterSheet = false
 
     init(sourceKey: String, entryURL: String?, chapterURL: String, chapterName: String) {
@@ -69,7 +69,7 @@ struct MangaReaderView: View {
                     }
                 }
 
-            if showControls {
+            if chrome.isControl {
                 controls
             }
         }
@@ -84,7 +84,7 @@ struct MangaReaderView: View {
         .onChange(of: currentIndex) { _, index in handlePageChange(index) }
         .onChange(of: modeRaw) { _, _ in
             // Re-run the layout without refetching the page list.
-            showControls = true
+            chrome = .control
         }
     }
 
@@ -150,17 +150,23 @@ struct MangaReaderView: View {
         .padding(32)
     }
 
-    // MARK: - Controls
+    // MARK: - Chrome
 
+    /// Control state: every number and every action, on Liquid Glass.
     private var controls: some View {
-        VStack {
+        VStack(spacing: 0) {
             topBar
-            Spacer()
+            Spacer(minLength: 0)
             bottomBar
         }
         .background(
             LinearGradient(
-                colors: [.black.opacity(0.65), .clear, .clear, .black.opacity(0.65)],
+                stops: [
+                    .init(color: .black.opacity(0.72), location: 0),
+                    .init(color: .clear, location: 0.2),
+                    .init(color: .clear, location: 0.8),
+                    .init(color: .black.opacity(0.72), location: 1),
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -171,127 +177,168 @@ struct MangaReaderView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 14) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Close reader")
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                glassCircleButton("xmark", label: "Close reader") { dismiss() }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(chapterName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Text(pageIndicator)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-
-            Spacer()
-
-            Button {
-                showChapterSheet = true
-            } label: {
-                Image(systemName: "list.bullet")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Chapters")
-
-            Menu {
-                Picker("Layout", selection: $modeRaw) {
-                    ForEach(MangaReadingMode.allCases) { readingMode in
-                        Label(readingMode.displayName, systemImage: readingMode.iconName)
-                            .tag(readingMode.rawValue)
-                    }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(chapterName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text(chapterSubtitle)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.75))
+                        .lineLimit(1)
                 }
-                if mode == .pager {
-                    Picker("Direction", selection: $directionRaw) {
-                        ForEach(MangaPagingDirection.allCases) { option in
-                            Text(option.displayName).tag(option.rawValue)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .glassEffect(.regular, in: .capsule)
+
+                Spacer(minLength: 0)
+
+                glassCircleButton("list.bullet", label: "Chapters") {
+                    showChapterSheet = true
+                }
+
+                Menu {
+                    Picker("Layout", selection: $modeRaw) {
+                        ForEach(MangaReadingMode.allCases) { readingMode in
+                            Label(readingMode.displayName, systemImage: readingMode.iconName)
+                                .tag(readingMode.rawValue)
                         }
                     }
+                    if mode == .pager {
+                        Picker("Direction", selection: $directionRaw) {
+                            ForEach(MangaPagingDirection.allCases) { option in
+                                Text(option.displayName).tag(option.rawValue)
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.regular.interactive(), in: .circle)
                 }
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 44, height: 44)
+                .accessibilityLabel("Reader options")
             }
-            .accessibilityLabel("Reader options")
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
     }
 
     private var bottomBar: some View {
-        VStack(spacing: 6) {
-            if pages.count > 1 {
-                Slider(
-                    value: Binding(
-                        get: { Double(currentIndex) },
-                        set: { newValue in
-                            let target = Int(newValue.rounded())
-                            if target != currentIndex { currentIndex = target }
-                        }
-                    ),
-                    in: 0...Double(pages.count - 1),
-                    step: 1
-                )
-                .tint(.white)
-                .padding(.horizontal, 8)
-                .accessibilityLabel("Page")
+        GlassEffectContainer(spacing: 10) {
+            VStack(spacing: 10) {
+                if pages.count > 1 {
+                    HStack(spacing: 12) {
+                        Text("1")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.6))
+                        Slider(value: pageBinding, in: 0...Double(pages.count - 1), step: 1)
+                            .tint(.white)
+                            .accessibilityLabel("Page")
+                        Text("\(pages.count)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .glassEffect(.regular, in: .capsule)
+                }
+
+                HStack(spacing: 12) {
+                    chapterButton(offset: -1, symbol: "chevron.left", label: "Previous chapter")
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        setChrome(.focus)
+                    } label: {
+                        Text(pageIndicator)
+                            .font(.footnote.monospacedDigit().weight(.semibold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .glassEffect(.regular.interactive(), in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Hide controls")
+
+                    Spacer(minLength: 0)
+
+                    chapterButton(offset: 1, symbol: "chevron.right", label: "Next chapter")
+                }
             }
-            chapterArrows
-        }
-    }
-
-    private var chapterArrows: some View {
-        HStack {
-            Button {
-                Task { await moveChapter(by: -1) }
-            } label: {
-                Label("Previous", systemImage: "chevron.left")
-                    .labelStyle(.iconOnly)
-                    .frame(width: 44, height: 44)
-            }
-            .disabled(!hasChapter(offset: -1))
-            .opacity(hasChapter(offset: -1) ? 1 : 0.3)
-            .accessibilityLabel("Previous chapter")
-
-            Spacer()
-
-            Button {
-                showControls = false
-            } label: {
-                Text(pageIndicator)
-                    .font(.caption.monospacedDigit())
-            }
-            .accessibilityLabel("Hide controls")
-
-            Spacer()
-
-            Button {
-                Task { await moveChapter(by: 1) }
-            } label: {
-                Label("Next", systemImage: "chevron.right")
-                    .labelStyle(.iconOnly)
-                    .frame(width: 44, height: 44)
-            }
-            .disabled(!hasChapter(offset: 1))
-            .opacity(hasChapter(offset: 1) ? 1 : 0.3)
-            .accessibilityLabel("Next chapter")
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 8)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+    }
+
+    private func glassCircleButton(
+        _ symbol: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: .circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func chapterButton(offset: Int, symbol: String, label: String) -> some View {
+        Button {
+            Task { await moveChapter(by: offset) }
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: .circle)
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasChapter(offset: offset))
+        .opacity(hasChapter(offset: offset) ? 1 : 0.35)
+        .accessibilityLabel(label)
+    }
+
+    private var pageBinding: Binding<Double> {
+        Binding(
+            get: { Double(currentIndex) },
+            set: { newValue in
+                let target = Int(newValue.rounded())
+                if target != currentIndex { currentIndex = target }
+            }
+        )
     }
 
     private var pageIndicator: String {
         guard !pages.isEmpty else { return "" }
         return "\(min(currentIndex + 1, pages.count)) / \(pages.count)"
+    }
+
+    /// `Ch. 200 · 3 / 112 · 27%` — everything the reader knows, in one line.
+    private var chapterSubtitle: String {
+        var parts: [String] = []
+
+        if let number = storedChapter?.chapterNumber, number > 0 {
+            let text = number == number.rounded()
+                ? String(Int(number))
+                : String(format: "%.1f", number)
+            parts.append("Ch. \(text)")
+        }
+
+        if !pages.isEmpty {
+            parts.append(pageIndicator)
+            let percent = Int((Double(currentIndex + 1) / Double(pages.count) * 100).rounded())
+            parts.append("\(percent)%")
+        }
+
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Loading
@@ -394,8 +441,16 @@ struct MangaReaderView: View {
         currentIndex = target
     }
 
+    private func setChrome(_ state: ReaderChromeState) {
+        guard chrome != state else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { chrome = state }
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+    }
+
     private func toggleControls() {
-        withAnimation(.easeInOut(duration: 0.18)) { showControls.toggle() }
+        setChrome(chrome.toggled)
     }
 
     /// Reading should not be interrupted by the idle timer.

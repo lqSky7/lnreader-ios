@@ -43,7 +43,7 @@ struct ReaderView: View {
     @State private var chapterLoadID = UUID()
     @State private var baseURL: URL? = nil
     @State private var isLoading = true
-    @State private var showControls = true
+    @State private var chrome: ReaderChromeState = .control
     @State private var showSettings = false
     @State private var showChapterList = false
     @State private var startTTSWhenReady = false
@@ -93,7 +93,17 @@ struct ReaderView: View {
     }
 
     private func toggleControls() {
-        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { showControls.toggle() }
+        setChrome(chrome.toggled)
+    }
+
+    /// Single tap moves between the two states: focus shows the page, control
+    /// shows every action.
+    private func setChrome(_ state: ReaderChromeState) {
+        guard chrome != state else { return }
+        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { chrome = state }
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
     }
 
     /// Kept out of the modifier chain: inlining it pushes the body past what the
@@ -135,7 +145,7 @@ struct ReaderView: View {
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
             .statusBarHidden(true)
-            .onChange(of: showControls) { _, visible in ttsBridge.setControlsVisible(visible) }
+            .onChange(of: chrome) { _, state in ttsBridge.setControlsVisible(state.isControl) }
             .sheet(isPresented: $showSettings) { settingsSheet }
             .fullScreenCover(isPresented: $showChapterList) { chapterListSheet }
             .sheet(isPresented: $showLoginSheet) { loginSheet }
@@ -203,7 +213,7 @@ struct ReaderView: View {
                     lineFocusEnabled: lineFocusEnabled,
                     lineFocusLines: lineFocusLines,
                     lineFocusDulling: lineFocusDulling,
-                    showControls: showControls,
+                    showControls: chrome.isControl,
                     bridge: ttsBridge,
                     baseURL: baseURL,
                     characterSpacing: characterSpacing,
@@ -231,8 +241,8 @@ struct ReaderView: View {
                 Spacer()
             }
             .ignoresSafeArea()
-            .opacity(showControls ? 1 : 0)
-            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showControls)
+            .opacity(chrome.isControl ? 1 : 0)
+            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: chrome)
             .allowsHitTesting(false)
 
             // Reading and listening share the same top navigation.
@@ -250,29 +260,29 @@ struct ReaderView: View {
                 onComments: commentSite != nil ? { showCommentsSheet = true } : nil,
                 isListening: isCurrentSpeech
             )
-            .opacity(showControls ? 1.0 : 0.0)
-            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showControls)
-            .allowsHitTesting(showControls)
-            .accessibilityHidden(!showControls)
+            .opacity(chrome.isControl ? 1.0 : 0.0)
+            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: chrome)
+            .allowsHitTesting(chrome.isControl)
+            .accessibilityHidden(!chrome.isControl)
 
             // TTS Controls Overlay (visible when isCurrentSpeech is true)
             ttsControlsOverlay
-                .opacity(isCurrentSpeech && showControls ? 1.0 : 0.0)
-                .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showControls)
+                .opacity(isCurrentSpeech && chrome.isControl ? 1.0 : 0.0)
+                .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: chrome)
                 .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isCurrentSpeech)
-                .allowsHitTesting(isCurrentSpeech && showControls)
-                .accessibilityHidden(!isCurrentSpeech || !showControls)
+                .allowsHitTesting(isCurrentSpeech && chrome.isControl)
+                .accessibilityHidden(!isCurrentSpeech || !chrome.isControl)
 
             // Focus Status Indicator Overlay (visible when controls and TTS speaking overlay are hidden, and Line Focus mode is active)
             VStack {
-                if !showControls && !isCurrentSpeech && lineFocusEnabled {
+                if !chrome.isControl && !isCurrentSpeech && lineFocusEnabled {
                     ReaderFocusIndicator()
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
                 Spacer()
             }
             .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(!showControls && !isCurrentSpeech && lineFocusEnabled)
+            .allowsHitTesting(!chrome.isControl && !isCurrentSpeech && lineFocusEnabled)
             .padding(.top, 12)
         }
     }

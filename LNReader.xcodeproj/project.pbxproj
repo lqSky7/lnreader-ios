@@ -132,6 +132,7 @@
 		E5D4E8732498C5D9250BD862 /* mangafire.js in Resources */ = {isa = PBXBuildFile; fileRef = E25DCEA50E9B876EBE1378C5 /* mangafire.js */; };
 		0C1F88D43CB0872BBEFD8D36 /* SourceIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */; };
 		B00394AC973379A2DB10AF2B /* ReaderRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */; };
+		C8637E60FBC9B7A81BA3A275 /* ReaderChromeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62993C0D9FEA014390994E1 /* ReaderChromeState.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -259,6 +260,7 @@
 		E25DCEA50E9B876EBE1378C5 /* mangafire.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Resources/mangafire.js; sourceTree = "<group>"; };
 		3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceIconView.swift; sourceTree = "<group>"; };
 		F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderRouter.swift; sourceTree = "<group>"; };
+		B62993C0D9FEA014390994E1 /* ReaderChromeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderChromeState.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -326,6 +328,7 @@
 				003CA6699D27A4A3DCAFD2EF /* ReaderView.swift */,
 				0A83CC9BB2AEC8F3766BF2EC /* ChapterReader.swift */,
 				F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */,
+				B62993C0D9FEA014390994E1 /* ReaderChromeState.swift */,
 			);
 			path = Reader;
 			sourceTree = "<group>";
@@ -811,6 +814,7 @@
 				EA13C552BF9AAFEEA6AEB31F /* BundledExtensions.swift in Sources */,
 				0C1F88D43CB0872BBEFD8D36 /* SourceIconView.swift in Sources */,
 				B00394AC973379A2DB10AF2B /* ReaderRouter.swift in Sources */,
+				C8637E60FBC9B7A81BA3A275 /* ReaderChromeState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
