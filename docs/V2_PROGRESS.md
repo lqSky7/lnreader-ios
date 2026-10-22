@@ -303,25 +303,37 @@ dom.parse(html); dom.select(h, css); dom.text/attr/html(h)
 fixture bundle through popular / search / latest / details / chapters / pages, plus a
 missing method, a throwing bundle, a bundle with no `extension`, and a 404. It passes.
 
-### MangaFire: blocked, with evidence
+### MangaFire: ported and verified
 
-Three separate walls, all checked from this machine:
+The first real extension is in `../lnreader-extensions/extensions/mangafire/mangafire.js`
+and ships inside the app (`Resources/mangafire.js`, installed into `ExtensionStore` on
+launch, listed under Browse → Extensions).
 
-1. **Cloudflare.** `GET https://mangafire.to/` returns a 3 KB shell containing
-   `window.__CF$cv$params` — the JS challenge, not the page. Content is SPA-rendered.
-2. **Token-gated API.** `GET /api/titles?keyword=naruto` → `403 {"message":"Missing token."}`
-3. **The token is derived, not published.** `window.__config` (a 130-char blob) is not the
-   token: sending it as `x-auth-token`, `Authorization: Bearer`, or `token`, with a warm
-   cookie jar from the same session, still returns 403. The derivation lives in
-   lazily-loaded chunks of the 630 KB `main-*.js`; the strings `Missing token`, `x-auth`
-   and `api/titles` do not appear in that bundle at all.
+It is a direct port of `keiyoushi/extensions-source` `src/all/mangafire`: the VRF signer,
+the request builders, and the DTO mapping. The earlier "missing token" wall was my own
+mistake — I was calling the API without the signature the extension already computes.
+`VrfSigner.kt` is three substitution stages over the sorted query string; translated
+byte for byte it returns 200.
 
-Porting MangaFire therefore needs one of:
+Verified through the real host against the live API (`scripts/try-mangafire.sh`):
 
-- the token algorithm reverse-engineered (a project of its own, and it rotates), or
-- a WebView-backed fetch that lets the site's own JS mint the token, then scrapes the
-  rendered DOM — which needs a device to verify and is not something this environment can
-  test.
+```
+popular: 50 entries, hasNext=true
+latest: 50 entries
+search('solo leveling'): 50 entries, first=Solo Leveling
+details: Solo Leveling, status=completed, genres=["Action", "Drama", "Adventure", "Fantasy"]
+chapters: 448, first=Side Story 21 #200.0
+pages: 112
+```
 
-No `mangafire.js` was shipped rather than shipping a bundle that always throws.
+Still missing from this extension: the upstream `ChallengeSolverInterceptor`
+(OpenCV.js in a WebView for `403 captcha_required`), the filter list, and the volume view.
+
+### What this means for the other ~500 extensions
+
+The bundle contract is now proven against a real site, so the remaining work is the
+Kotlin/JS translation layer: a Kotlin/JS implementation of the Mihon API surface
+(`HttpSource`, `ParsedHttpSource`, `SManga`, `SChapter`, `Page`, `Request`, `Response`)
+plus OkHttp and Jsoup shims, so an extension's Kotlin compiles unchanged and the
+transpiler only has to emit it. That repository is `../lnreader-extensions`.
 

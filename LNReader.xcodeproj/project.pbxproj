@@ -128,6 +128,8 @@
 		3677CEA5E0278FDC4BD229E0 /* ExtensionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2DAFDDA81802FB60316A08 /* ExtensionStore.swift */; };
 		B152D4A75103710108D37FA5 /* JSBundleMangaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7C537C97E7B2AA00700BA5 /* JSBundleMangaSource.swift */; };
 		DE9F26EF7BEE71CCF351DAE3 /* JSExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */; };
+		EA13C552BF9AAFEEA6AEB31F /* BundledExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6399BD2DC044398F328154 /* BundledExtensions.swift */; };
+		E5D4E8732498C5D9250BD862 /* mangafire.js in Resources */ = {isa = PBXBuildFile; fileRef = E25DCEA50E9B876EBE1378C5 /* mangafire.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -251,6 +253,8 @@
 		9E2DAFDDA81802FB60316A08 /* ExtensionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionStore.swift; sourceTree = "<group>"; };
 		AC7C537C97E7B2AA00700BA5 /* JSBundleMangaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSBundleMangaSource.swift; sourceTree = "<group>"; };
 		803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSExtensionHost.swift; sourceTree = "<group>"; };
+		EE6399BD2DC044398F328154 /* BundledExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledExtensions.swift; sourceTree = "<group>"; };
+		E25DCEA50E9B876EBE1378C5 /* mangafire.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Resources/mangafire.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -391,6 +395,7 @@
 		6A3F5AB528717E8414751190 = {
 			isa = PBXGroup;
 			children = (
+				E25DCEA50E9B876EBE1378C5 /* mangafire.js */,
 				2B650856C28BA6DD64543A24 /* AppIcon.icon */,
 				BA227D06471ABC5D87C79929 /* Assets.xcassets */,
 				3098E6B5EE638FB9BAC7732D /* ContentView.swift */,
@@ -596,6 +601,7 @@
 				9E2DAFDDA81802FB60316A08 /* ExtensionStore.swift */,
 				AC7C537C97E7B2AA00700BA5 /* JSBundleMangaSource.swift */,
 				803A28EFBC50F5C8CE16BFB1 /* JSExtensionHost.swift */,
+				EE6399BD2DC044398F328154 /* BundledExtensions.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -668,6 +674,7 @@
 			files = (
 				0518E7BC7FF5DA15E6F1CB52 /* AppIcon.icon in Resources */,
 				DF964DDA1C4FB131E160580E /* Assets.xcassets in Resources */,
+				E5D4E8732498C5D9250BD862 /* mangafire.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -795,6 +802,7 @@
 				3677CEA5E0278FDC4BD229E0 /* ExtensionStore.swift in Sources */,
 				B152D4A75103710108D37FA5 /* JSBundleMangaSource.swift in Sources */,
 				DE9F26EF7BEE71CCF351DAE3 /* JSExtensionHost.swift in Sources */,
+				EA13C552BF9AAFEEA6AEB31F /* BundledExtensions.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

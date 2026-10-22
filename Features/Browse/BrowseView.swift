@@ -24,9 +24,9 @@ struct BrowseView: View {
                     }
                 }
 
-                if !builtInSources.isEmpty {
-                    Section("Built-in Sources") {
-                        ForEach(builtInSources, id: \.key) { source in
+                if !extensionSources.isEmpty {
+                    Section("Extensions") {
+                        ForEach(extensionSources, id: \.key) { source in
                             NavigationLink {
                                 SourceDetailView(sourceKey: source.key, title: source.name)
                             } label: {
@@ -83,10 +83,12 @@ struct BrowseView: View {
 
     // MARK: - Filtering
 
-    /// Sources compiled into the app (plan §3.5). Installed extensions are
-    /// listed above; these are always present.
-    private var builtInSources: [any CatalogSource] {
-        sourceManager.allSources.filter { SourceKey.isBuiltin($0.key) }
+    /// Everything that is not a JS novel plugin or a local import: bundled
+    /// sources and installed extension bundles.
+    private var extensionSources: [any CatalogSource] {
+        sourceManager.allSources.filter { source in
+            !SourceKey.isLN(source.key) && source.key != SourceKey.local
+        }
     }
 
     private var installedPlugins: [PluginListItem] {

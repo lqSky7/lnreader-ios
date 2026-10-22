@@ -73,6 +73,45 @@ final class SourceManager {
         sources[key] as? any MangaSource
     }
 
+    // MARK: Extensions
+
+    /// Load every installed extension bundle into the registry.
+    ///
+    /// Idempotent: an already-registered key is left alone, so calling this
+    /// after an install only adds the new one.
+    func registerInstalledExtensions() {
+        for installed in ExtensionStore.installed() {
+            let key = SourceKey.make(kind: installed.kind, id: installed.pkg)
+            if sources[key] != nil { continue }
+
+            guard let bundle = ExtensionStore.bundle(for: installed.pkg) else { continue }
+
+            let manifest = ExtensionManifest(
+                pkg: installed.pkg,
+                name: installed.name,
+                lang: installed.lang,
+                versionId: installed.versionId,
+                iconURL: installed.iconURL,
+                bundlePath: "\(installed.pkg).js",
+                kind: installed.kind
+            )
+
+            do {
+                register(try JSBundleMangaSource(manifest: manifest, bundle: bundle))
+            } catch {
+                // A broken bundle must not stop the others from loading.
+                lastError = error
+                print("⚠️ Extension \(installed.pkg) failed to load: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Uninstall an extension: remove its files and drop it from the registry.
+    func uninstallExtension(pkg: String, kind: ContentKind) {
+        ExtensionStore.uninstall(pkg)
+        unregister(key: SourceKey.make(kind: kind, id: pkg))
+    }
+
     // MARK: Bridging the v1 plugin layer
 
     /// Mirror the installed LN plugins into the registry.

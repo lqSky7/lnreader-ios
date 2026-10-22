@@ -50,6 +50,10 @@ struct ContentView: View {
             sourceManager.register(SampleMangaSource())
             #endif
             sourceManager.sync(with: pluginManager)
+            // Extensions: ship MangaFire with the binary, then load whatever is
+            // installed (bundled or from a repository).
+            BundledExtensions.installMissing()
+            sourceManager.registerInstalledExtensions()
             // The HTTP stack gets its Cloudflare solver before any source is browsed.
             await HTTPClient.shared.setCloudflareSolver(WebKitCloudflareSolver())
             if autoUpdateOnLaunch {
