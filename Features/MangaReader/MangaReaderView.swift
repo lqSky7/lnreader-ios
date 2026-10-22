@@ -59,15 +59,13 @@ struct MangaReaderView: View {
 
             content
                 .contentShape(Rectangle())
-                .overlay {
-                    if mode == .pager, !isLoading, errorMessage == nil {
-                        pageTapZones
-                    } else {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture { toggleControls() }
-                    }
-                }
+                // A simultaneous gesture, not an overlay: an overlay of
+                // `Color.clear` sits above the scroll view and eats the drag, so
+                // the webtoon would not scroll and the pager would not swipe.
+                .simultaneousGesture(
+                    SpatialTapGesture()
+                        .onEnded { value in handleTap(at: value.location.x) }
+                )
 
             if chrome.isControl {
                 controls
@@ -418,21 +416,29 @@ struct MangaReaderView: View {
 
     // MARK: - Interaction
 
-    /// Pager only: left and right thirds turn the page, the middle toggles the
-    /// controls. In right-to-left mode the zones swap, matching the swipe
-    /// direction the pager itself uses.
-    private var pageTapZones: some View {
-        HStack(spacing: 0) {
-            tapZone { turnPage(forward: direction == .rightToLeft) }
-            tapZone { toggleControls() }
-            tapZone { turnPage(forward: direction != .rightToLeft) }
+    /// Pager: left and right thirds turn the page, the middle toggles chrome.
+    /// In right-to-left mode the zones swap, matching the swipe direction the
+    /// pager itself uses. Webtoon has no zones — every tap toggles.
+    private func handleTap(at x: CGFloat) {
+        guard mode == .pager else {
+            toggleControls()
+            return
         }
-    }
 
-    private func tapZone(_ action: @escaping () -> Void) -> some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture(perform: action)
+        #if canImport(UIKit)
+        let width = UIScreen.main.bounds.width
+        #else
+        let width: CGFloat = 400
+        #endif
+
+        let third = width / 3
+        if x < third {
+            turnPage(forward: direction == .rightToLeft)
+        } else if x > width - third {
+            turnPage(forward: direction != .rightToLeft)
+        } else {
+            toggleControls()
+        }
     }
 
     private func turnPage(forward: Bool) {
