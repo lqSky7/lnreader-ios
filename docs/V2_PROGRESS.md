@@ -196,14 +196,37 @@ Decisions worth knowing:
   Yokai's `ChapterRecognitionTest` cases verbatim (40 of them) plus merge behaviour against
   an in-memory store, so the port can be diffed against upstream.
 
-## Slice 5 — next
+## Slice 5 — manga page pipeline (landed)
 
-1. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
-   fingerprint pinning. This is the entry point for the Mihon path.
-2. **Manga reader** (plan §4) with a stub `MangaSource` so the pager and webtoon viewers
-   can be built before the transpiler exists.
-3. **Downloads** (plan §5).
-4. **Library update scheduling** (plan §8): `BGAppRefreshTask`, per-entry restrictions
-   (Wi-Fi, charging, skip completed), and batching through a background `@ModelActor`.
-5. **Filter UI** on browse, now that `FilterState` exists.
+The headless half of the manga reader: the cache every page goes through, and the
+ordering the viewers will ask it for. No UI yet — that comes with the viewers.
+
+| File | What it is |
+|---|---|
+| `Services/Images/ChapterCache.swift` | Actor-backed LRU disk cache keyed by MD5(imageURL), 512 MB default, self-trimming to 90% of the limit |
+| `Features/MangaReader/PagePrefetchPlan.swift` | Pure ordering: current page first, then 6 ahead, 1 behind; plus the "5 pages from the end" next-chapter trigger |
+
+Notes:
+
+- **LRU order is each file's modification date**, touched on every read. That survives
+  restarts without a separate index file that could drift from the directory contents.
+- **Writes are write-then-rename**, so a crash mid-download cannot leave a half image the
+  reader would decode into a corrupt page.
+- **The cache is excluded from backups by location** (`Application Support/ChapterCache`):
+  it is re-downloadable, and carrying hundreds of megabytes into iCloud is waste.
+- The check caught a real accounting bug: the size was measured *after* writing the new
+  file, so every store double-counted and the cache trimmed one file too early.
+
+## Slice 6 — next
+
+1. **Manga reader UI** (plan §4): `UICollectionView` pager and webtoon viewers, driven by
+   `PagePrefetchPlan`, with `MangaSource` behind a stub source for now.
+2. **`PageLoader`** on top of `ChapterCache`: priority queue, lazy `imageURL` resolution,
+   ImageIO downsampling and tall-page tiling.
+3. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
+   fingerprint pinning — the entry point for the Mihon path.
+4. **Downloads** (plan §5).
+5. **Library update scheduling** (plan §8): `BGAppRefreshTask`, per-entry restrictions,
+   batching through a background `@ModelActor`.
+6. **Filter UI** on browse, now that `FilterState` exists.
 
