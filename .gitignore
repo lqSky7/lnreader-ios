@@ -21,3 +21,6 @@ DerivedData/
 
 # Xcode schemes are per-developer
 LNReader.xcodeproj/xcshareddata/xcschemes/
+
+# Instruments traces
+*.trace
