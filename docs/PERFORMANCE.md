@@ -117,6 +117,29 @@ History and Updates grouped rows by a fully formatted timestamp string, which pu
 every row in its own section and rebuilt a format style per row. They now group
 by `startOfDay` with one shared formatter.
 
+### 7. The manga reader (second pass)
+
+Found by reading the code, not by a trace — verify on a Release device build.
+
+- **Every page turn saved.** `scheduleProgressSave` writes immediately after 3 s idle, which
+  is every turn when reading page by page, and each save re-runs every `@Query` on the main
+  thread. Manga progress is now `deferred` (30 s) and lands on close, chapter change and
+  backgrounding.
+- **Decoded pages were never released.** Each `MangaPageView` held its bitmap in `@State`, so
+  a long chapter kept every page alive. Pages now drop the bitmap in `onDisappear`; the
+  byte-accounted `PageImageCache` (160 MB) serves a quick scroll back, and the aspect ratio is
+  remembered per page so the slot keeps its height instead of collapsing to a spinner.
+- **Decoding ignored scrolling.** `Task.detached` was not cancelled when a page scrolled
+  away and there was no limit on parallel decodes. Decoding is now `@concurrent`, cancellable,
+  and gated to two at a time (`PageDecodeGate`).
+- **Pages were drawn 3× oversized.** The bitmap was decoded at pixel width but tagged scale 1,
+  so the GPU minified it every frame. It is now tagged with the display scale.
+- **A drag gesture covered the whole strip** for the right-edge dismiss swipe. It is now a
+  `UIScreenEdgePanGestureRecognizer` that only exists at the edge.
+- **Not done:** `ChapterCache.data` still rewrites the file's modification date on every read.
+  Throttling it breaks the cache's LRU contract (checked by `check-v2-page-pipeline.sh`), so it
+  stays unless a trace shows it matters.
+
 ## Still to look at
 
 Ordered by expected payoff on device, not yet measured:

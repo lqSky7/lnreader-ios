@@ -62,7 +62,7 @@ actor ChapterCache {
     /// Cached bytes for `url`, touching its LRU position.
     func data(for url: String) -> Data? {
         let file = fileURL(for: url)
-        guard let data = try? Data(contentsOf: file) else { return nil }
+        guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { return nil }
         // Touching the modification date is the whole LRU mechanism.
         try? fileManager.setAttributes([.modificationDate: Date.now], ofItemAtPath: file.path)
         return data

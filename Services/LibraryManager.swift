@@ -35,6 +35,7 @@ final class LibraryManager {
 
     /// Minimum gap between two progress writes.
     static let progressSaveInterval: Duration = .seconds(3)
+    static let deferredSaveInterval: Duration = .seconds(30)
 
     /// Timestamp bump inside `History` / `Entry` is only useful at a coarse
     /// granularity — nothing reads it below a minute.
@@ -200,19 +201,27 @@ final class LibraryManager {
     }
 
     /// Coalesce a progress write. Safe to call as often as the reader likes.
-    private func scheduleProgressSave(_ context: ModelContext) {
+    ///
+    /// `deferred` is for readers that turn a page every few seconds. The
+    /// "first write after idle lands immediately" rule below fits a scroll
+    /// stream but not page-by-page reading: every turn is a fresh idle stretch,
+    /// so every turn saved, and each save re-runs every `@Query` on the main
+    /// thread. Deferred writes wait out `deferredSaveInterval` instead; the
+    /// reader still flushes on close, on a chapter change and on backgrounding.
+    private func scheduleProgressSave(_ context: ModelContext, deferred: Bool = false) {
         pendingProgressSave = true
         guard progressSaveTask == nil else { return }
 
         // First write after an idle stretch lands immediately, so closing the
         // reader right after opening it still persists.
-        if Date.now.timeIntervalSince(lastProgressSave) >= 3 {
+        if !deferred, Date.now.timeIntervalSince(lastProgressSave) >= 3 {
             flushProgress(context: context)
             return
         }
 
+        let interval = deferred ? Self.deferredSaveInterval : Self.progressSaveInterval
         progressSaveTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: Self.progressSaveInterval)
+            try? await Task.sleep(for: interval)
             guard let self, !Task.isCancelled else { return }
             self.progressSaveTask = nil
             self.flushProgress(context: context)
@@ -256,7 +265,7 @@ final class LibraryManager {
         if chapter.read != wasRead { LibraryChapterCounts.shared.invalidate() }
 
         touchTimestamps(chapter)
-        scheduleProgressSave(context)
+        scheduleProgressSave(context, deferred: true)
     }
 
     // MARK: - Network state
