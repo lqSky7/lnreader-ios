@@ -34,6 +34,87 @@ touches `default.store`, so the old data stays recoverable on disk.
 | Backup / restore (`.lnbk`) | **Local v2 format implemented; device check pending** | Authenticated encrypted snapshots, recovery key, merge restore; protobuf/cloud interoperability remains deferred |
 | Performance | **Pass done; device trace pending** | Library counts cached off-main, reader writes coalesced, covers downsampled; see [PERFORMANCE.md](PERFORMANCE.md) |
 
+## Roadmap — Mihon / Yokai parity
+
+Everything here is **Planned** (nothing started). Ordered by dependency, not by size: the
+per-series settings store comes first because reader modes, filters and incognito all read it.
+
+| # | Feature | State | Depends on |
+|---|---|---|---|
+| R1 | Per-series reader settings store | Planned | — |
+| R2 | Per-series read mode (pager / webtoon / direction) | Planned | R1 |
+| R3 | Tap-zone layouts | Planned | R1 |
+| R4 | Volume-key page turns | Planned | R1 |
+| R5 | Auto scroll | Planned | R1 |
+| R6 | Hold to scroll, with swipe-to-change-speed | Planned | R5 |
+| R7 | Library filters | Planned | — |
+| R8 | Library sorts (per category) | Planned | R7 |
+| R9 | Categories: per-category sort, display, update scope | Planned | R7, R8 |
+| R10 | Library badges | Planned | — |
+| R11 | Duplicate detection | Planned | — |
+| R12 | Migrate manga / novel to another source | Planned | R11 |
+| R13 | Incognito mode | Planned | — |
+| R14 | Download UI/UX polish | Planned | — |
+
+### Reader (R1–R6)
+
+- **R1 settings store.** One resolved-settings struct: series override ➝ global default.
+  Keep it in UserDefaults keyed by `sourceKey::url`, like scanlator rules, not in the
+  schema — it is a view preference. Everything below reads through it.
+- **R2 read mode.** Today `manga.readingMode` / `manga.pagingDirection` are global
+  `@AppStorage`. Add a "this series" override with a "use default" state, shown in the reader
+  options menu. Novels keep their own reader settings; only manga needs this.
+- **R3 tap zones.** Layouts: default (thirds), L-shaped, Kindlish, edge, disabled, plus an
+  invert toggle. Zones stay a simultaneous gesture, never an overlay (see Decisions).
+  Zones must respect right-to-left.
+- **R4 volume keys.** Needs a hardware-key hook (observe `AVAudioSession` output volume or
+  `onHardwareKeyPress`/`UIPress`), swallow the HUD where possible, and invert in RTL.
+  Per-series override optional. Check it does not fight the screen-awake setting.
+- **R5 auto scroll.** Webtoon only at first: a `CADisplayLink`-driven offset, not a timer,
+  so speed is frame-rate independent. Setting: speed in points/second, default and
+  min/max. Stops on touch, resumes on a tap or after a configurable delay.
+- **R6 hold to scroll.** Press and hold scrolls at a configurable speed; while holding,
+  dragging up or down raises or lowers the speed. Configurable: base speed, step size per
+  point dragged, min/max, and **which direction increases** (up = faster by default, with
+  an invert option). Must not use an overlay that eats the scroll view's drag; implement as
+  a simultaneous long-press-then-drag gesture and cancel it when the hold ends. Share the
+  scroller with R5 so there is one animation driver.
+
+### Library (R7–R10)
+
+- **R7 filters.** Downloaded, unread, started, completed, tracked, source/kind. Tri-state
+  (include / exclude / off) like Mihon, persisted per category. Counts must come from
+  `LibraryChapterCounts` — no relationship walks in a `body` (see Decisions).
+- **R8 sorts.** Sort orders exist today (`SortOrder`); add per-category sort + direction,
+  and "latest chapter", "last checked", "chapter fetch date". Sorting by unread must use the
+  cached counts, never `Entry.unreadCount`.
+- **R9 categories.** Per-category display mode, sort, filter and update scope. The category
+  chip row already exists; this adds the per-category state behind it.
+- **R10 badges.** Unread, downloaded, source/language, "new". Compute off-main and cache;
+  badges are the main per-cell cost in the grid.
+
+### Library maintenance (R11–R13)
+
+- **R11 duplicates.** On add-to-library, match by normalized title (and alt titles) across
+  sources and warn with a "view existing / add anyway" choice. Matching must be cheap: index
+  once, not per keystroke.
+- **R12 migrate.** Pick a destination source, search it, choose the match, then carry over
+  chapters read, bookmarks, categories, added date and tracking, and offer to keep or remove
+  the old entry. Match chapters by number (reuse `ChapterRecognition`). Do this as one
+  background transaction so a failed migrate leaves the old entry intact. Works for both
+  manga and novels.
+- **R13 incognito.** A global toggle that suppresses history writes, reading progress, and
+  `lastReadAt`. Must be visible (a banner or icon) so it is never on by accident, and must
+  be respected by both readers and the downloader's auto-mark-read.
+
+### Downloads (R14)
+
+Polish the More → Downloads screen and the per-chapter download controls: clearer
+queue states (queued / downloading / paused / waiting for Wi-Fi / failed), reorderable
+queue, per-title progress, swipe actions, a visible download state on chapter rows, a
+storage summary with a clear-all, and a sensible empty state. The queue and guards already
+exist; this is UI and information design, so it needs a device pass.
+
 ## Landed
 
 | Commit | What |
@@ -112,12 +193,13 @@ touches `default.store`, so the old data stays recoverable on disk.
 ## UX pass
 
 - **Swiping switches kinds.** The Library kind picker and the Browse source switcher both
-  looked like tabs but did nothing on swipe. Both are now paged containers bound to the
-  same `@AppStorage` key, with the chrome pinned above the pager so a swipe moves only the
-  content: the picker, the Browse switcher and the search field stay put and animate. Each
-  Library page has its own empty state, so a filter that matches nothing no longer claims
-  the whole library is empty. Category chips stay inside the page — they filter the grid,
-  so they are content.
+  looked like tabs but did nothing on swipe. They are now bound to the same `@AppStorage`
+  key, with the chrome pinned above the content so a swipe moves only the list. They began as
+  page-style `TabView`s; those were replaced with a single rendered page and a
+  `horizontalSwipe` modifier (`Extensions/View+Extensions.swift`) because the nested pager
+  built every page up front and fought the scroll view. Each Library page has its own empty
+  state, so a filter that matches nothing no longer claims the whole library is empty.
+  Category chips stay inside the page — they filter the grid, so they are content.
 - **Browse's floating search button is an overlay**, not a bottom safe-area inset. The
   inset reserved a strip that nothing painted, which showed as a black bar under the list;
   the list now reserves scroll room with `.contentMargins` instead.
@@ -128,8 +210,8 @@ touches `default.store`, so the old data stays recoverable on disk.
   series, and the chapter list says "Loading chapters…" instead of "No chapters yet".
 - **Launch update is deferred** by two seconds so the first frame and first tap are not
   competing with a library-wide refresh.
-- **Risk:** the Library pager hosts drag-and-drop reordering; long-press drag is expected
-  to cancel the pager's pan, but that needs a device check.
+- **Risk:** the swipe is disabled while the library is in edit mode so it cannot compete
+  with drag-and-drop reordering; check on a device that a long-press drag still starts.
 
 ## Open issues
 
