@@ -188,11 +188,12 @@ final class LibraryManager {
     // MARK: - Library updates
 
     /// Refresh every library entry from its source.
-    func updateLibrary(context: ModelContext, sourceManager: SourceManager) async {
+    func updateLibrary(context: ModelContext, sourceManager: SourceManager, automatic: Bool = false) async {
         guard !isUpdating else { return }
 
         if UserDefaults.standard.object(forKey: "general.updateOnWifiOnly") as? Bool ?? true {
-            if isCellularConnection() {
+            await NetworkMonitor.shared.waitForPath()
+            if !NetworkMonitor.shared.isOnWiFi() {
                 print("📶 Library update skipped: Wi-Fi only setting is enabled and current network is cellular.")
                 return
             }
@@ -228,6 +229,11 @@ final class LibraryManager {
 
         var pending: [UpdateWork] = []
         for entry in entries where !entry.isLocal {
+            guard !Task.isCancelled else { return }
+            guard LibraryUpdatePolicy.permits(strategy: entry.updateStrategy, hasFetched: entry.lastUpdate != nil,
+                status: entry.status, hasUnread: entry.hasUnread, automatic: automatic,
+                unreadOnly: UserDefaults.standard.bool(forKey: "updates.unreadOnly"),
+                skipCompleted: UserDefaults.standard.bool(forKey: "updates.skipCompleted")) else { continue }
             guard let source = sourceManager.source(forKey: entry.sourceKey) else { continue }
             let job = UpdateJob(
                 id: entry.persistentModelID,
@@ -255,7 +261,9 @@ final class LibraryManager {
                         title: work.job.title
                     )
                     do {
+                        try Task.checkCancellation()
                         let details = try await work.source.details(entry)
+                        try Task.checkCancellation()
                         let chapters = try await work.source.chapters(entry)
                         return UpdateResult(
                             id: work.job.id, details: details, chapters: chapters, error: nil
@@ -283,6 +291,7 @@ final class LibraryManager {
         let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.persistentModelID, $0) })
         var didChange = false
         for result in results {
+            guard !Task.isCancelled else { return }
             guard let entry = byID[result.id] else { continue }
             if let details = result.details, result.error == nil {
                 applyUpdate(entry, details: details, chapters: result.chapters, context: context)
@@ -343,13 +352,16 @@ final class LibraryManager {
 /// Singleton wrapper around NWPathMonitor. Creating a monitor per check
 /// (plus a semaphore wait) blocks the caller and spins up threads;
 /// share one long-lived monitor instead.
-final class NetworkMonitor: Sendable {
+final class NetworkMonitor: @unchecked Sendable {
     static let shared = NetworkMonitor()
 
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.lnreader.network-monitor")
     private let lock = NSLock()
     private var _isCellular = false
+    private var _isOnWiFi = false
+    private var _isConnected = false
+    private var _hasPath = false
     private var started = false
 
     private init() {}
@@ -363,7 +375,11 @@ final class NetworkMonitor: Sendable {
             guard let self else { return }
             self.lock.lock()
             self._isCellular = path.usesInterfaceType(.cellular)
+            self._isOnWiFi = path.status == .satisfied && path.usesInterfaceType(.wifi)
+            self._isConnected = path.status == .satisfied
+            self._hasPath = true
             self.lock.unlock()
+            NotificationCenter.default.post(name: Notification.Name("LNReaderNetworkChanged"), object: nil)
         }
         monitor.start(queue: queue)
     }
@@ -373,5 +389,24 @@ final class NetworkMonitor: Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _isCellular
+    }
+
+    func isOnWiFi() -> Bool {
+        ensureStarted()
+        lock.lock(); defer { lock.unlock() }
+        return _isOnWiFi
+    }
+    func isConnected() -> Bool {
+        ensureStarted(); lock.lock(); defer { lock.unlock() }; return _isConnected
+    }
+    private func hasPath() -> Bool {
+        lock.lock(); defer { lock.unlock() }; return _hasPath
+    }
+    func waitForPath() async {
+        ensureStarted()
+        for _ in 0..<20 {
+            if hasPath() || Task.isCancelled { return }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 }

@@ -308,6 +308,13 @@ struct ChapterDirectoryView: View {
                                 }.buttonStyle(.plain)
                             } else { ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey) }
                         }.id(chapter.path)
+                        .contextMenu {
+                            if let saved = entry?.chapters.first(where: { $0.url == chapter.path }), entry?.isLocal == false {
+                                Button(chapter.downloaded ? "Downloaded" : "Download chapter", systemImage: "arrow.down.circle") {
+                                    ChapterDownloadManager.shared.enqueue([saved])
+                                }.disabled(chapter.downloaded)
+                            }
+                        }
                     }
                     if visible.isEmpty { ContentUnavailableView("No chapters", systemImage: "text.magnifyingglass", description: Text("Try another number, title, or filter.")) }
                 } header: { Text(search.isEmpty ? "Chapters \(pageLabel)" : "\(filtered.count) results") }

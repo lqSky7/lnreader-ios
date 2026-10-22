@@ -323,6 +323,16 @@ struct MangaReaderView: View {
         errorMessage = nil
         loadStoredChapters()
 
+        if let entryURL, let downloaded = OfflineChapters.manga(sourceKey: sourceKey, entryURL: entryURL, chapterURL: requestedURL) {
+            pages = downloaded
+            currentIndex = resumeIndex(pageCount: downloaded.count)
+            isLoading = false
+            if let storedChapter, let entry = storedChapter.entry {
+                libraryManager.recordHistory(entry: entry, chapter: storedChapter, context: modelContext)
+            }
+            return
+        }
+
         guard let source = sourceManager.mangaSource(forKey: sourceKey) else {
             errorMessage = "This source is not available. Reinstall it and try again."
             isLoading = false

@@ -6,6 +6,9 @@ import SwiftUI
 
 @main
 struct LNReaderApp: App {
+    init() {
+        LibraryMaintenance.container = Self.modelContainer
+    }
     #if os(iOS)
     @UIApplicationDelegateAdaptor(TTSAudioAppDelegate.self) private var audioDelegate
     #endif

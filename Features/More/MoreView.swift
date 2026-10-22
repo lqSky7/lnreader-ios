@@ -29,6 +29,27 @@ struct MoreView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     profileHeaderCard
+
+                    VStack(spacing: 0) {
+                        NavigationLink { OfflineLibraryView() } label: {
+                            Label("Downloads", systemImage: "arrow.down.circle")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                        }
+                        Divider().padding(.vertical, 12)
+                        NavigationLink { LibraryUpdateSettingsView() } label: {
+                            Label("Library updates", systemImage: "arrow.triangle.2.circlepath")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                        }
+                        Divider().padding(.vertical, 12)
+                        NavigationLink { LibraryBackupView() } label: {
+                            Label("Backup & restore", systemImage: "externaldrive")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(Color(uiColor: .systemGray6), in: RoundedRectangle(cornerRadius: 20))
+                    .padding(.horizontal)
                     
                     // Bento grid layout for settings (systemGray6 background, monochrome icons)
                     bentoSettingsGrid

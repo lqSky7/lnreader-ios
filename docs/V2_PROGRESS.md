@@ -1,7 +1,7 @@
 # v2 rewrite — status
 
 **Updated** 2026-10-22 · **Branch** `feat/v2-rewrite-manga` · **Version** 2.0.0 (build 3)
-· **Latest update** Reader and Browse UI corrections, chapter directory reuse, and UI audit
+· **Latest update** Novel/manga offline chapters, scheduled updates, and encrypted local backup/restore
 
 The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end, and puts
 every source behind one protocol so a JS plugin and a transpiled extension are the same
@@ -24,14 +24,14 @@ touches `default.store`, so the old data stays recoverable on disk.
 | Chapter lists | **Done** | Number ordering, all-chapters for manga, scanlator priority |
 | Browse | **Done** | Split into Light Novels / Manga |
 | Reader and Browse UI polish | **Implemented; device check pending** | Manga controls and dismiss swipe; Browse title and switcher; English default for novel sources |
-| Extension repo UI | Not started | `ExtensionRepoService` works; nothing calls it yet |
-| WebView fetch primitive | Not started | Blocks captcha-gated sources (MangaFire included) |
-| Kotlin/JS transpiler | Blocked | No JDK/Kotlin/Gradle in this environment |
-| Downloads | Not started | Plan §5 |
-| Update scheduling | Not started | Plan §8 (`BGAppRefreshTask`, restrictions) |
+| Extension repo UI | **On hold by user** | Existing service retained |
+| WebView fetch primitive | **On hold by user** | Captcha-gated sources remain blocked |
+| Kotlin/JS transpiler | **On hold by user** | Toolchain also absent |
+| Downloads | **Implemented; device check pending** | Novel text and manga pages, durable queue, offline reader paths, pause/retry/remove, Wi-Fi and storage guards |
+| Update scheduling | **Implemented; device check pending** | App refresh, continued/processing download tasks, per-title policy, optional notifications and new-chapter downloads |
 | Trackers | **Deferred** | User's call |
 | Migration (`.tachibk`, bridge) | **Deferred** | User's call; fresh installs start empty |
-| Backup / restore (`.lnbk`) | Not started | Plan §6 |
+| Backup / restore (`.lnbk`) | **Local v2 format implemented; device check pending** | Authenticated encrypted snapshots, recovery key, merge restore; protobuf/cloud interoperability remains deferred |
 
 ## Landed
 
@@ -54,6 +54,34 @@ touches `default.store`, so the old data stays recoverable on disk.
 | `6c32ca4` | Browse split into two catalogues |
 | `86d0c39` | Version 2.0.0 |
 | `2092e97` | Rewrote this progress tracker as a status ledger |
+| `3072d5d` | Reader/Browse UI fixes, shared manga chapter directory, audit, sample source removal |
+
+## Offline library update
+
+- **Downloads:** More → Downloads provides title batches, per-chapter context actions,
+  durable queue state, pause/retry/removal, errors, progress, Wi-Fi waiting, and a 200 MB
+  free-space guard. Novels save chapter HTML/text; manga saves page files. Both readers
+  prefer validated durable files before consulting the network. Chapter folders are
+  published with a manifest only after completion and survive cache eviction.
+- **Background work:** task identifiers and modes are registered and declared. User
+  batches request iOS 26 continued processing; pending work can resume in a scheduled
+  processing task. Library app refresh has a requested interval, Wi-Fi preference,
+  unread/completed filters, per-entry strategies, optional notifications and new-chapter
+  downloads. Manual refresh overrides automatic-only entry restrictions. iOS controls
+  when scheduled tasks run.
+- **Backup:** More → Backup & restore exports AES-256-GCM `.lnbk` snapshots with a random
+  Keychain recovery key. Covers metadata, categories, chapters, reading state/history,
+  existing tracker records, preferences, profile, and local imported books. Restore
+  merges without replacing existing title details or newer progress. Downloaded media,
+  audio, source packages, credentials, and cloud transfer are excluded.
+- **Format decision:** the local snapshot uses authenticated `LNRB` envelope version 2
+  and a JSON payload with a random recovery key. It is distinct from the plan's proposed
+  Argon2/protobuf format. `.tachibk` interoperability remains deferred migration work.
+- **Checks:** simulator SDK build, offline-library encryption/restore/policy checks,
+  existing schema checks, and page-pipeline checks passed. Interactive verification is
+  unavailable: no installed Simulator runtime and the paired iPhone is unavailable.
+- See [offline library notes](OFFLINE_LIBRARY.md) for usage, recovery, background behavior,
+  current media/format boundaries, and the remaining device acceptance checklist.
 
 ## UI update
 
@@ -87,7 +115,8 @@ touches `default.store`, so the old data stays recoverable on disk.
    rules are wired; seeking, gestures, large text, and blur still need interactive checks.
 3. **Global search is novel-only.** `GlobalSearchView` iterates `sourceManager.novelSources`;
    hidden on the Manga tab rather than shown broken.
-4. **Downloads / scheduling absent.** No offline manga, no background refresh.
+4. **Offline/background features need device acceptance.** Verify airplane-mode reading,
+   queue cancellation and relaunch, Files/Keychain recovery, and system task expiration.
 5. **Bundle signing.** Repositories pin a signing-key fingerprint, but bundle bytes are not
    verified.
 
@@ -95,16 +124,13 @@ touches `default.store`, so the old data stays recoverable on disk.
 
 1. **Check the UI changes interactively.** Confirm manga paging and
    webtoon scrolling still work alongside the edge swipe, and check Browse on a compact phone.
-2. **WebView fetch primitive** (`webview.fetch(url, waitForSelector)`) — unblocks captcha
-   sources and gives MangaFire its solver path. Testable only on device.
-3. **Repository browser** — `ExtensionRepoService.fetchIndex/install` already exist; needs a
-   screen (add repo, list available extensions, install/uninstall).
-4. **Kotlin/JS shims** — `HttpSource`, `ParsedHttpSource`, `SManga`, `SChapter`, `Page`,
-   `Request`, `Response` + OkHttp/Jsoup in Kotlin/JS, so extensions compile unchanged. Needs
-   a machine with a JDK; nothing here can build it.
-5. **Downloads** — reuse `PageLoader` + `ChapterCache`, add CBZ/folder output.
-6. **Update scheduling** — `BGAppRefreshTask`, per-entry restrictions, background actor.
-7. **`.lnbk` backup** — the schema is stable enough now.
+2. **Exercise offline reading and queue recovery** on hardware for both novels and manga.
+3. **Exercise background task scheduling/expiration**, notifications, and automatic download rules.
+4. **Export and restore `.lnbk` through Files**, including a fresh-device recovery key and local imported book.
+
+Extension WebView fetching, repository UI, and Kotlin/JS shims are on hold at the user's
+request. Trackers and migration remain deferred. Cloud and `.tachibk` backup interoperability
+are separate from the implemented local `.lnbk` snapshot.
 
 ## Verification
 
@@ -112,6 +138,7 @@ touches `default.store`, so the old data stays recoverable on disk.
 |---|---|
 | `scripts/typecheck.sh` | Whole app, `-D DEBUG` so DEBUG-only code is checked |
 | `scripts/check-v2-schema.sh` | CRUD, cascades, uniqueness, history cascade, download queue |
+| `scripts/check-offline-library.sh` | Backup encryption, rejection/merge rules, durable manifests, manual vs automatic update policy |
 | `scripts/check-v2-foundation.sh` | Status mapping, identity, filters, dates, HTTP values |
 | `scripts/check-v2-chapter-sync.sh` | Chapter parsing (40 Yokai cases), merge, delete guard |
 | `scripts/check-v2-page-pipeline.sh` | Cache LRU, loader dedupe, prefetch order, progress |

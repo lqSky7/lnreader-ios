@@ -85,7 +85,14 @@ struct ChapterRow: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Chapter audio", systemImage: "headphones") { showAudioDownloads = true }
+            if let saved = entry?.chapters.first(where: { $0.url == chapter.path }), entry?.isLocal == false {
+                Button(chapter.downloaded ? "Downloaded" : "Download chapter", systemImage: "arrow.down.circle") {
+                    ChapterDownloadManager.shared.enqueue([saved])
+                }.disabled(chapter.downloaded)
+            }
+            if (entry?.kind ?? chapter.kind) == .novel {
+                Button("Chapter audio", systemImage: "headphones") { showAudioDownloads = true }
+            }
         }
         .sheet(isPresented: $showAudioDownloads) {
             BookAudioDownloadsView(bookId: bookID, bookTitle: entry?.displayTitle ?? chapter.name, sourceKey: sourceKey, entryURL: bookPath,

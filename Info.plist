@@ -36,7 +36,17 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array><string>com.lnreader.library.refresh</string><string>com.lnreader.chapter.downloads</string><string>com.lnreader.chapter.continued.*</string></array>
+    <key>UTExportedTypeDeclarations</key>
+    <array><dict><key>UTTypeIdentifier</key><string>com.lnreader.backup</string>
+    <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+    <key>UTTypeDescription</key><string>LNReader encrypted backup</string>
+    <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>lnbk</string></array></dict>
+    </dict></array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchScreen</key>

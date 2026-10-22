@@ -515,6 +515,15 @@ struct ReaderView: View {
             return
         }
 
+        if let entryURL, let downloaded = OfflineChapters.novel(sourceKey: sourceKey, entryURL: entryURL, chapterURL: requestedPath) {
+            errorMessage = nil
+            ttsBridge.contentDidChange()
+            htmlContent = downloaded; baseURL = nil; isLoading = false
+            if let entry = fetchEntry(), let chapter = entry.chapters.first(where: { $0.url == requestedPath }) {
+                libraryManager.recordHistory(entry: entry, chapter: chapter, context: modelContext)
+            }
+            return
+        }
         if sourceKey == SourceKey.local, let entryURL {
             do {
                 let fileManager = FileManager.default
