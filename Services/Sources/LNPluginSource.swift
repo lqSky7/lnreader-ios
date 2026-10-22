@@ -69,9 +69,15 @@ final class LNPluginSource: NovelSource, @unchecked Sendable {
 
     func chapters(_ entry: SourceEntry) async throws -> [SourceChapter] {
         let novel = try await novel(at: entry.url)
-        return novel.chapters.enumerated().map { index, chapter in
-            self.chapter(from: chapter, fallbackOrder: index)
+
+        // Paginated plugins return only the first page from `parseNovel`;
+        // the remaining pages have to be fetched explicitly.
+        var chapters = novel.chapters
+        if plugin.hasParsePage, let totalPages = novel.totalPages, totalPages > 1 {
+            chapters = try await plugin.fetchAllChapters(path: entry.url, totalPages: totalPages)
         }
+
+        return chapters.map { self.chapter(from: $0) }
     }
 
     // MARK: NovelSource
@@ -143,7 +149,7 @@ extension LNPluginSource {
         )
     }
 
-    private func chapter(from chapter: PluginChapter, fallbackOrder: Int) -> SourceChapter {
+    private func chapter(from chapter: PluginChapter) -> SourceChapter {
         SourceChapter(
             url: chapter.path,
             name: chapter.name,

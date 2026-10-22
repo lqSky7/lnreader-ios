@@ -8,10 +8,10 @@ struct ChapterRow: View {
     @ObservedObject private var audioLibrary = TTSOfflineLibrary.shared
     @State private var showAudioDownloads = false
     let chapter: ChapterDisplay
-    let novel: Novel?
-    let pluginId: String
-    private var bookPath: String { novel?.path ?? chapter.novelPath ?? chapter.path }
-    private var bookID: String { TTSBookIdentity.make(pluginId: pluginId, novelPath: bookPath) }
+    let entry: Entry?
+    let sourceKey: String
+    private var bookPath: String { entry?.url ?? chapter.entryURL ?? chapter.path }
+    private var bookID: String { TTSBookIdentity.make(pluginId: sourceKey, novelPath: bookPath) }
     private var audioCount: Int { audioLibrary.downloads(bookId: bookID, chapterId: chapter.path).filter(\.isAvailable).count }
 
     var body: some View {
@@ -19,8 +19,8 @@ struct ChapterRow: View {
             ReaderView(
                 chapterPath: chapter.path,
                 chapterName: chapter.name,
-                pluginId: pluginId,
-                novelPath: novel?.path ?? chapter.novelPath
+                sourceKey: sourceKey,
+                entryURL: entry?.url ?? chapter.entryURL
             )
             .id(chapter.path)
             .bookZoom(from: chapter.path, in: chapterTransition)
@@ -82,8 +82,8 @@ struct ChapterRow: View {
             Button("Chapter audio", systemImage: "headphones") { showAudioDownloads = true }
         }
         .sheet(isPresented: $showAudioDownloads) {
-            BookAudioDownloadsView(bookId: bookID, bookTitle: novel?.name ?? chapter.name, pluginId: pluginId, novelPath: bookPath,
-                chapters: [TTSChapterChoice(chapter)], coverURL: novel?.cover, initialChapter: chapter.path)
+            BookAudioDownloadsView(bookId: bookID, bookTitle: entry?.displayTitle ?? chapter.name, sourceKey: sourceKey, entryURL: bookPath,
+                chapters: [TTSChapterChoice(chapter)], coverURL: entry?.displayThumbnailURL, initialChapter: chapter.path)
         }
     }
 }

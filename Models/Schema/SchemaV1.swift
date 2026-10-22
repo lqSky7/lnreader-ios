@@ -28,6 +28,9 @@ enum SchemaV1: VersionedSchema {
             ExtensionRepo.self,
             DownloadItem.self,
             PendingTrackUpdate.self,
+            // Account profile. Lives outside the namespace because it predates
+            // v2 and has no schema of its own, but it shares the store.
+            UserProfile.self,
         ]
     }
 
@@ -70,6 +73,13 @@ enum SchemaV1: VersionedSchema {
         var lastUpdate: Date?
         /// Manual drag-and-drop position inside the library.
         var libraryOrder: Int = 0
+
+        /// Cached `max(History.lastRead)` for this entry.
+        ///
+        /// Denormalized on purpose: the library sorts by "recently read" and a
+        /// predicate cannot walk chapters → history. The reader keeps it in
+        /// sync; `History` stays the source of truth for the History screen.
+        var lastReadAt: Date?
 
         // MARK: Kind-specific / source-specific
 
@@ -127,8 +137,14 @@ enum SchemaV1: VersionedSchema {
 
         // MARK: Derived state
 
+        /// Local books live in `Documents/LocalNovels` and are read from disk
+        /// instead of a source. They use the reserved `"local"` source key.
+        var isLocal: Bool { sourceKey == SourceKey.local }
+
         /// Chapters the user has not read yet, newest-first ordering assumed.
         var unreadCount: Int { chapters.count { !$0.read } }
+
+        var totalChapterCount: Int { chapters.count }
 
         var hasUnread: Bool { chapters.contains { !$0.read } }
 
@@ -223,6 +239,15 @@ enum SchemaV1: VersionedSchema {
         static let finishedThreshold: Double = 95
 
         var isInProgress: Bool { !read && progress > 0 }
+
+        /// Whether the chapter can be opened without a network call.
+        ///
+        /// Local books keep their chapters on disk by definition; everything
+        /// else is offline only once its download finished.
+        var isDownloaded: Bool {
+            if entry?.isLocal == true { return true }
+            return downloadItem?.state == .completed
+        }
     }
 
     // MARK: - History
@@ -380,9 +405,9 @@ enum SchemaV1: VersionedSchema {
 /// Short handles so ported views read naturally (`Entry`, `Chapter`, …) without
 /// clashing with the v1 models that are still in the tree.
 typealias Entry = SchemaV1.Entry
-typealias EntryChapter = SchemaV1.Chapter
-typealias ReadingHistoryEntry = SchemaV1.History
-typealias LibraryCategory = SchemaV1.Category
+typealias Chapter = SchemaV1.Chapter
+typealias History = SchemaV1.History
+typealias Category = SchemaV1.Category
 typealias Track = SchemaV1.Track
 typealias ExtensionRepo = SchemaV1.ExtensionRepo
 typealias DownloadItem = SchemaV1.DownloadItem

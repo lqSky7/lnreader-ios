@@ -67,6 +67,10 @@ final class PluginManager {
     /// Set of plugin IDs currently being installed.
     private(set) var installingPluginIDs: Set<String> = []
 
+    /// Called after the installed set changes, so the v2 `SourceManager` can
+    /// mirror it. Wired once at launch; not observable state.
+    @ObservationIgnored var onInstalledSourcesChanged: (() -> Void)?
+
     // MARK: - Computed Properties
 
     /// Unique languages available across all plugins.
@@ -189,6 +193,7 @@ final class PluginManager {
             installedPlugins[id] = plugin
             syncInstalledState()
             saveInstalledMetadata()
+            onInstalledSourcesChanged?()
         } catch {
             lastError = error
             throw PluginManagerError.installationFailed(error.localizedDescription)
@@ -201,6 +206,7 @@ final class PluginManager {
         deletePluginJS(id: id)
         syncInstalledState()
         saveInstalledMetadata()
+        onInstalledSourcesChanged?()
     }
 
     /// Install synced plugins by metadata, fetching registry first when needed.
@@ -239,6 +245,7 @@ final class PluginManager {
         try? FileManager.default.removeItem(at: pluginsDir)
         syncInstalledState()
         saveInstalledMetadata()
+        onInstalledSourcesChanged?()
     }
 
     /// Get an installed plugin by ID.
@@ -318,6 +325,7 @@ final class PluginManager {
         }
 
         syncInstalledState()
+        onInstalledSourcesChanged?()
     }
 
     // MARK: - Private Helpers

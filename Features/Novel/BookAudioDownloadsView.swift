@@ -148,13 +148,13 @@ struct VoiceReferencePassageView: View {
 }
 
 struct BookAudioDownloadsView: View {
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var library = TTSOfflineLibrary.shared
     let bookId: String
     let bookTitle: String
-    let pluginId: String
-    let novelPath: String
+    let sourceKey: String
+    let entryURL: String
     let chapters: [TTSChapterChoice]
     var coverURL: String? = nil
     var initialChapter: String? = nil
@@ -520,14 +520,14 @@ struct BookAudioDownloadsView: View {
                         continue
                     }
                     let html: String
-                    if pluginId == "local" {
-                        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalNovels").appendingPathComponent(novelPath.replacingOccurrences(of: "local://", with: ""))
+                    if sourceKey == SourceKey.local {
+                        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalNovels").appendingPathComponent(entryURL.replacingOccurrences(of: "local://", with: ""))
                         let file = folder.appendingPathComponent(chapter.path).standardizedFileURL
                         guard file.path.hasPrefix(folder.standardizedFileURL.path + "/") else { throw TTSError.request("Invalid local chapter path") }
                         html = try String(contentsOf: file, encoding: .utf8)
                     } else {
-                        guard let source = pluginManager.plugin(for: pluginId) else { throw TTSError.request("Source plugin is unavailable") }
-                        html = try await source.parseChapter(path: chapter.path)
+                        guard let source = sourceManager.novelSource(forKey: sourceKey) else { throw TTSError.request("Source is unavailable") }
+                        html = try await source.chapterHTML(SourceChapter(url: chapter.path, name: chapter.title))
                     }
                     let blocks = try await TTSChapterTextExtractor().extract(html)
                     try await library.prepare(chapter: .init(bookId: bookId, bookTitle: bookTitle, chapterId: chapter.path, title: chapter.title, position: chapter.position, blocks: blocks), voiceIds: voices)

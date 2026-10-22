@@ -13,6 +13,8 @@ xcrun swiftc -parse-as-library -swift-version 5 -disable-sandbox \
   Models/Schema/DownloadState.swift \
   Models/Schema/SchemaV1.swift \
   Models/Schema/SchemaMigrationPlan.swift \
+  Models/UserProfile.swift \
+  Services/Sources/SourceKey.swift \
   tests/V2SchemaChecks.swift \
   -o "$binary"
 "$binary"

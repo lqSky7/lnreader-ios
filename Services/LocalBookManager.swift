@@ -37,8 +37,9 @@ final class LocalBookManager {
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalNovels").appendingPathComponent(id)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let title = document.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String ?? fileURL.deletingPathExtension().lastPathComponent
-        let novel = Novel(path: "local://\(id)", pluginId: "local", name: title, author: document.documentAttributes?[PDFDocumentAttribute.authorAttribute] as? String)
-        novel.isLocal = true; novel.inLibrary = true
+        let novel = Entry(kind: .novel, sourceKey: SourceKey.local, url: "local://\(id)", title: title)
+        novel.author = document.documentAttributes?[PDFDocumentAttribute.authorAttribute] as? String
+        novel.inLibrary = true
         var chapters: [Chapter] = []
         do {
             for (position, section) in starts.enumerated() {
@@ -61,8 +62,14 @@ final class LocalBookManager {
                 guard !paragraphs.isEmpty else { continue }
                 let path = "chapter-\(position).html"
                 try TTSBookIdentity.html(blocks: paragraphs).write(to: directory.appendingPathComponent(path), atomically: true, encoding: .utf8)
-                let chapter = Chapter(path: path, name: section.1, position: chapters.count)
-                chapter.isDownloaded = true; chapter.novel = novel; chapters.append(chapter)
+                let chapter = Chapter(
+                    url: path,
+                    name: section.1,
+                    chapterNumber: Double(chapters.count + 1),
+                    sourceOrder: chapters.count
+                )
+                chapter.entry = novel
+                chapters.append(chapter)
             }
             novel.chapters = chapters
             context.insert(novel)
@@ -445,33 +452,25 @@ final class LocalBookManager {
             print("⚠️ [LocalBookManager] Warning: No chapters resolved for this EPUB book.")
         }
         
-        // Save the Novel and Chapter metadata in SwiftData
-        let novel = Novel(
-            path: novelPath,
-            pluginId: "local",
-            name: title,
-            cover: coverFileURLString,
-            summary: summary,
-            author: author,
-            artist: nil,
-            status: .completed,
-            genres: genres
-        )
+        // Save the entry and chapter metadata in SwiftData
+        let novel = Entry(kind: .novel, sourceKey: SourceKey.local, url: novelPath, title: title)
+        novel.thumbnailURL = coverFileURLString
+        novel.summary = summary
+        novel.author = author
+        novel.status = .completed
+        novel.genres = subjects
         novel.inLibrary = true
-        novel.isLocal = true
-        novel.totalPages = 1
-        
+
         context.insert(novel)
-        
+
         for (index, ch) in cleanChapters.enumerated() {
             let chapter = Chapter(
-                path: ch.path,
+                url: ch.path,
                 name: ch.title,
-                releaseTime: nil,
                 chapterNumber: Double(index + 1),
-                position: index
+                sourceOrder: index
             )
-            chapter.novel = novel
+            chapter.entry = novel
             context.insert(chapter)
             print("📥 [LocalBookManager]   Linked chapter [\(index + 1)]: \"\(ch.title)\" -> path: \"\(ch.path)\"")
         }

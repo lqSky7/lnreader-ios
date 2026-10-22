@@ -104,8 +104,13 @@ struct SourceResultSection: View {
                     ForEach(result.novels.prefix(10)) { novel in
                         NavigationLink {
                             NovelDetailView(
-                                partialNovel: novel,
-                                pluginId: result.pluginId
+                                sourceEntry: SourceEntry(
+                                    sourceKey: SourceKey.make(kind: .novel, id: result.pluginId),
+                                    kind: .novel,
+                                    url: novel.path,
+                                    title: novel.name,
+                                    thumbnailURL: novel.cover
+                                )
                             )
                             .bookZoom(from: novel.path, in: bookTransitions)
                         } label: {

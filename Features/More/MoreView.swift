@@ -9,7 +9,7 @@ struct MoreView: View {
     @Environment(PluginManager.self) private var pluginManager
     @Environment(SyncManager.self) private var syncManager
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<Novel> { $0.inLibrary }) private var libraryNovels: [Novel]
+    @Query(filter: #Predicate<Entry> { $0.inLibrary }) private var libraryNovels: [Entry]
     @Query private var chapters: [Chapter]
     @Query private var profiles: [UserProfile]
 
@@ -156,7 +156,7 @@ struct MoreView: View {
                                 Task {
                                     await syncManager.push(
                                         profile: userProfile,
-                                        novels: libraryNovels,
+                                        entries: libraryNovels,
                                         sources: pluginManager.installedPluginsList
                                     )
                                 }

@@ -1,5 +1,5 @@
 // UpdatesView.swift
-// Feed of newly available chapters from library novels.
+// Feed of newly available chapters from library entries.
 
 import SwiftData
 import SwiftUI
@@ -7,13 +7,13 @@ import SwiftUI
 struct UpdatesView: View {
     @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
     @State private var showClearConfirmation = false
 
     @Query(
-        filter: #Predicate<Chapter> { $0.updatedTime != nil },
-        sort: \Chapter.updatedTime,
+        filter: #Predicate<Chapter> { $0.dateFetch != nil },
+        sort: \Chapter.dateFetch,
         order: .reverse
     )
     private var recentChapters: [Chapter]
@@ -25,10 +25,10 @@ struct UpdatesView: View {
                     EmptyStateView(
                         icon: "bell.badge",
                         title: "No Updates",
-                        subtitle: "New chapters from your library novels will appear here."
+                        subtitle: "New chapters from your library will appear here."
                     )
                     .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                     }
                 } else {
                     List {
@@ -37,12 +37,12 @@ struct UpdatesView: View {
                                 ForEach(chapters) { chapter in
                                     NavigationLink {
                                         ReaderView(
-                                            chapterPath: chapter.path,
+                                            chapterPath: chapter.url,
                                             chapterName: chapter.name,
-                                            pluginId: chapter.novel?.pluginId ?? "",
-                                            novelPath: chapter.novel?.path
+                                            sourceKey: chapter.entry?.sourceKey ?? "",
+                                            entryURL: chapter.entry?.url
                                         )
-                                        .id(chapter.path)
+                                        .id(chapter.url)
                                         .bookZoom(from: chapter.persistentModelID, in: chapterTransitions)
                                     } label: {
                                         UpdateRow(chapter: chapter)
@@ -54,7 +54,7 @@ struct UpdatesView: View {
                     }
                     .listStyle(.plain)
                     .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                     }
                 }
             }
@@ -71,7 +71,7 @@ struct UpdatesView: View {
 
                     Button(action: {
                         Task {
-                            await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                            await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                         }
                     }) {
                         if libraryManager.isUpdating {
@@ -101,7 +101,7 @@ struct UpdatesView: View {
     /// Group chapters by their update date (formatted as relative date).
     private var groupedUpdates: [(key: String, value: [Chapter])] {
         let grouped = Dictionary(grouping: recentChapters) { chapter -> String in
-            guard let date = chapter.updatedTime else { return "Unknown" }
+            guard let date = chapter.dateFetch else { return "Unknown" }
             return date.formatted
         }
         return grouped.sorted { $0.key > $1.key }

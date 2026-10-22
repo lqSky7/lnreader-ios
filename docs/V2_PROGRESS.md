@@ -13,13 +13,18 @@ touches `default.store`, so the old data stays recoverable on disk.
 | Phase | Scope | Status |
 |---|---|---|
 | 0a. Bridge build | `LNBackupSchema`, `LegacyBackupConverter`, "Export for v2" | Deferred with migration |
-| 0b. v2 foundations | Versioned schema, new store, source protocols, HTTP client, repo/trust | **In progress — slice 1 landed** |
-| 1. Extension spike | `lnreader-source-compat`, Kotlin/JS build, JSC threads, parse benchmarks | Not started (go/no-go gate) |
-| 2. Browse + reader MVP | Repo UI, manga browse, entry detail, pager + webtoon, `PageLoader` | Not started |
+| 0b. v2 foundations | Versioned schema, new store, source protocols, HTTP client, repo/trust | **Landed** |
+| 1. Extension spike | `lnreader-source-compat`, Kotlin/JS build, JSC threads, parse benchmarks | **Path chosen: Kotlin/JS.** Spike itself not started |
+| 2. Browse + reader MVP | Repo UI, manga browse, entry detail, pager + webtoon, `PageLoader` | **Read path ported to v2**; manga reader not started |
 | 3. Downloads | Unified manager, CBZ/folder, ComicInfo, background continuation | Not started |
 | 4. E2E backup + cloud | `.lnbk`, Keychain key, blob endpoints | Not started |
 | 5. AniList | Tracker framework, auto-update, offline queue | Not started |
-| 6. Updates & polish | `ChapterSourceSync`, restrictions, BG refresh | Not started |
+| 6. Updates & polish | `ChapterSourceSync`, restrictions, BG refresh | Partially: update merge runs on v2 models |
+
+The Kotlin/JS transpiler route is the chosen one for sources (plan §3.3), so broad
+extension coverage stays the goal and `BuiltinSource` is only the emergency fallback.
+Nothing in slices 1–2 depends on that choice, which is why they could land first.
+
 
 ## Slice 1 — foundations (landed)
 
@@ -103,22 +108,62 @@ Notes:
 plugin server need nested sandboxes. It expects SwiftSoup/Glur `.swiftmodule` files in
 `/tmp/lnr-mod` (see the script header).
 
-## Slice 2 — next
+## Slice 2 — read path on v2 (landed)
 
-Ordered so each step is independently shippable:
+The app now runs on `SchemaV1`. The v1 models (`Novel`, `Chapter`, `ReadingHistory`,
+`Category`, `Repository`, `NovelStatus`) are deleted; `ModelContainerFactory.makeV2()`
+is the only store the app opens.
 
-1. **Port the read path to `Entry`.** Library, Updates, History, entry detail, chapter
-   list. Old models and new coexist until this lands; then delete `Novel`,
-   `ReadingHistory` and the `PluginNovel*` aliases.
-2. **Browse on `SourceManager`.** Replace `PluginManager` reads in Browse/Search with
-   `CatalogSource`, including filters via `FilterState`.
-3. **`ChapterSourceSync`** (plan §8) so updates write through the new models.
-4. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
-   fingerprint pinning. This is also the entry point for the Mihon path.
-5. **Manga reader** (plan §4) with a stub `MangaSource` so the pager and webtoon viewers
-   can be built and tested before the transpiler exists.
-6. **Downloads** (plan §5).
+### What changed
 
-Phase 1 (the transpiler spike) stays a separate go/no-go: it decides whether sources come
-from Kotlin/JS or from a curated set of built-in Swift sources. Nothing in slice 1 depends
-on that answer, which is why it was safe to build first.
+| Area | Change |
+|---|---|
+| Store | `LNReaderApp` opens `LNReader-v2.store` through `ModelContainerFactory`; `UserProfile` moved into `SchemaV1.models` |
+| Models | Aliases promoted to real names: `Entry`, `Chapter`, `History`, `Category` |
+| Library | `LibraryView` / grid / list / drop delegate query `Entry`; sorting uses `libraryOrder`, `lastUpdate`, `unreadCount`, `totalChapterCount` |
+| Detail | `NovelDetailView` takes `entry:` or `sourceEntry:` and fetches through `NovelSource` instead of `PluginManager` |
+| Chapter list | `ChapterDisplay` bridges `Chapter` and `SourceChapter`; `releaseTime` is now formatted from `dateUpload` |
+| Reader | `ReaderView` takes `sourceKey` + `entryURL`, resolves the source from `SourceManager`, reads local books via `sourceKey == "local"` |
+| History | Queries `History.lastRead` and walks `chapter → entry` for titles and covers |
+| Updates | Queries `Chapter.dateFetch` instead of `updatedAt` |
+| Stats | Category counts use `Category.entries`; source counts use `entry.sourceKey` |
+| Sync | Wire format unchanged (`/api/sync` still speaks v1 `path`/`pluginId`); only the mapping changed |
+| Local books | Imported EPUB/PDF become `Entry(sourceKey: "local")`, with `isLocal` computed |
+
+### Design notes
+
+- **`Entry.lastReadAt` is a cached column.** The library sorts by "recently read" and a
+  `#Predicate` cannot walk chapters → history, so the reader writes the timestamp on
+  `Entry` as well. `History` remains the source of truth for the History screen.
+- **`Chapter.isDownloaded` is computed** from the download queue (or from the entry being
+  local), replacing the stored v1 flag that could drift from reality.
+- **`SourceKey`** owns the `"ln:<id>"` / `"mihon:<id>"` / `"local"` grammar. Anything that
+  needs the bare plugin id (TTS book ids, comment-site lookup) goes through it, which is
+  what keeps existing audio downloads and NovelFire comments working.
+- **Type-checker pressure is real.** Two views had to be split into smaller computed
+  properties (`ReaderView.presentation` / `.readerStack`, `LibraryView.libraryContent`);
+  a 25-modifier body is past what Swift will infer in reasonable time.
+
+### Verification
+
+```sh
+./scripts/typecheck.sh            # whole app
+./scripts/check-v2-schema.sh      # schema CRUD, cascades, uniqueness
+./scripts/check-v2-foundation.sh  # status mapping, identity, filters, dates, HTTP values
+```
+
+## Slice 3 — next
+
+1. **Browse on `SourceManager`.** `SourceDetailView` and `GlobalSearchView` still call
+   `PluginManager` + `PluginNovelRef` directly; move them to `CatalogSource` and
+   `SourceEntry`, including filters via `FilterState`. That also deletes the last
+   `PluginNovel*` types from the UI layer.
+2. **`ChapterSourceSync`** (plan §8): dedupe, `chapterNumber` parsing via a port of
+   `ChapterRecognition`, delete-missing, and a background `@ModelActor` for batching.
+   Today `LibraryManager.applyUpdate` adds and updates but never removes.
+3. **Extension repos + trust.** `ExtensionRepo` rows, `index.min.json` fetch, signing
+   fingerprint pinning. This is the entry point for the Mihon path.
+4. **Manga reader** (plan §4) with a stub `MangaSource` so the pager and webtoon viewers
+   can be built before the transpiler exists.
+5. **Downloads** (plan §5).
+

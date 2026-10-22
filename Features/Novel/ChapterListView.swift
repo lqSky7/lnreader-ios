@@ -6,12 +6,12 @@ import SwiftUI
 
 struct ChapterListView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let novel: Novel?
+    let entry: Entry?
     var allChapters: [ChapterDisplay] = []
     let chapters: [ChapterDisplay]
     let totalCount: Int
     let filteredCount: Int
-    let pluginId: String
+    let sourceKey: String
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
@@ -76,7 +76,7 @@ struct ChapterListView: View {
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(chapters) { chapter in
-                        ChapterRow(chapter: chapter, novel: novel, pluginId: pluginId)
+                        ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey)
                             .padding(.horizontal, 12)
                         if chapter.id != chapters.last?.id { Divider().padding(.leading, 34) }
                     }
@@ -96,8 +96,8 @@ struct ChapterListView: View {
         .padding(.horizontal)
         .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showSearchField)
         .sheet(isPresented: $showDirectory) {
-            ChapterDirectoryView(novel: novel, chapters: allChapters.isEmpty ? chapters : allChapters,
-                pluginId: pluginId, currentChapterPath: chapters.first(where: { $0.unread })?.path ?? chapters.first?.path,
+            ChapterDirectoryView(entry: entry, chapters: allChapters.isEmpty ? chapters : allChapters,
+                sourceKey: sourceKey, currentChapterPath: chapters.first(where: { $0.unread })?.path ?? chapters.first?.path,
                 initialSearch: searchText, initialFilter: selectedFilter)
         }
         .onAppear { showSearchField = !searchText.isEmpty }
@@ -106,7 +106,10 @@ struct ChapterListView: View {
 
 // MARK: - Unified Chapter Display
 
-/// Bridges SwiftData Chapter and PluginChapter into a single displayable type.
+/// Bridges a stored chapter and a source chapter into a single displayable type.
+///
+/// The two sources of chapters differ (SwiftData rows carry read state, source
+/// rows do not), so the list only ever renders this value.
 struct ChapterDisplay: Identifiable, Hashable {
     let id: String
     let name: String
@@ -119,56 +122,56 @@ struct ChapterDisplay: Identifiable, Hashable {
     let isInProgress: Bool
     let position: Int
     let chapterNumber: Double?
-    let pluginId: String
-    let novelPath: String?
+    let sourceKey: String
+    let entryURL: String?
 
     init(chapter: Chapter) {
-        self.id = chapter.path
+        self.id = chapter.url
         self.name = chapter.name
-        self.path = chapter.path
-        self.releaseTime = chapter.releaseTime
-        self.unread = chapter.unread
+        self.path = chapter.url
+        self.releaseTime = chapter.dateUpload?.formatted
+        self.unread = !chapter.read
         self.bookmarked = chapter.bookmark
         self.downloaded = chapter.isDownloaded
-        self.progress = chapter.progress
+        self.progress = chapter.progress > 0 ? Int(chapter.progress) : nil
         self.isInProgress = chapter.isInProgress
-        self.position = chapter.position
-        self.chapterNumber = chapter.chapterNumber
-        self.pluginId = chapter.novel?.pluginId ?? ""
-        self.novelPath = chapter.novel?.path
+        self.position = chapter.sourceOrder
+        self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
+        self.sourceKey = chapter.entry?.sourceKey ?? ""
+        self.entryURL = chapter.entry?.url
     }
 
-    init(sourceChapter: PluginChapter, position: Int, pluginId: String = "", novelPath: String? = nil) {
-        self.id = sourceChapter.path
+    init(sourceChapter: SourceChapter, position: Int, sourceKey: String = "", entryURL: String? = nil) {
+        self.id = sourceChapter.url
         self.name = sourceChapter.name
-        self.path = sourceChapter.path
-        self.releaseTime = sourceChapter.releaseTime
+        self.path = sourceChapter.url
+        self.releaseTime = sourceChapter.dateUpload?.formatted
         self.unread = true
         self.bookmarked = false
         self.downloaded = false
         self.progress = nil
         self.isInProgress = false
         self.position = position
-        self.chapterNumber = sourceChapter.chapterNumber
-        self.pluginId = pluginId
-        self.novelPath = novelPath
+        self.chapterNumber = sourceChapter.chapterNumber >= 0 ? sourceChapter.chapterNumber : nil
+        self.sourceKey = sourceKey
+        self.entryURL = entryURL
     }
 }
 
 /// Bounded chapter pages keep navigation manageable even for very long novels.
 struct ChapterDirectoryView: View {
     @Environment(\.dismiss) private var dismiss
-    let novel: Novel?
+    let entry: Entry?
     let chapters: [ChapterDisplay]
-    let pluginId: String
+    let sourceKey: String
     let currentChapterPath: String?
     var onSelect: ((ChapterDisplay) -> Void)? = nil
     var onClose: (() -> Void)? = nil
     let initialSearch: String
     let initialFilter: ChapterFilter
 
-    init(novel: Novel?, chapters: [ChapterDisplay], pluginId: String, currentChapterPath: String?, onSelect: ((ChapterDisplay) -> Void)? = nil, onClose: (() -> Void)? = nil, initialSearch: String = "", initialFilter: ChapterFilter = .all) {
-        self.novel = novel; self.chapters = chapters; self.pluginId = pluginId; self.currentChapterPath = currentChapterPath
+    init(entry: Entry?, chapters: [ChapterDisplay], sourceKey: String, currentChapterPath: String?, onSelect: ((ChapterDisplay) -> Void)? = nil, onClose: (() -> Void)? = nil, initialSearch: String = "", initialFilter: ChapterFilter = .all) {
+        self.entry = entry; self.chapters = chapters; self.sourceKey = sourceKey; self.currentChapterPath = currentChapterPath
         self.onSelect = onSelect; self.onClose = onClose; self.initialSearch = initialSearch; self.initialFilter = initialFilter
         self._search = State(initialValue: initialSearch); self._selectedFilter = State(initialValue: initialFilter)
     }
@@ -216,9 +219,9 @@ struct ChapterDirectoryView: View {
             List {
                 Section {
                     HStack(spacing: 12) {
-                        NovelCoverView(url: novel?.cover, aspectRatio: LayoutConstants.coverAspectRatio).frame(width: 42, height: 60)
+                        NovelCoverView(url: entry?.displayThumbnailURL, aspectRatio: LayoutConstants.coverAspectRatio).frame(width: 42, height: 60)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(novel?.name ?? "Chapters").font(.headline).lineLimit(2)
+                            Text(entry?.displayTitle ?? "Chapters").font(.headline).lineLimit(2)
                             Text("\(chapters.count) chapters").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -245,7 +248,7 @@ struct ChapterDirectoryView: View {
                                         else if chapter.bookmarked { Image(systemName: "bookmark.fill").foregroundStyle(.secondary) }
                                     }.frame(minHeight: 44).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
-                            } else { ChapterRow(chapter: chapter, novel: novel, pluginId: pluginId) }
+                            } else { ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey) }
                         }.id(chapter.path)
                     }
                     if visible.isEmpty { ContentUnavailableView("No chapters", systemImage: "text.magnifyingglass", description: Text("Try another number, title, or filter.")) }

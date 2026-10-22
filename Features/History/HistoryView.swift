@@ -7,9 +7,8 @@ import SwiftUI
 struct HistoryView: View {
     @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ReadingHistory.lastReadAt, order: .reverse)
-    private var history: [ReadingHistory]
-    @Query private var novels: [Novel]
+    @Query(sort: \History.lastRead, order: .reverse)
+    private var history: [History]
 
     @State private var searchText = ""
 
@@ -26,19 +25,21 @@ struct HistoryView: View {
                     List {
                         ForEach(groupedHistory, id: \.key) { date, entries in
                             Section(date) {
-                                ForEach(entries) { entry in
-                                    NavigationLink {
-                                        ReaderView(
-                                            chapterPath: entry.chapterPath,
-                                            chapterName: entry.chapterName,
-                                            pluginId: entry.pluginId,
-                                            novelPath: entry.novelPath
-                                        )
-                                        .id(entry.chapterPath)
-                                        .bookZoom(from: entry.persistentModelID, in: chapterTransitions)
-                                    } label: {
-                                        HistoryRow(entry: entry)
-                                            .bookTransitionSource(entry.persistentModelID, in: chapterTransitions)
+                                ForEach(entries) { item in
+                                    if let chapter = item.chapter {
+                                        NavigationLink {
+                                            ReaderView(
+                                                chapterPath: chapter.url,
+                                                chapterName: chapter.name,
+                                                sourceKey: chapter.entry?.sourceKey ?? "",
+                                                entryURL: chapter.entry?.url
+                                            )
+                                            .id(chapter.url)
+                                            .bookZoom(from: item.persistentModelID, in: chapterTransitions)
+                                        } label: {
+                                            HistoryRow(history: item)
+                                                .bookTransitionSource(item.persistentModelID, in: chapterTransitions)
+                                        }
                                     }
                                 }
                                 .onDelete { offsets in
@@ -64,30 +65,28 @@ struct HistoryView: View {
         }
     }
 
-    private func novel(for entry: ReadingHistory) -> Novel? {
-        novels.first { $0.path == entry.novelPath && $0.pluginId == entry.pluginId }
-    }
-
     // MARK: - Filtering & Grouping
 
-    private var filteredHistory: [ReadingHistory] {
+    private var filteredHistory: [History] {
         if searchText.isEmpty { return history }
-        return history.filter {
-            $0.novelName.localizedCaseInsensitiveContains(searchText)
-            || $0.chapterName.localizedCaseInsensitiveContains(searchText)
+        return history.filter { item in
+            let bookTitle = item.chapter?.entry?.displayTitle ?? ""
+            let chapterName = item.chapter?.name ?? ""
+            return bookTitle.localizedCaseInsensitiveContains(searchText)
+                || chapterName.localizedCaseInsensitiveContains(searchText)
         }
     }
 
-    private var groupedHistory: [(key: String, value: [ReadingHistory])] {
-        let grouped = Dictionary(grouping: filteredHistory) { entry in
-            entry.lastReadAt.formatted
+    private var groupedHistory: [(key: String, value: [History])] {
+        let grouped = Dictionary(grouping: filteredHistory) { item in
+            item.lastRead.formatted
         }
         return grouped.sorted { $0.key > $1.key }
     }
 
     // MARK: - Actions
 
-    private func deleteEntries(_ offsets: IndexSet, from entries: [ReadingHistory]) {
+    private func deleteEntries(_ offsets: IndexSet, from entries: [History]) {
         for index in offsets {
             modelContext.delete(entries[index])
         }
@@ -95,8 +94,8 @@ struct HistoryView: View {
     }
 
     private func clearAllHistory() {
-        for entry in history {
-            modelContext.delete(entry)
+        for item in history {
+            modelContext.delete(item)
         }
         try? modelContext.save()
     }

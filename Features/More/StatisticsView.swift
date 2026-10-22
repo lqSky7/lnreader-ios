@@ -15,15 +15,15 @@ private enum Pastel {
 }
 
 struct StatisticsView: View {
-    @Environment(PluginManager.self) private var pluginManager
-    @Query(filter: #Predicate<Novel> { $0.inLibrary }) private var libraryNovels: [Novel]
+    @Environment(SourceManager.self) private var sourceManager
+    @Query(filter: #Predicate<Entry> { $0.inLibrary }) private var libraryEntries: [Entry]
     @Query private var chapters: [Chapter]
     @Query private var categories: [Category]
-    @Query(sort: \ReadingHistory.lastReadAt, order: .reverse) private var historyEntries: [ReadingHistory]
+    @Query(sort: \History.lastRead, order: .reverse) private var historyEntries: [History]
 
     // Summary calculations
     private var unreadCount: Int {
-        chapters.filter(\.unread).count
+        chapters.filter { !$0.read }.count
     }
 
     private var downloadedCount: Int {
@@ -31,7 +31,7 @@ struct StatisticsView: View {
     }
 
     private var lastReadText: String {
-        historyEntries.first?.lastReadAt.timeAgo ?? "Never"
+        historyEntries.first?.lastRead.timeAgo ?? "Never"
     }
 
     private var columns: [GridItem] {
@@ -43,7 +43,7 @@ struct StatisticsView: View {
             VStack(spacing: 24) {
                 // Summary Overview Grid (systemGray6 cards, flat pastel icons)
                 LazyVGrid(columns: columns, spacing: 16) {
-                    summaryCard(title: "Library Novels", value: "\(libraryNovels.count)", icon: "books.vertical.fill", color: Pastel.blue)
+                    summaryCard(title: "Library", value: "\(libraryEntries.count)", icon: "books.vertical.fill", color: Pastel.blue)
                     summaryCard(title: "Total Chapters", value: "\(chapters.count)", icon: "list.number", color: Pastel.purple)
                     summaryCard(title: "Downloaded", value: "\(downloadedCount)", icon: "arrow.down.circle.fill", color: Pastel.green)
                     summaryCard(title: "Last Read", value: lastReadText, icon: "clock.arrow.circlepath", color: Pastel.orange)
@@ -146,7 +146,7 @@ struct StatisticsView: View {
         
         var dayCounts: [Date: Int] = [:]
         for entry in historyEntries {
-            let dayStart = calendar.startOfDay(for: entry.lastReadAt)
+            let dayStart = calendar.startOfDay(for: entry.lastRead)
             dayCounts[dayStart, default: 0] += 1
         }
         
@@ -307,7 +307,7 @@ struct StatisticsView: View {
 
     private var categoryData: [CategoryCount] {
         categories.map { category in
-            CategoryCount(name: category.name, count: category.novels.count)
+            CategoryCount(name: category.name, count: category.entries.count)
         }
         .sorted { $0.count > $1.count }
         .prefix(5)
@@ -330,7 +330,7 @@ struct StatisticsView: View {
                     Spacer()
                 }
                 
-                Text("Distribution of novels across categories (top 5)")
+                Text("Distribution of library entries across categories (top 5)")
                     .font(Typography.caption)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 4)
@@ -381,7 +381,7 @@ struct StatisticsView: View {
     private var hourlyActivityData: [HourActivity] {
         var hourCounts: [Int: Int] = [:]
         for entry in historyEntries {
-            let hour = Calendar.current.component(.hour, from: entry.lastReadAt)
+            let hour = Calendar.current.component(.hour, from: entry.lastRead)
             hourCounts[hour, default: 0] += 1
         }
         
@@ -463,19 +463,19 @@ struct StatisticsView: View {
         }
     }
 
-    // MARK: - 5. Novels by Source
+    // MARK: - 5. Books by Source
 
-    private func pluginName(for id: String) -> String {
-        pluginManager.installedPlugins[id]?.name ?? id.capitalized
+    private func sourceName(for key: String) -> String {
+        sourceManager.source(forKey: key)?.name ?? SourceKey.identifier(from: key)
     }
 
     private var sourceCountData: [SourceCount] {
         var counts: [String: Int] = [:]
-        for novel in libraryNovels {
-            counts[novel.pluginId, default: 0] += 1
+        for entry in libraryEntries {
+            counts[entry.sourceKey, default: 0] += 1
         }
-        return counts.map { (pluginId, count) in
-            SourceCount(name: pluginName(for: pluginId), count: count)
+        return counts.map { (sourceKey, count) in
+            SourceCount(name: sourceName(for: sourceKey), count: count)
         }
         .sorted { $0.count > $1.count }
         .prefix(5)
@@ -492,13 +492,13 @@ struct StatisticsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "globe")
                         .foregroundStyle(Pastel.teal)
-                    Text("Novels by Source")
+                    Text("Books by Source")
                         .font(.headline)
                         .foregroundStyle(.primary)
                     Spacer()
                 }
                 
-                Text("Distribution of library novels by source plugin")
+                Text("Distribution of library entries by source")
                     .font(Typography.caption)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 4)

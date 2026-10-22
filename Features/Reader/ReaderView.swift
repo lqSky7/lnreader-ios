@@ -6,7 +6,7 @@ import SwiftUI
 import WebKit
 
 struct ReaderView: View {
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -26,13 +26,14 @@ struct ReaderView: View {
 
     @State private var currentChapterPath: String
     @State private var currentChapterName: String
-    let pluginId: String
-    let novelPath: String?
+    let sourceKey: String
+    let entryURL: String?
 
-    private func fetchNovel() -> Novel? {
-        guard let novelPath else { return nil }
-        let predicate = #Predicate<Novel> { $0.path == novelPath && $0.pluginId == pluginId }
-        var descriptor = FetchDescriptor<Novel>(predicate: predicate)
+    private func fetchEntry() -> Entry? {
+        guard let entryURL else { return nil }
+        let key = sourceKey
+        let predicate = #Predicate<Entry> { $0.url == entryURL && $0.sourceKey == key }
+        var descriptor = FetchDescriptor<Entry>(predicate: predicate)
         descriptor.fetchLimit = 1
         return try? modelContext.fetch(descriptor).first
     }
@@ -61,8 +62,8 @@ struct ReaderView: View {
     @State private var showCommentsSheet = false
     @State private var commentsTask: Task<Void, Never>?
 
-    /// Comment site for the current plugin, if chapter comments are supported.
-    private var commentSite: CommentSite? { CommentSite.site(for: pluginId) }
+    /// Comment site for the current source, if chapter comments are supported.
+    private var commentSite: CommentSite? { CommentSite.site(for: SourceKey.identifier(from: sourceKey)) }
 
     // Reader settings persisted across sessions
     @AppStorage("reader.fontSize") private var fontSize: Double = 18
@@ -84,20 +85,95 @@ struct ReaderView: View {
 
     @ObservedObject private var focusManager = FocusModeManager.shared
 
-    init(chapterPath: String, chapterName: String, pluginId: String, novelPath: String?) {
+    init(chapterPath: String, chapterName: String, sourceKey: String, entryURL: String?) {
         self._currentChapterPath = State(initialValue: chapterPath)
         self._currentChapterName = State(initialValue: chapterName)
-        self.pluginId = pluginId
-        self.novelPath = novelPath
-        
-
+        self.sourceKey = sourceKey
+        self.entryURL = entryURL
     }
 
     private func toggleControls() {
         withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { showControls.toggle() }
     }
 
+    /// Kept out of the modifier chain: inlining it pushes the body past what the
+    /// type checker will infer in reasonable time.
+    private var narrationAlert: Binding<Bool> {
+        Binding(
+            get: { ttsManager.errorMessage != nil },
+            set: { presented in if !presented { ttsManager.errorMessage = nil } }
+        )
+    }
+
     var body: some View {
+        presentation
+            .task { await loadChapter() }
+            .onChange(of: ttsBridge.isReady) { _, ready in handleBridgeReady(ready) }
+            .onChange(of: ttsManager.currentBlockIndex) { _, newIndex in handleBlockIndex(newIndex) }
+            .onChange(of: isCurrentSpeech) { _, isSpeaking in handleSpeechChange(isSpeaking) }
+            .onChange(of: ttsManager.errorMessage) { _, error in
+                if error != nil { isPreparingTTS = false }
+            }
+            .onChange(of: ttsManager.currentWord) { _, word in
+                guard isCurrentSpeech, speechScrubTime == nil else { return }
+                ttsBridge.setActiveWord(word)
+            }
+            .onChange(of: ttsManager.manifest?.id) { _, _ in handleManifestChange() }
+            .onAppear { FocusModeManager.shared.updateFocusStatus() }
+            .onDisappear { commentsTask?.cancel() }
+    }
+
+    // MARK: - View composition
+    //
+    // Split into three properties on purpose: one flat body with ~25 modifiers
+    // is past what the Swift type checker will infer in reasonable time.
+
+    /// Sheets, covers and alerts.
+    private var presentation: some View {
+        readerStack
+            .navigationBarBackButtonHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
+            .statusBarHidden(true)
+            .onChange(of: showControls) { _, visible in ttsBridge.setControlsVisible(visible) }
+            .sheet(isPresented: $showSettings) { settingsSheet }
+            .fullScreenCover(isPresented: $showChapterList) { chapterListSheet }
+            .sheet(isPresented: $showLoginSheet) { loginSheet }
+            .sheet(isPresented: $showCommentsSheet) { commentsSheet }
+            .sheet(isPresented: $showAudioDownloads) { audioDownloadsSheet }
+            .alert("Narration", isPresented: narrationAlert) {
+                Button("OK", role: .cancel) { ttsManager.errorMessage = nil }
+            } message: { Text(ttsManager.errorMessage ?? "") }
+            .onReceive(ttsBridge.paragraphScrollPublisher) { position in
+                // Only update progress when TTS is not active (TTS updates it automatically)
+                guard !isCurrentSpeech, let chapter = currentChapter else { return }
+                libraryManager.recordReadingPosition(
+                    chapter: chapter, paragraphIndex: position.paragraphIndex,
+                    percent: position.percent, context: modelContext
+                )
+            }
+            .onReceive(ttsBridge.wordTapPublisher) { position in
+                guard isCurrentSpeech else { return }
+                ttsManager.seek(paragraph: position.paragraphIndex, offset: position.offset)
+                ttsManager.resume()
+                ttsBridge.resumeFollowing()
+            }
+            .confirmationDialog("Playback speed", isPresented: $showSpeedPicker) {
+                ForEach([0.75, 1, 1.25, 1.5, 1.75, 2, 2.5], id: \.self) { speed in
+                    Button(String(format: "%.2gx", speed)) { updateSpeed(speed) }
+                }
+            }
+            .confirmationDialog("Sleep timer", isPresented: $showSleepPicker) {
+                ForEach([15, 30, 60], id: \.self) { minutes in
+                    Button("\(minutes) minutes") { ttsManager.setSleep(minutes: minutes) }
+                }
+                Button("End of chapter") { ttsManager.sleepAfterChapter() }
+                Button("Off") { ttsManager.setSleep(minutes: nil) }
+            }
+    }
+
+    /// The reader itself: background, page content, toolbar, overlays.
+    private var readerStack: some View {
         ZStack {
             // Background
             resolvedBackgroundColor.ignoresSafeArea()
@@ -199,156 +275,125 @@ struct ReaderView: View {
             .allowsHitTesting(!showControls && !isCurrentSpeech && lineFocusEnabled)
             .padding(.top, 12)
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
-        .statusBarHidden(true)
-        .onChange(of: showControls) { _, visible in ttsBridge.setControlsVisible(visible) }
-        .sheet(isPresented: $showSettings) {
-            ReaderSettings(
-                fontSize: $fontSize,
-                lineHeight: $lineHeight,
-                fontFamily: $fontFamily,
-                horizontalPadding: $horizontalPadding,
-                verticalPadding: $verticalPadding,
-                backgroundColorHex: $backgroundColorHex,
-                textColorHex: $textColorHex,
-                bionicReading: $bionicReading,
-                lineFocusEnabled: $lineFocusEnabled,
-                lineFocusLines: $lineFocusLines,
-                lineFocusDulling: $lineFocusDulling,
-                characterSpacing: $characterSpacing,
-                wordSpacing: $wordSpacing,
-                grainIntensity: $grainIntensity
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(28)
+    }
+
+    private var settingsSheet: some View {
+        ReaderSettings(
+            fontSize: $fontSize,
+            lineHeight: $lineHeight,
+            fontFamily: $fontFamily,
+            horizontalPadding: $horizontalPadding,
+            verticalPadding: $verticalPadding,
+            backgroundColorHex: $backgroundColorHex,
+            textColorHex: $textColorHex,
+            bionicReading: $bionicReading,
+            lineFocusEnabled: $lineFocusEnabled,
+            lineFocusLines: $lineFocusLines,
+            lineFocusDulling: $lineFocusDulling,
+            characterSpacing: $characterSpacing,
+            wordSpacing: $wordSpacing,
+            grainIntensity: $grainIntensity
+        )
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(28)
+    }
+
+    private var chapterListSheet: some View {
+        ReaderChapterListSheet(
+            entry: fetchEntry(),
+            currentChapterPath: currentChapterPath,
+            onSelectChapter: { chapter in
+                showChapterList = false
+                navigateToChapter(chapter)
+            },
+            onDismiss: { showChapterList = false }
+        )
+    }
+
+    private var loginSheet: some View {
+        NovelFireLoginView(onLoginSuccess: {
+            loadNovelFireComments()
+        }, site: commentSite ?? .novelFire)
+    }
+
+    private var commentsSheet: some View {
+        NovelFireCommentsView(
+            postId: novelfirePostId,
+            chapterId: novelfireChapterId,
+            csrfToken: novelfireCsrfToken,
+            initialCommentsHtml: commentsHtml,
+            initialNextCursor: nextCursor,
+            initialHasMore: hasMoreComments,
+            chapterPath: currentChapterPath,
+            backgroundColorHex: backgroundColorHex,
+            textColorHex: textColorHex,
+            site: commentSite ?? .novelFire
+        )
+    }
+
+    private var audioDownloadsSheet: some View {
+        BookAudioDownloadsView(
+            bookId: audioBookId,
+            bookTitle: fetchEntry()?.displayTitle ?? currentChapterName,
+            sourceKey: sourceKey,
+            entryURL: entryURL ?? "",
+            chapters: audioChapterChoices,
+            coverURL: fetchEntry()?.displayThumbnailURL,
+            initialChapter: currentChapterPath
+        )
+    }
+
+    // MARK: - TTS event handlers
+
+    private func handleBridgeReady(_ ready: Bool) {
+        guard ready else { return }
+        ttsBridge.setSpeechMode(isCurrentSpeech)
+        if isCurrentSpeech { ttsBridge.setActiveWord(displayedSpeechWord) }
+        if !isCurrentSpeech, let lastIndex = currentChapter?.paragraphIndex, lastIndex > 0 {
+            ttsBridge.scrollToParagraph(lastIndex)
         }
-        .fullScreenCover(isPresented: $showChapterList) {
-            ReaderChapterListSheet(
-                novel: fetchNovel(),
-                currentChapterPath: currentChapterPath,
-                onSelectChapter: { chapter in
-                    showChapterList = false
-                    navigateToChapter(chapter)
-                },
-                onDismiss: {
-                    showChapterList = false
-                }
-            )
+        if startTTSWhenReady {
+            startTTSWhenReady = false
+            startTTSPlayback()
         }
-        .sheet(isPresented: $showLoginSheet) {
-            NovelFireLoginView(onLoginSuccess: {
-                loadNovelFireComments()
-            }, site: commentSite ?? .novelFire)
+    }
+
+    private func handleBlockIndex(_ newIndex: Int?) {
+        guard isCurrentSpeech, let newIndex else { return }
+        if speechScrubTime == nil { ttsBridge.setActiveWord(ttsManager.currentWord) }
+
+        // Save reading progress to database
+        let total = ttsManager.totalBlocks
+        guard let chapter = currentChapter, total > 0 else { return }
+        let percent = Int(Double(newIndex + 1) / Double(total) * 100)
+        libraryManager.recordReadingPosition(
+            chapter: chapter,
+            paragraphIndex: newIndex,
+            percent: min(max(percent, 0), 100),
+            context: modelContext
+        )
+    }
+
+    private func handleSpeechChange(_ isSpeaking: Bool) {
+        ttsBridge.setSpeechMode(isSpeaking)
+        if isSpeaking {
+            isPreparingTTS = false
+            ttsBridge.setActiveWord(displayedSpeechWord)
+        } else {
+            speechScrubTime = nil
+            ttsBridge.clearActive()
         }
-        .sheet(isPresented: $showCommentsSheet) {
-            NovelFireCommentsView(
-                postId: novelfirePostId,
-                chapterId: novelfireChapterId,
-                csrfToken: novelfireCsrfToken,
-                initialCommentsHtml: commentsHtml,
-                initialNextCursor: nextCursor,
-                initialHasMore: hasMoreComments,
-                chapterPath: currentChapterPath,
-                backgroundColorHex: backgroundColorHex,
-                textColorHex: textColorHex,
-                site: commentSite ?? .novelFire
-            )
+    }
+
+    private func handleManifestChange() {
+        guard let manifest = ttsManager.manifest, manifest.bookId == audioBookId else { return }
+        if currentChapterPath != manifest.chapterId || displayedAudioRevision != manifest.contentRevision {
+            currentChapterPath = manifest.chapterId
+            currentChapterName = manifest.title
+            isLoading = true
+            Task { await loadChapter() }
         }
-        .task { await loadChapter() }
-        .onChange(of: ttsBridge.isReady) { _, ready in
-            if ready {
-                ttsBridge.setSpeechMode(isCurrentSpeech)
-                if isCurrentSpeech { ttsBridge.setActiveWord(displayedSpeechWord) }
-                if !isCurrentSpeech, let lastIndex = currentChapter?.lastReadParagraphIndex, lastIndex > 0 {
-                    ttsBridge.scrollToParagraph(lastIndex)
-                }
-                if startTTSWhenReady {
-                    startTTSWhenReady = false
-                    startTTSPlayback()
-                }
-            }
-        }
-        .onChange(of: ttsManager.currentBlockIndex) { _, newIndex in
-            guard isCurrentSpeech else { return }
-            if let newIndex = newIndex {
-                if speechScrubTime == nil { ttsBridge.setActiveWord(ttsManager.currentWord) }
-                
-                // Save reading progress to database
-                let total = ttsManager.totalBlocks
-                if let chapter = currentChapter, total > 0 {
-                    let percent = Int(Double(newIndex + 1) / Double(total) * 100)
-                    libraryManager.recordReadingPosition(
-                        chapter: chapter, paragraphIndex: newIndex,
-                        percent: min(max(percent, 0), 100), context: modelContext
-                    )
-                }
-            }
-        }
-        .onChange(of: isCurrentSpeech) { _, isSpeaking in
-            ttsBridge.setSpeechMode(isSpeaking)
-            if isSpeaking {
-                isPreparingTTS = false
-                ttsBridge.setActiveWord(displayedSpeechWord)
-            } else {
-                speechScrubTime = nil
-                ttsBridge.clearActive()
-            }
-        }
-        .onChange(of: ttsManager.errorMessage) { _, error in
-            if error != nil {
-                isPreparingTTS = false
-            }
-        }
-        .alert("Narration", isPresented: Binding(get: { ttsManager.errorMessage != nil }, set: { if !$0 { ttsManager.errorMessage = nil } })) {
-            Button("OK", role: .cancel) { ttsManager.errorMessage = nil }
-        } message: { Text(ttsManager.errorMessage ?? "") }
-        .onReceive(ttsBridge.paragraphScrollPublisher) { position in
-            // Only update progress when TTS is not active (TTS updates it automatically)
-            guard !isCurrentSpeech, let chapter = currentChapter else { return }
-            libraryManager.recordReadingPosition(
-                chapter: chapter, paragraphIndex: position.paragraphIndex,
-                percent: position.percent, context: modelContext
-            )
-        }
-        .onAppear {
-            FocusModeManager.shared.updateFocusStatus()
-        }
-        .onReceive(ttsBridge.wordTapPublisher) { position in
-            guard isCurrentSpeech else { return }
-            ttsManager.seek(paragraph: position.paragraphIndex, offset: position.offset)
-            ttsManager.resume()
-            ttsBridge.resumeFollowing()
-        }
-        .onChange(of: ttsManager.currentWord) { _, word in
-            guard isCurrentSpeech, speechScrubTime == nil else { return }
-            ttsBridge.setActiveWord(word)
-        }
-        .onChange(of: ttsManager.manifest?.id) { _, _ in
-            guard let manifest = ttsManager.manifest, manifest.bookId == audioBookId else { return }
-            if currentChapterPath != manifest.chapterId || displayedAudioRevision != manifest.contentRevision {
-                currentChapterPath = manifest.chapterId; currentChapterName = manifest.title; isLoading = true
-                Task { await loadChapter() }
-            }
-        }
-        .sheet(isPresented: $showAudioDownloads) {
-            BookAudioDownloadsView(bookId: audioBookId, bookTitle: fetchNovel()?.name ?? currentChapterName,
-                pluginId: pluginId, novelPath: novelPath ?? "",
-                chapters: audioChapterChoices, coverURL: fetchNovel()?.cover, initialChapter: currentChapterPath)
-        }
-        .confirmationDialog("Playback speed", isPresented: $showSpeedPicker) {
-            ForEach([0.75, 1, 1.25, 1.5, 1.75, 2, 2.5], id: \.self) { speed in
-                Button(String(format: "%.2gx", speed)) { updateSpeed(speed) }
-            }
-        }
-        .confirmationDialog("Sleep timer", isPresented: $showSleepPicker) {
-            ForEach([15, 30, 60], id: \.self) { minutes in Button("\(minutes) minutes") { ttsManager.setSleep(minutes: minutes) } }
-            Button("End of chapter") { ttsManager.sleepAfterChapter() }
-            Button("Off") { ttsManager.setSleep(minutes: nil) }
-        }
-        .onDisappear { commentsTask?.cancel() }
     }
 
     private var resolvedBackgroundColor: Color {
@@ -359,7 +404,7 @@ struct ReaderView: View {
     }
 
     private var currentChapter: Chapter? {
-        cachedChapters.first(where: { $0.path == currentChapterPath })
+        cachedChapters.first(where: { $0.url == currentChapterPath })
     }
 
     // MARK: - Navigation Helpers
@@ -369,15 +414,15 @@ struct ReaderView: View {
     }
 
     private var hasPreviousChapter: Bool {
-        guard novelPath != nil,
-            let currentIndex = sortedChapters.firstIndex(where: { $0.path == currentChapterPath })
+        guard entryURL != nil,
+            let currentIndex = sortedChapters.firstIndex(where: { $0.url == currentChapterPath })
         else { return false }
         return currentIndex > 0
     }
 
     private var hasNextChapter: Bool {
-        guard novelPath != nil,
-            let currentIndex = sortedChapters.firstIndex(where: { $0.path == currentChapterPath })
+        guard entryURL != nil,
+            let currentIndex = sortedChapters.firstIndex(where: { $0.url == currentChapterPath })
         else { return false }
         return currentIndex < sortedChapters.count - 1
     }
@@ -385,11 +430,11 @@ struct ReaderView: View {
     private func navigateToPreviousChapter() {
         ttsManager.stop()
         guard
-            let currentIndex = sortedChapters.firstIndex(where: { $0.path == currentChapterPath }),
+            let currentIndex = sortedChapters.firstIndex(where: { $0.url == currentChapterPath }),
             currentIndex > 0
         else { return }
         let prevChapter = sortedChapters[currentIndex - 1]
-        currentChapterPath = prevChapter.path
+        currentChapterPath = prevChapter.url
         currentChapterName = prevChapter.name
         isLoading = true
         Task {
@@ -400,11 +445,11 @@ struct ReaderView: View {
     private func navigateToNextChapter() {
         ttsManager.stop()
         guard
-            let currentIndex = sortedChapters.firstIndex(where: { $0.path == currentChapterPath }),
+            let currentIndex = sortedChapters.firstIndex(where: { $0.url == currentChapterPath }),
             currentIndex < sortedChapters.count - 1
         else { return }
         let nextChapter = sortedChapters[currentIndex + 1]
-        currentChapterPath = nextChapter.path
+        currentChapterPath = nextChapter.url
         currentChapterName = nextChapter.name
         isLoading = true
         Task {
@@ -414,7 +459,7 @@ struct ReaderView: View {
 
     private func navigateToChapter(_ chapter: Chapter) {
         ttsManager.stop()
-        currentChapterPath = chapter.path
+        currentChapterPath = chapter.url
         currentChapterName = chapter.name
         isLoading = true
         Task {
@@ -430,9 +475,10 @@ struct ReaderView: View {
         errorMessage = nil
         ttsBridge.contentDidChange()
         displayedAudioRevision = nil
-        if cachedChapters.isEmpty, let novelPath {
-            let predicate = #Predicate<Chapter> { $0.novel?.path == novelPath && $0.novel?.pluginId == pluginId }
-            var descriptor = FetchDescriptor<Chapter>(predicate: predicate, sortBy: [SortDescriptor(\.position)])
+        if cachedChapters.isEmpty, let entryURL {
+            let key = sourceKey
+            let predicate = #Predicate<Chapter> { $0.entry?.url == entryURL && $0.entry?.sourceKey == key }
+            var descriptor = FetchDescriptor<Chapter>(predicate: predicate, sortBy: [SortDescriptor(\.sourceOrder)])
             descriptor.relationshipKeyPathsForPrefetching = []
             if let fetched = try? modelContext.fetch(descriptor) {
                 self.cachedChapters = fetched
@@ -459,29 +505,29 @@ struct ReaderView: View {
             return
         }
 
-        if pluginId == "local", let novelPath {
+        if sourceKey == SourceKey.local, let entryURL {
             do {
                 let fileManager = FileManager.default
                 let docDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let novelId = novelPath.replacingOccurrences(of: "local://", with: "")
+                let novelId = entryURL.replacingOccurrences(of: "local://", with: "")
                 let bookDir = docDir.appendingPathComponent("LocalNovels").appendingPathComponent(novelId)
                 let chapterURL = bookDir.appendingPathComponent(currentChapterPath)
-                
+
                 guard fileManager.fileExists(atPath: chapterURL.path) else {
                     errorMessage = "Chapter file not found: \(currentChapterPath)"
                     isLoading = false
                     return
                 }
-                
+
                 let rawHtml = try String(contentsOf: chapterURL, encoding: .utf8)
                 htmlContent = rawHtml
                 baseURL = chapterURL.deletingLastPathComponent()
                 isLoading = false
-                
+
                 // Record reading history
-                if let chapter = cachedChapters.first(where: { $0.path == currentChapterPath }),
-                   let novel = fetchNovel() {
-                    libraryManager.recordHistory(novel: novel, chapter: chapter, context: modelContext)
+                if let chapter = cachedChapters.first(where: { $0.url == currentChapterPath }),
+                   let entry = fetchEntry() {
+                    libraryManager.recordHistory(entry: entry, chapter: chapter, context: modelContext)
                 }
             } catch {
                 errorMessage = "Failed to load local chapter: \(error.localizedDescription)"
@@ -489,26 +535,28 @@ struct ReaderView: View {
             }
             return
         }
-        
-        guard let source = pluginManager.plugin(for: pluginId) else {
-            errorMessage = "Source plugin not found."
+
+        guard let source = sourceManager.novelSource(forKey: sourceKey) else {
+            errorMessage = "Source not available. Reinstall the extension and try again."
             isLoading = false
             return
         }
 
         do {
-            let parsed = try await source.parseChapter(path: requestedPath)
+            let parsed = try await source.chapterHTML(
+                SourceChapter(url: requestedPath, name: currentChapterName)
+            )
             guard chapterLoadID == loadID, currentChapterPath == requestedPath else { return }
             htmlContent = parsed
             baseURL = nil
             isLoading = false
 
             // Record reading history
-            if let novel = fetchNovel(),
-               let chapter = cachedChapters.first(where: { $0.path == currentChapterPath }) {
-                libraryManager.recordHistory(novel: novel, chapter: chapter, context: modelContext)
+            if let entry = fetchEntry(),
+               let chapter = cachedChapters.first(where: { $0.url == currentChapterPath }) {
+                libraryManager.recordHistory(entry: entry, chapter: chapter, context: modelContext)
             }
-            
+
             // Fetch NovelFire / NovelPhoenix comments asynchronously
             if commentSite != nil {
                 loadNovelFireComments()
@@ -638,13 +686,13 @@ struct ReaderView: View {
         }
     }
 
-    private var audioBookId: String { TTSBookIdentity.make(pluginId: pluginId, novelPath: novelPath ?? currentChapterPath) }
+    private var audioBookId: String { TTSBookIdentity.make(pluginId: sourceKey, novelPath: entryURL ?? currentChapterPath) }
     private var isCurrentSpeech: Bool {
         ttsManager.isSpeaking && ttsManager.manifest?.bookId == audioBookId && ttsManager.manifest?.chapterId == currentChapterPath
     }
     private var audioChapterChoices: [TTSChapterChoice] {
         if cachedChapters.isEmpty { return [.init(path: currentChapterPath, title: currentChapterName, position: 0)] }
-        return cachedChapters.map { .init(path: $0.path, title: $0.name, position: $0.position) }
+        return cachedChapters.map { .init(path: $0.url, title: $0.name, position: $0.sourceOrder) }
     }
     private func toggleTTSPlayback() {
         if isCurrentSpeech { ttsManager.togglePause() } else { startTTSPlayback() }
@@ -655,7 +703,7 @@ struct ReaderView: View {
             showAudioDownloads = true
             return
         }
-        ttsManager.attachCover(url: fetchNovel()?.cover, bookId: audioBookId)
+        ttsManager.attachCover(url: fetchEntry()?.displayThumbnailURL, bookId: audioBookId)
         if record.isAvailable { ttsManager.play(renditionID: record.id, paragraph: startIndex) }
         else { ttsManager.playAvailable(record) }
         ttsBridge.setSpeechMode(true)

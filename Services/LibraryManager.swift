@@ -1,13 +1,17 @@
 // LibraryManager.swift
-// Manages library operations: adding/removing novels, updating chapters.
+// Library operations: adding entries, updating chapters, recording progress.
 
 import Foundation
 import Network
 import Observation
 import SwiftData
 
-/// Coordinates library-level operations such as adding novels from sources,
-/// updating chapters, and managing reading progress.
+/// Coordinates library-level operations: adding entries from a source,
+/// refreshing chapter lists, and recording reading progress.
+///
+/// Source-agnostic by design: it works with `SourceEntry` / `SourceChapter`
+/// values and the `SourceManager` registry, so a novel and a manga go through
+/// exactly the same code path.
 @Observable
 @MainActor
 final class LibraryManager {
@@ -15,153 +19,149 @@ final class LibraryManager {
     /// Whether a library-wide update is in progress.
     private(set) var isUpdating = false
 
-    /// Add a novel to the library from source data, inserting into SwiftData.
+    // MARK: - Adding and removing
+
+    /// Add an entry to the library, or return the existing row.
+    ///
+    /// Chapters already known for the entry are left untouched, so re-adding a
+    /// removed entry keeps its read state.
+    @discardableResult
     func addToLibrary(
-        sourceNovel: PluginNovel,
-        pluginId: String,
+        entry sourceEntry: SourceEntry,
+        chapters: [SourceChapter],
         context: ModelContext
-    ) {
-        // Check if novel already exists
-        let path = sourceNovel.path
-        let predicate = #Predicate<Novel> { $0.path == path && $0.pluginId == pluginId }
-        let descriptor = FetchDescriptor(predicate: predicate)
+    ) -> Entry {
+        let sourceKey = sourceEntry.sourceKey
+        let url = sourceEntry.url
+        let predicate = #Predicate<Entry> { $0.sourceKey == sourceKey && $0.url == url }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
 
         if let existing = try? context.fetch(descriptor).first {
             existing.inLibrary = true
-            return
-        }
-
-        let novel = Novel(
-            path: sourceNovel.path,
-            pluginId: pluginId,
-            name: sourceNovel.name,
-            cover: sourceNovel.cover,
-            summary: sourceNovel.summary,
-            author: sourceNovel.author,
-            artist: sourceNovel.artist,
-            status: NovelStatus(rawValue: sourceNovel.status ?? "") ?? NovelStatus.unknown,
-            genres: sourceNovel.genres
-        )
-        novel.inLibrary = true
-        novel.totalPages = sourceNovel.totalPages ?? 0
-        context.insert(novel)
-
-        // Insert chapters
-        for (index, sourceChapter) in sourceNovel.chapters.enumerated() {
-            let chapter = Chapter(
-                path: sourceChapter.path,
-                name: sourceChapter.name
-            )
-            chapter.chapterNumber = sourceChapter.chapterNumber
-            chapter.releaseTime = sourceChapter.releaseTime
-            chapter.page = sourceChapter.page ?? "1"
-            chapter.position = index
-            chapter.novel = novel
-            context.insert(chapter)
-        }
-
-        try? context.save()
-    }
-
-    /// Remove a novel from the library (keeps data but marks as not in library).
-    func removeFromLibrary(novel: Novel, context: ModelContext) {
-        novel.inLibrary = false
-        try? context.save()
-    }
-
-    /// Record a reading history entry.
-    func recordHistory(
-        novel: Novel,
-        chapter: Chapter,
-        context: ModelContext
-    ) {
-        // Delete any existing history entries for this novel to only keep the latest
-        let targetPath = novel.path
-        let targetPlugin = novel.pluginId
-        let predicate = #Predicate<ReadingHistory> { $0.novelPath == targetPath && $0.pluginId == targetPlugin }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        if let existingEntries = try? context.fetch(descriptor) {
-            for entry in existingEntries {
-                context.delete(entry)
+            if existing.chapters.isEmpty {
+                insertChapters(chapters, into: existing, context: context)
             }
+            try? context.save()
+            return existing
         }
 
-        let entry = ReadingHistory(
-            novelId: novel.persistentModelID.hashValue,
-            chapterID: chapter.persistentModelID.hashValue,
-            novelPath: novel.path,
-            chapterPath: chapter.path,
-            novelName: novel.name,
-            novelCover: novel.cover,
-            chapterName: chapter.name,
-            pluginId: novel.pluginId,
-            progress: chapter.progress
+        let entry = Entry(
+            kind: sourceEntry.kind,
+            sourceKey: sourceEntry.sourceKey,
+            url: sourceEntry.url,
+            title: sourceEntry.title
         )
+        entry.thumbnailURL = sourceEntry.thumbnailURL
+        entry.author = sourceEntry.author
+        entry.artist = sourceEntry.artist
+        entry.summary = sourceEntry.description
+        entry.genres = sourceEntry.genres
+        entry.status = sourceEntry.status
+        entry.inLibrary = true
+        entry.dateAdded = .now
         context.insert(entry)
 
-        // Opening a chapter is not reading it: `unread` flips only once the reader reaches the end.
-        novel.lastReadAt = .now
-        chapter.readTime = .now
+        insertChapters(chapters, into: entry, context: context)
+        try? context.save()
+        return entry
+    }
 
+    /// Remove an entry from the library but keep its chapters and history.
+    func removeFromLibrary(entry: Entry, context: ModelContext) {
+        entry.inLibrary = false
+        try? context.save()
+    }
+
+    private func insertChapters(
+        _ chapters: [SourceChapter],
+        into entry: Entry,
+        context: ModelContext
+    ) {
+        for (index, sourceChapter) in chapters.enumerated() {
+            let chapter = Chapter(
+                url: sourceChapter.url,
+                name: sourceChapter.name,
+                chapterNumber: sourceChapter.chapterNumber,
+                sourceOrder: index
+            )
+            chapter.scanlator = sourceChapter.scanlator
+            chapter.dateUpload = sourceChapter.dateUpload
+            chapter.entry = entry
+            context.insert(chapter)
+        }
+    }
+
+    // MARK: - Reading state
+
+    /// Record that a chapter was opened.
+    ///
+    /// Opening is not reading: `read` only flips once the reader reaches the
+    /// end, which is why this only touches history and the "recently read"
+    /// timestamp.
+    func recordHistory(entry: Entry, chapter: Chapter, context: ModelContext) {
+        let chapterURL = chapter.url
+        let predicate = #Predicate<History> { $0.chapterURL == chapterURL }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
+
+        if let existing = try? context.fetch(descriptor).first {
+            existing.lastRead = .now
+        } else {
+            let history = History(chapterURL: chapter.url)
+            history.chapter = chapter
+            context.insert(history)
+        }
+
+        entry.lastReadAt = .now
         try? context.save()
     }
 
     /// Record how far the user has read into a chapter.
-    /// Reaching `Chapter.finishedThreshold` marks the chapter read; a finished chapter keeps 100%
-    /// and reopens from the top, while rereading it never moves it back to unread.
+    ///
+    /// Reaching `Chapter.finishedThreshold` marks the chapter read; a finished
+    /// chapter keeps 100% and reopens from the top, and rereading it never
+    /// moves it back to unread.
     func recordReadingPosition(
         chapter: Chapter,
         paragraphIndex: Int,
         percent: Int,
         context: ModelContext
     ) {
-        let finished = !chapter.unread && chapter.progress == 100
+        let finished = chapter.read && chapter.progress >= 100
+        let clamped = min(max(percent, 0), 100)
+
         if finished {
-            chapter.lastReadParagraphIndex = percent >= Chapter.finishedThreshold ? 0 : paragraphIndex
-        } else if percent >= Chapter.finishedThreshold {
-            chapter.unread = false
+            chapter.paragraphIndex = clamped >= Int(Chapter.finishedThreshold) ? 0 : paragraphIndex
+        } else if clamped >= Int(Chapter.finishedThreshold) {
+            chapter.read = true
             chapter.progress = 100
-            chapter.lastReadParagraphIndex = 0
+            chapter.paragraphIndex = 0
         } else {
-            chapter.progress = percent
-            chapter.lastReadParagraphIndex = paragraphIndex
+            chapter.progress = Double(clamped)
+            chapter.paragraphIndex = paragraphIndex
         }
-        chapter.readTime = .now
 
-        if let novel = chapter.novel {
-            let novelPath = novel.path, pluginId = novel.pluginId
-            let predicate = #Predicate<ReadingHistory> { $0.novelPath == novelPath && $0.pluginId == pluginId }
-            if let entries = try? context.fetch(FetchDescriptor(predicate: predicate)) {
-                for entry in entries where entry.chapterPath == chapter.path { entry.progress = chapter.progress }
-            }
-        }
+        // Keep the history row's timestamp current without creating one.
+        chapter.history?.lastRead = .now
+        chapter.entry?.lastReadAt = .now
+
         try? context.save()
     }
 
-    /// Update reading progress for a chapter.
-    func updateProgress(
-        chapter: Chapter,
-        progress: Int,
-        position: Int,
-        context: ModelContext
-    ) {
-        chapter.progress = progress
-        chapter.position = position
-        try? context.save()
-    }
+    // MARK: - Network state
 
-    /// Check if the current network connection is cellular.
-    /// Uses a shared NWPathMonitor instead of spinning one up per call
-    /// (the old code created a monitor + semaphore + thread on every update).
+    /// Whether the current connection is cellular.
     private func isCellularConnection() -> Bool {
         NetworkMonitor.shared.isCellular()
     }
 
-    /// Update all novels in the library by fetching the latest details and chapters from sources.
-    func updateLibrary(context: ModelContext, pluginManager: PluginManager) async {
+    // MARK: - Library updates
+
+    /// Refresh every library entry from its source.
+    func updateLibrary(context: ModelContext, sourceManager: SourceManager) async {
         guard !isUpdating else { return }
 
-        // Wi-Fi only restriction check
         if UserDefaults.standard.object(forKey: "general.updateOnWifiOnly") as? Bool ?? true {
             if isCellularConnection() {
                 print("📶 Library update skipped: Wi-Fi only setting is enabled and current network is cellular.")
@@ -172,40 +172,45 @@ final class LibraryManager {
         isUpdating = true
         defer { isUpdating = false }
 
-        let predicate = #Predicate<Novel> { $0.inLibrary }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        guard let novels = try? context.fetch(descriptor), !novels.isEmpty else { return }
+        let predicate = #Predicate<Entry> { $0.inLibrary }
+        guard let entries = try? context.fetch(FetchDescriptor(predicate: predicate)),
+              !entries.isEmpty
+        else { return }
 
-        // Fetch all sources CONCURRENTLY (network-bound, max 4 at a time),
-        // then apply SwiftData updates SEQUENTIALLY on the MainActor context.
-        // The old code awaited each novel one-by-one: N novels × latency.
-        //
-        // Concurrency-safety: plugin instances are snapshotted on the MainActor
-        // before the group (same pattern as GlobalSearchView) and each child
-        // task only touches its own snapshot plus its Sendable job. Chapter
-        // results are Sendable value types; failures travel as plain strings
-        // so the group's result type stays Sendable under Swift 6 checking.
+        // Fetch all sources concurrently (network-bound, 4 at a time), then
+        // apply SwiftData changes sequentially on the MainActor context.
         struct UpdateJob: Sendable {
             let id: PersistentIdentifier
-            let pluginId: String
-            let path: String
-            let name: String
+            let sourceKey: String
+            let url: String
+            let kind: ContentKind
+            let title: String
         }
         struct UpdateWork {
-            let source: any SourcePlugin
-            let hasParsePage: Bool
+            let source: any CatalogSource
             let job: UpdateJob
         }
+        struct UpdateResult: Sendable {
+            let id: PersistentIdentifier
+            let details: SourceEntry?
+            let chapters: [SourceChapter]
+            let error: String?
+        }
+
         var pending: [UpdateWork] = []
-        for novel in novels {
-            let job = UpdateJob(id: novel.persistentModelID, pluginId: novel.pluginId, path: novel.path, name: novel.name)
-            if let source = pluginManager.plugin(for: job.pluginId) {
-                pending.append(UpdateWork(source: source, hasParsePage: source.hasParsePage, job: job))
-            }
+        for entry in entries where !entry.isLocal {
+            guard let source = sourceManager.source(forKey: entry.sourceKey) else { continue }
+            let job = UpdateJob(
+                id: entry.persistentModelID,
+                sourceKey: entry.sourceKey,
+                url: entry.url,
+                kind: entry.kind,
+                title: entry.title
+            )
+            pending.append(UpdateWork(source: source, job: job))
         }
         guard !pending.isEmpty else { return }
 
-        typealias UpdateResult = (id: PersistentIdentifier, novel: PluginNovel?, error: String?)
         let results = await withTaskGroup(of: UpdateResult.self, returning: [UpdateResult].self) { group in
             let maxConcurrent = 4
             var queue = pending[...]
@@ -214,29 +219,22 @@ final class LibraryManager {
 
             func submit(_ work: UpdateWork) {
                 group.addTask {
+                    let entry = SourceEntry(
+                        sourceKey: work.job.sourceKey,
+                        kind: work.job.kind,
+                        url: work.job.url,
+                        title: work.job.title
+                    )
                     do {
-                        var sourceNovel = try await work.source.parseNovel(path: work.job.path)
-                        if work.hasParsePage, let totalPages = sourceNovel.totalPages, totalPages > 1 {
-                            #if DEBUG
-                            print("🔌 [\(work.job.pluginId)] Paginated chapters detected during library update, fetching \(totalPages) pages...")
-                            #endif
-                            let allChapters = try await work.source.fetchAllChapters(path: work.job.path, totalPages: totalPages)
-                            sourceNovel = PluginNovel(
-                                name: sourceNovel.name,
-                                path: sourceNovel.path,
-                                cover: sourceNovel.cover,
-                                genres: sourceNovel.genres,
-                                summary: sourceNovel.summary,
-                                author: sourceNovel.author,
-                                artist: sourceNovel.artist,
-                                status: sourceNovel.status,
-                                chapters: allChapters,
-                                totalPages: sourceNovel.totalPages
-                            )
-                        }
-                        return (work.job.id, sourceNovel, nil)
+                        let details = try await work.source.details(entry)
+                        let chapters = try await work.source.chapters(entry)
+                        return UpdateResult(
+                            id: work.job.id, details: details, chapters: chapters, error: nil
+                        )
                     } catch {
-                        return (work.job.id, nil, error.localizedDescription)
+                        return UpdateResult(
+                            id: work.job.id, details: nil, chapters: [], error: error.localizedDescription
+                        )
                     }
                 }
             }
@@ -253,15 +251,15 @@ final class LibraryManager {
             return collected
         }
 
-        let byID = Dictionary(uniqueKeysWithValues: novels.map { ($0.persistentModelID, $0) })
+        let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.persistentModelID, $0) })
         var didChange = false
         for result in results {
-            guard let novel = byID[result.id] else { continue }
-            if let sourceNovel = result.novel {
-                updateNovel(novel, sourceNovel: sourceNovel, context: context, saveImmediately: false)
+            guard let entry = byID[result.id] else { continue }
+            if let details = result.details, result.error == nil {
+                applyUpdate(entry, details: details, chapters: result.chapters, context: context)
                 didChange = true
             } else {
-                print("Failed to update novel \(novel.name): \(result.error ?? "unknown error")")
+                print("Failed to update \(entry.title): \(result.error ?? "unknown error")")
             }
         }
         if didChange {
@@ -269,62 +267,69 @@ final class LibraryManager {
         }
     }
 
-    /// Update a single novel's chapters and metadata from source.
-    func updateNovel(_ novel: Novel, sourceNovel: PluginNovel, context: ModelContext, saveImmediately: Bool = true) {
-        novel.name = sourceNovel.name
-        if let cover = sourceNovel.cover {
-            novel.cover = cover
-        }
-        if let summary = sourceNovel.summary {
-            novel.summary = summary
-        }
-        if let author = sourceNovel.author {
-            novel.author = author
-        }
-        if let artist = sourceNovel.artist {
-            novel.artist = artist
-        }
-        novel.status = NovelStatus(rawValue: sourceNovel.status ?? "") ?? .unknown
-        novel.genres = sourceNovel.genres
-        novel.totalPages = sourceNovel.totalPages ?? 0
-        novel.lastUpdatedAt = .now
+    /// Merge source metadata and a chapter list into a stored entry.
+    ///
+    /// Chapters are matched by URL. Existing rows keep their read state and
+    /// their source order is refreshed; new rows are stamped with `dateFetch`
+    /// so they show up in Updates.
+    func applyUpdate(
+        _ entry: Entry,
+        details: SourceEntry,
+        chapters: [SourceChapter],
+        context: ModelContext,
+        saveImmediately: Bool = true
+    ) {
+        if !details.title.isEmpty { entry.title = details.title }
+        if let thumbnail = details.thumbnailURL { entry.thumbnailURL = thumbnail }
+        if let summary = details.description, !summary.isEmpty { entry.summary = summary }
+        if let author = details.author { entry.author = author }
+        if let artist = details.artist { entry.artist = artist }
+        if !details.genres.isEmpty { entry.genres = details.genres }
+        entry.status = details.status
+        entry.lastUpdate = .now
 
-        // O(n) lookup via dictionary. The old `first(where:)` inside the loop
-        // was O(n²) — painful for 2000-chapter novels on every library update.
-        let existingByPath = Dictionary(uniqueKeysWithValues: novel.chapters.map { ($0.path, $0) })
+        // O(n) lookup; the old `first(where:)` inside the loop was O(n²) and
+        // painful for 2000-chapter books on every refresh.
+        var existingByURL: [String: Chapter] = [:]
+        existingByURL.reserveCapacity(entry.chapters.count)
+        for chapter in entry.chapters {
+            existingByURL[chapter.url] = chapter
+        }
 
-        for (index, sourceChapter) in sourceNovel.chapters.enumerated() {
-            if let existing = existingByPath[sourceChapter.path] {
+        for (index, sourceChapter) in chapters.enumerated() {
+            if let existing = existingByURL[sourceChapter.url] {
                 existing.name = sourceChapter.name
-                existing.releaseTime = sourceChapter.releaseTime
                 existing.chapterNumber = sourceChapter.chapterNumber
-                existing.position = index
+                existing.scanlator = sourceChapter.scanlator
+                existing.dateUpload = sourceChapter.dateUpload
+                existing.sourceOrder = index
             } else {
-                let newChapter = Chapter(
-                    path: sourceChapter.path,
-                    name: sourceChapter.name
+                let chapter = Chapter(
+                    url: sourceChapter.url,
+                    name: sourceChapter.name,
+                    chapterNumber: sourceChapter.chapterNumber,
+                    sourceOrder: index
                 )
-                newChapter.chapterNumber = sourceChapter.chapterNumber
-                newChapter.releaseTime = sourceChapter.releaseTime
-                newChapter.page = sourceChapter.page ?? "1"
-                newChapter.position = index
-                newChapter.updatedTime = .now // Marks it as an update!
-                newChapter.novel = novel
-                context.insert(newChapter)
+                chapter.scanlator = sourceChapter.scanlator
+                chapter.dateUpload = sourceChapter.dateUpload
+                // Marks the chapter as new, which is what Updates reads.
+                chapter.dateFetch = .now
+                chapter.entry = entry
+                context.insert(chapter)
             }
         }
+
         if saveImmediately {
             try? context.save()
         }
     }
 
-    /// Clear all updates by setting updatedTime to nil for all chapters.
+    /// Mark every "new chapter" badge as seen.
     func clearUpdates(context: ModelContext) {
-        let predicate = #Predicate<Chapter> { $0.updatedTime != nil }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        if let chapters = try? context.fetch(descriptor) {
+        let predicate = #Predicate<Chapter> { $0.dateFetch != nil }
+        if let chapters = try? context.fetch(FetchDescriptor(predicate: predicate)) {
             for chapter in chapters {
-                chapter.updatedTime = nil
+                chapter.dateFetch = nil
             }
             try? context.save()
         }

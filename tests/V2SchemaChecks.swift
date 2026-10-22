@@ -43,8 +43,8 @@ struct V2SchemaChecks {
         entry.updateStrategy = .onlyFetchOnce
         context.insert(entry)
 
-        let chapters = (1...3).map { number -> EntryChapter in
-            let chapter = EntryChapter(
+        let chapters = (1...3).map { number -> Chapter in
+            let chapter = Chapter(
                 url: "/manga/solo/\(number)",
                 name: "Chapter \(number)",
                 chapterNumber: Double(number),
@@ -90,7 +90,7 @@ struct V2SchemaChecks {
     // MARK: Chapter state
 
     private static func checkChapterState(_ context: ModelContext) throws {
-        let chapters = try context.fetch(FetchDescriptor<EntryChapter>(sortBy: [SortDescriptor(\.sourceOrder)]))
+        let chapters = try context.fetch(FetchDescriptor<Chapter>(sortBy: [SortDescriptor(\.sourceOrder)]))
         let first = try unwrap(chapters.first)
         precondition(first.read)
         precondition(!first.isInProgress)
@@ -155,7 +155,7 @@ struct V2SchemaChecks {
         context.delete(entry)
         try context.save()
         try expectCount(context, Entry.self, 0)
-        try expectCount(context, EntryChapter.self, 0)
+        try expectCount(context, Chapter.self, 0)
     }
 
     // MARK: Downloads
@@ -163,7 +163,7 @@ struct V2SchemaChecks {
     private static func checkDownloadQueue(_ context: ModelContext) throws {
         let entry = Entry(kind: .novel, sourceKey: "ln:readnovelfull", url: "novel/x", title: "X")
         context.insert(entry)
-        let chapter = EntryChapter(url: "novel/x/1", name: "1", chapterNumber: 1)
+        let chapter = Chapter(url: "novel/x/1", name: "1", chapterNumber: 1)
         chapter.entry = entry
         context.insert(chapter)
 

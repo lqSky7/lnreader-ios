@@ -9,15 +9,15 @@ struct LibraryView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
 
     @Query(
-        filter: #Predicate<Novel> { $0.inLibrary },
-        sort: \Novel.name
+        filter: #Predicate<Entry> { $0.inLibrary },
+        sort: \Entry.title
     )
-    private var novels: [Novel]
-    @Query(sort: \Category.sort) private var categories: [Category]
+    private var novels: [Entry]
+    @Query(sort: \Category.order) private var categories: [Category]
 
     @Namespace private var bookTransitions
     @State private var lastReorderTarget: PersistentIdentifier?
@@ -30,8 +30,8 @@ struct LibraryView: View {
     @AppStorage("general.confirmRemove") private var confirmRemove = true
 
     @State private var isEditingLibrary = false
-    @State private var draggedItem: Novel? = nil
-    @State private var novelToDelete: Novel? = nil
+    @State private var draggedItem: Entry? = nil
+    @State private var novelToDelete: Entry? = nil
     @State private var showDeleteConfirmation = false
     @State private var navigationPath = NavigationPath()
     @State private var showFileImporter = false
@@ -59,49 +59,7 @@ struct LibraryView: View {
                             .padding(.horizontal)
                         }
 
-                        switch displayMode {
-                        case .list:
-                            LibraryListView(
-                                transitionNamespace: bookTransitions,
-                                novels: filteredNovels,
-                                isEditing: isEditingLibrary,
-                                draggedItem: $draggedItem,
-                                onReorder: { reorderNovels(dragged: $0, target: $1) },
-                                onDelete: { novel in
-                                    if confirmRemove {
-                                        novelToDelete = novel
-                                        showDeleteConfirmation = true
-                                    } else {
-                                        libraryManager.removeFromLibrary(novel: novel, context: modelContext)
-                                    }
-                                },
-                                onStartEditing: { startEditing() },
-                                onSelect: { novel in
-                                    navigationPath.append(novel)
-                                }
-                            )
-                        default:
-                            LibraryGridView(
-                                transitionNamespace: bookTransitions,
-                                novels: filteredNovels,
-                                displayMode: displayMode,
-                                isEditing: isEditingLibrary,
-                                draggedItem: $draggedItem,
-                                onReorder: { reorderNovels(dragged: $0, target: $1) },
-                                onDelete: { novel in
-                                    if confirmRemove {
-                                        novelToDelete = novel
-                                        showDeleteConfirmation = true
-                                    } else {
-                                        libraryManager.removeFromLibrary(novel: novel, context: modelContext)
-                                    }
-                                },
-                                onStartEditing: { startEditing() },
-                                onSelect: { novel in
-                                    navigationPath.append(novel)
-                                }
-                            )
-                        }
+                        libraryContent
                     }
                     .immediateScrollTouches()
                     .onDrop(of: [UTType.text], isTargeted: nil) { _ in
@@ -110,7 +68,7 @@ struct LibraryView: View {
                         return true
                     }
                     .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                     }
                 }
             }
@@ -157,13 +115,13 @@ struct LibraryView: View {
             .alert("Remove from Library?", isPresented: $showDeleteConfirmation, presenting: novelToDelete) { novel in
                 Button("Cancel", role: .cancel) {}
                 Button("Remove", role: .destructive) {
-                    libraryManager.removeFromLibrary(novel: novel, context: modelContext)
+                    libraryManager.removeFromLibrary(entry: novel, context: modelContext)
                 }
             } message: { novel in
-                Text("Are you sure you want to remove '\(novel.name)' from your library?")
+                Text("Are you sure you want to remove '\(novel.displayTitle)' from your library?")
             }
-            .navigationDestination(for: Novel.self) { novel in
-                NovelDetailView(novel: novel)
+            .navigationDestination(for: Entry.self) { novel in
+                NovelDetailView(entry: novel)
                     .bookZoom(from: novel.persistentModelID, in: bookTransitions)
             }
             .fileImporter(
@@ -202,9 +160,58 @@ struct LibraryView: View {
         }
     }
 
+    // MARK: - Content
+
+    /// Split out of `body`: two 15-line cell constructors inline pushed the
+    /// view builder past what the type checker will infer in reasonable time.
+    @ViewBuilder
+    private var libraryContent: some View {
+        if displayMode == .list {
+            LibraryListView(
+                transitionNamespace: bookTransitions,
+                novels: filteredNovels,
+                isEditing: isEditingLibrary,
+                draggedItem: $draggedItem,
+                onReorder: handleReorder,
+                onDelete: handleDelete,
+                onStartEditing: { startEditing() },
+                onSelect: handleSelect
+            )
+        } else {
+            LibraryGridView(
+                transitionNamespace: bookTransitions,
+                novels: filteredNovels,
+                displayMode: displayMode,
+                isEditing: isEditingLibrary,
+                draggedItem: $draggedItem,
+                onReorder: handleReorder,
+                onDelete: handleDelete,
+                onStartEditing: { startEditing() },
+                onSelect: handleSelect
+            )
+        }
+    }
+
+    private func handleReorder(_ dragged: Entry, _ target: Entry) {
+        reorderNovels(dragged: dragged, target: target)
+    }
+
+    private func handleDelete(_ novel: Entry) {
+        if confirmRemove {
+            novelToDelete = novel
+            showDeleteConfirmation = true
+        } else {
+            libraryManager.removeFromLibrary(entry: novel, context: modelContext)
+        }
+    }
+
+    private func handleSelect(_ novel: Entry) {
+        navigationPath.append(novel)
+    }
+
     // MARK: - Filtering & Sorting
 
-    private var filteredNovels: [Novel] {
+    private var filteredNovels: [Entry] {
         var result = novels
 
         if let category = selectedCategory {
@@ -213,14 +220,14 @@ struct LibraryView: View {
 
         if !searchText.isEmpty {
             result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(searchText)
+                $0.displayTitle.localizedCaseInsensitiveContains(searchText)
             }
         }
 
         return sortedNovels(result)
     }
 
-    private func sortedNovels(_ novels: [Novel]) -> [Novel] {
+    private func sortedNovels(_ novels: [Entry]) -> [Entry] {
         // Precompute per-novel chapter stats ONCE. The old code called
         // `chaptersUnread` / `totalChapters` inside the sort comparator,
         // re-faulting + re-scanning every novel's chapter list O(log n) times.
@@ -229,11 +236,11 @@ struct LibraryView: View {
         let needsCounts = (sortOrder == .unread || sortOrder == .totalChapters)
         if needsCounts {
             for novel in novels {
-                unreadByID[novel.persistentModelID] = novel.chaptersUnread
-                totalByID[novel.persistentModelID] = novel.totalChapters
+                unreadByID[novel.persistentModelID] = novel.unreadCount
+                totalByID[novel.persistentModelID] = novel.totalChapterCount
             }
         }
-        let sorted: [Novel]
+        let sorted: [Entry]
         switch sortOrder {
         case .custom:
             if isEditingLibrary {
@@ -241,13 +248,13 @@ struct LibraryView: View {
                 return novels.sorted { (ranks[$0.persistentModelID] ?? Int.max) < (ranks[$1.persistentModelID] ?? Int.max) }
             }
             let ordered = novels.sorted {
-                if $0.libraryPosition != $1.libraryPosition { return $0.libraryPosition < $1.libraryPosition }
-                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                if $0.libraryOrder != $1.libraryOrder { return $0.libraryOrder < $1.libraryOrder }
+                return $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending
             }
             return sortDirection.isAscending ? ordered : ordered.reversed()
         case .alphabetical:
             sorted = novels.sorted {
-                $0.name.localizedCompare($1.name) == .orderedAscending
+                $0.displayTitle.localizedCompare($1.displayTitle) == .orderedAscending
             }
         case .lastRead:
             sorted = novels.sorted {
@@ -255,17 +262,17 @@ struct LibraryView: View {
             }
         case .lastUpdated:
             sorted = novels.sorted {
-                ($0.lastUpdatedAt ?? .distantPast) > ($1.lastUpdatedAt ?? .distantPast)
+                ($0.lastUpdate ?? .distantPast) > ($1.lastUpdate ?? .distantPast)
             }
         case .totalChapters:
             sorted = novels.sorted {
-                (totalByID[$0.persistentModelID] ?? $0.totalChapters)
-                    > (totalByID[$1.persistentModelID] ?? $1.totalChapters)
+                (totalByID[$0.persistentModelID] ?? $0.totalChapterCount)
+                    > (totalByID[$1.persistentModelID] ?? $1.totalChapterCount)
             }
         case .unread:
             sorted = novels.sorted {
-                (unreadByID[$0.persistentModelID] ?? $0.chaptersUnread)
-                    > (unreadByID[$1.persistentModelID] ?? $1.chaptersUnread)
+                (unreadByID[$0.persistentModelID] ?? $0.unreadCount)
+                    > (unreadByID[$1.persistentModelID] ?? $1.unreadCount)
             }
         case .dateAdded:
             sorted = novels.sorted { $0.dateAdded > $1.dateAdded }
@@ -284,7 +291,7 @@ struct LibraryView: View {
         }
     }
 
-    private func reorderNovels(dragged: Novel, target: Novel) {
+    private func reorderNovels(dragged: Entry, target: Entry) {
         guard lastReorderTarget != target.persistentModelID,
               dragged.persistentModelID != target.persistentModelID else { return }
         lastReorderTarget = target.persistentModelID
@@ -297,7 +304,7 @@ struct LibraryView: View {
         let byID = Dictionary(uniqueKeysWithValues: novels.map { ($0.persistentModelID, $0) })
         let current = Set(editingOrder)
         let order = editingOrder + novels.filter { !current.contains($0.persistentModelID) }.map(\.persistentModelID)
-        for (index, id) in order.enumerated() { byID[id]?.libraryPosition = index }
+        for (index, id) in order.enumerated() { byID[id]?.libraryOrder = index }
         try? modelContext.save()
         if clearOrder { editingOrder = [] }
     }

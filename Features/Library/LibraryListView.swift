@@ -6,13 +6,13 @@ import UniformTypeIdentifiers
 
 struct LibraryListView: View {
     var transitionNamespace: Namespace.ID? = nil
-    let novels: [Novel]
+    let novels: [Entry]
     let isEditing: Bool
-    @Binding var draggedItem: Novel?
-    var onReorder: (Novel, Novel) -> Void
-    var onDelete: (Novel) -> Void
+    @Binding var draggedItem: Entry?
+    var onReorder: (Entry, Entry) -> Void
+    var onDelete: (Entry) -> Void
     var onStartEditing: () -> Void
-    var onSelect: (Novel) -> Void
+    var onSelect: (Entry) -> Void
 
     var body: some View {
         LazyVStack(spacing: 0) {
@@ -27,7 +27,7 @@ struct LibraryListView: View {
                         .onDrag {
                             self.draggedItem = novel
                             return NSItemProvider(
-                                object: (novel.path + "|" + novel.pluginId) as NSString)
+                                object: (novel.url + "|" + novel.sourceKey) as NSString)
                         }
                         .onDrop(
                             of: [UTType.text],
@@ -59,7 +59,7 @@ struct LibraryListView: View {
 /// aren't swallowed by the drag gesture.
 struct EditableListRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let novel: Novel
+    let novel: Entry
     let isDragging: Bool
     var onDelete: () -> Void
 
@@ -80,8 +80,8 @@ struct EditableListRow: View {
 
 struct InteractiveListRow: View {
     var transitionNamespace: Namespace.ID? = nil
-    let novel: Novel
-    var onSelect: (Novel) -> Void
+    let novel: Entry
+    var onSelect: (Entry) -> Void
     var onStartEditing: () -> Void
 
     @State private var longPressActive = false
@@ -121,7 +121,7 @@ struct InteractiveListRow: View {
 struct LibraryListRow: View {
     var transitionNamespace: Namespace.ID? = nil
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
-    let novel: Novel
+    let novel: Entry
     var isEditing: Bool = false
     var onDelete: () -> Void = {}
 
@@ -141,7 +141,7 @@ struct LibraryListRow: View {
             }
 
             NovelCoverView(
-                url: novel.cover,
+                url: novel.displayThumbnailURL,
                 aspectRatio: LayoutConstants.coverAspectRatio
             )
             .frame(width: 60, height: 86)
@@ -149,20 +149,20 @@ struct LibraryListRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(novel.name)
+                Text(novel.displayTitle)
                     .font(Typography.headline)
                     .lineLimit(2)
 
-                if let author = novel.author {
+                if let author = novel.displayAuthor {
                     Text(author)
                         .font(Typography.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 12) {
-                    Label("\(novel.totalChapters)", systemImage: "list.number")
-                    if showUnreadBadges && novel.chaptersUnread > 0 {
-                        Label("\(novel.chaptersUnread)", systemImage: "eye.slash")
+                    Label("\(novel.totalChapterCount)", systemImage: "list.number")
+                    if showUnreadBadges && novel.unreadCount > 0 {
+                        Label("\(novel.unreadCount)", systemImage: "eye.slash")
                     }
                 }
                 .font(Typography.small)

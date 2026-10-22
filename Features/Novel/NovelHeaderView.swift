@@ -9,7 +9,7 @@ struct NovelHeaderView: View {
     let name: String
     let author: String?
     let cover: String?
-    let status: NovelStatus
+    let status: EntryStatus
     let inLibrary: Bool
     let onToggleLibrary: () -> Void
     var hasStartedReading: Bool = true

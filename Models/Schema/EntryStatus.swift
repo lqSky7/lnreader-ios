@@ -29,6 +29,19 @@ enum EntryStatus: Int, Codable, CaseIterable, Sendable, Hashable {
         }
     }
 
+    /// SF Symbol shown next to the status.
+    var iconName: String {
+        switch self {
+        case .unknown: "questionmark.circle"
+        case .ongoing: "clock.arrow.circlepath"
+        case .completed: "checkmark.circle.fill"
+        case .licensed: "lock.fill"
+        case .publishingFinished: "flag.checkered"
+        case .cancelled: "xmark.circle.fill"
+        case .onHiatus: "pause.circle.fill"
+        }
+    }
+
     /// Best-effort parse of the loose status strings sources return.
     ///
     /// LN plugins hand back free text ("Ongoing", "COMPLETED", "hiatus", …)

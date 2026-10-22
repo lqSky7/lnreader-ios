@@ -40,13 +40,15 @@ struct ContentView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .task {
             await syncManager.loadSession()
+            // v2 source registry mirrors the installed LN plugins, and refreshes
+            // whenever one is installed or removed.
+            pluginManager.onInstalledSourcesChanged = { sourceManager.sync(with: pluginManager) }
             await pluginManager.restoreInstalledPlugins()
-            // v2 source registry mirrors the installed LN plugins, and the HTTP
-            // stack gets its Cloudflare solver before any source is browsed.
             sourceManager.sync(with: pluginManager)
+            // The HTTP stack gets its Cloudflare solver before any source is browsed.
             await HTTPClient.shared.setCloudflareSolver(WebKitCloudflareSolver())
             if autoUpdateOnLaunch {
-                await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
             }
         }
     }
@@ -87,5 +89,5 @@ enum AppTab: String, CaseIterable, Identifiable {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Novel.self, Chapter.self], inMemory: true)
+        .modelContainer(for: [Entry.self, Chapter.self, History.self], inMemory: true)
 }

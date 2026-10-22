@@ -6,14 +6,14 @@ import UniformTypeIdentifiers
 
 struct LibraryGridView: View {
     var transitionNamespace: Namespace.ID? = nil
-    let novels: [Novel]
+    let novels: [Entry]
     let displayMode: DisplayMode
     let isEditing: Bool
-    @Binding var draggedItem: Novel?
-    var onReorder: (Novel, Novel) -> Void
-    var onDelete: (Novel) -> Void
+    @Binding var draggedItem: Entry?
+    var onReorder: (Entry, Entry) -> Void
+    var onDelete: (Entry) -> Void
     var onStartEditing: () -> Void
-    var onSelect: (Novel) -> Void
+    var onSelect: (Entry) -> Void
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: LayoutConstants.gridItemMinSize), spacing: 12)]
@@ -32,7 +32,7 @@ struct LibraryGridView: View {
                     .onDrag {
                         draggedItem = novel
                         return NSItemProvider(
-                            object: (novel.path + "|" + novel.pluginId) as NSString)
+                            object: (novel.url + "|" + novel.sourceKey) as NSString)
                     }
                     .onDrop(
                         of: [UTType.text],
@@ -63,7 +63,7 @@ struct LibraryGridView: View {
 /// aren't swallowed by the drag gesture.
 struct EditableGridCell: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let novel: Novel
+    let novel: Entry
     let displayMode: DisplayMode
     let isDragging: Bool
     var onDelete: () -> Void
@@ -86,9 +86,9 @@ struct EditableGridCell: View {
 
 struct InteractiveGridCell: View {
     var transitionNamespace: Namespace.ID? = nil
-    let novel: Novel
+    let novel: Entry
     let displayMode: DisplayMode
-    var onSelect: (Novel) -> Void
+    var onSelect: (Entry) -> Void
     var onStartEditing: () -> Void
 
     @State private var longPressActive = false
@@ -129,7 +129,7 @@ struct InteractiveGridCell: View {
 struct NovelGridCell: View {
     var transitionNamespace: Namespace.ID? = nil
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
-    let novel: Novel
+    let novel: Entry
     let displayMode: DisplayMode
     var isEditing: Bool = false
     var onDelete: () -> Void = {}
@@ -139,7 +139,7 @@ struct NovelGridCell: View {
             ZStack(alignment: .topTrailing) {
                 ZStack(alignment: .topLeading) {
                     NovelCoverView(
-                        url: novel.cover,
+                        url: novel.displayThumbnailURL,
                         aspectRatio: LayoutConstants.coverAspectRatio
                     )
                     .bookTransitionSource(novel.persistentModelID, in: transitionNamespace)
@@ -152,15 +152,15 @@ struct NovelGridCell: View {
                     }
                 }
 
-                if showUnreadBadges && novel.chaptersUnread > 0 && !isEditing {
-                    BadgeView(count: novel.chaptersUnread)
+                if showUnreadBadges && novel.unreadCount > 0 && !isEditing {
+                    BadgeView(count: novel.unreadCount)
                         .padding(6)
                 }
             }
 
             if displayMode != .coverOnly {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(novel.name)
+                    Text(novel.displayTitle)
                         .font(Typography.caption)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -168,7 +168,7 @@ struct NovelGridCell: View {
                         .frame(height: 36, alignment: .topLeading)
 
                     if displayMode == .comfortable {
-                        Text(novel.author ?? "")
+                        Text(novel.displayAuthor ?? "")
                             .font(Typography.small)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

@@ -19,6 +19,18 @@ struct SourceDetailView: View {
         [GridItem(.adaptive(minimum: LayoutConstants.gridItemMinSize), spacing: 12)]
     }
 
+    /// Browse still speaks the plugin layer's `PluginNovelRef`; the detail
+    /// screen takes a source-agnostic value.
+    private func sourceEntry(from novel: PluginNovelRef) -> SourceEntry {
+        SourceEntry(
+            sourceKey: SourceKey.make(kind: .novel, id: plugin.id),
+            kind: .novel,
+            url: novel.path,
+            title: novel.name,
+            thumbnailURL: novel.cover
+        )
+    }
+
     var body: some View {
         ScrollView {
             if novels.isEmpty && !isLoading {
@@ -33,7 +45,7 @@ struct SourceDetailView: View {
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(novels) { novel in
                     NavigationLink {
-                        NovelDetailView(partialNovel: novel, pluginId: plugin.id)
+                        NovelDetailView(sourceEntry: sourceEntry(from: novel))
                             .bookZoom(from: novel.path, in: bookTransitions)
                     } label: {
                         BrowseNovelCell(novel: novel, transitionNamespace: bookTransitions)
