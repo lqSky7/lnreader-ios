@@ -294,8 +294,13 @@ final class LibraryManager {
 
     // MARK: - Library updates
 
-    /// Refresh every library entry from its source.
-    func updateLibrary(context: ModelContext, sourceManager: SourceManager, automatic: Bool = false) async {
+    /// Refresh library entries from their sources.
+    ///
+    /// `category` limits the run to that category's titles and ignores its
+    /// "exclude from updates" flag; without it, titles in excluded categories
+    /// are skipped (`LibraryUpdateScope`).
+    func updateLibrary(context: ModelContext, sourceManager: SourceManager, automatic: Bool = false,
+                       category: String? = nil) async {
         guard !isUpdating else { return }
 
         if UserDefaults.standard.object(forKey: "general.updateOnWifiOnly") as? Bool ?? true {
@@ -348,8 +353,19 @@ final class LibraryManager {
         var notInstalled = 0
         let unreadOnly = UserDefaults.standard.bool(forKey: "updates.unreadOnly")
         let skipCompleted = UserDefaults.standard.bool(forKey: "updates.skipCompleted")
+        let excludedCategories: Set<String>
+        if category == nil {
+            let all = (try? context.fetch(FetchDescriptor<Category>())) ?? []
+            excludedCategories = Set(all.filter { CategoryFlags.isExcluded($0.flags) }.map(\.name))
+        } else {
+            excludedCategories = []
+        }
         for entry in entries where !entry.isLocal {
             guard !Task.isCancelled else { return }
+            if category != nil || !excludedCategories.isEmpty {
+                guard LibraryUpdateScope.includes(categories: entry.categories.map(\.name),
+                                                  excluded: excludedCategories, only: category) else { continue }
+            }
             // `hasUnread` faults in every chapter of the entry on the main actor,
             // so only ask when the answer can change the outcome.
             guard LibraryUpdatePolicy.permits(strategy: entry.updateStrategy, hasFetched: entry.lastUpdate != nil,

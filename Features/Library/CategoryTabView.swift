@@ -7,6 +7,9 @@ struct CategoryTabView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let categories: [Category]
     @Binding var selectedCategory: Category?
+    var isUpdating = false
+    var onUpdate: (Category) -> Void = { _ in }
+    var onToggleUpdates: (Category) -> Void = { _ in }
     @Namespace private var namespace
 
     var body: some View {
@@ -25,9 +28,20 @@ struct CategoryTabView: View {
                 ForEach(categories) { category in
                     categoryPill(
                         title: category.name,
-                        isSelected: selectedCategory?.id == category.id
+                        isSelected: selectedCategory?.id == category.id,
+                        isExcluded: CategoryFlags.isExcluded(category.flags)
                     ) {
                         selectedCategory = category
+                    }
+                    .contextMenu {
+                        Button("Update this category", systemImage: "arrow.clockwise") { onUpdate(category) }
+                            .disabled(isUpdating)
+                        Toggle(isOn: Binding(
+                            get: { !CategoryFlags.isExcluded(category.flags) },
+                            set: { _ in onToggleUpdates(category) }
+                        )) {
+                            Label("Include in library updates", systemImage: "arrow.triangle.2.circlepath")
+                        }
                     }
                     .glassEffectID(category.id, in: namespace)
                 }
@@ -42,12 +56,19 @@ struct CategoryTabView: View {
     private func categoryPill(
         title: String,
         isSelected: Bool,
+        isExcluded: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button {
             withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { action() }
         } label: {
-            Text(title)
+            HStack(spacing: 4) {
+                Text(title)
+                if isExcluded {
+                    Image(systemName: "pause.circle")
+                        .accessibilityLabel("Excluded from updates")
+                }
+            }
                 .font(Typography.caption)
                 .fontWeight(isSelected ? .semibold : .regular)
                 .foregroundStyle(isSelected ? .primary : .secondary)

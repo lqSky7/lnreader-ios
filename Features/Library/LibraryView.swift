@@ -29,7 +29,9 @@ struct LibraryView: View {
     @AppStorage("general.defaultSortDirection") private var defaultSortDirection: SortDirection = .descending
     /// Sort overrides, one per category (`LibrarySortStore`).
     @AppStorage("library.sorts") private var sortsJSON = "{}"
-    @AppStorage("general.defaultDisplayMode") private var displayMode: DisplayMode = .comfortable
+    @AppStorage("general.defaultDisplayMode") private var defaultDisplayMode: DisplayMode = .comfortable
+    /// Display overrides, one per category (`LibraryDisplayStore`).
+    @AppStorage("library.displays") private var displaysJSON = "{}"
     @AppStorage("general.confirmRemove") private var confirmRemove = true
     @AppStorage("library.kindFilter") private var kindFilterRaw = LibraryKindFilter.all.rawValue
     /// Tri-state filters, one per category (`LibraryFilterStore`).
@@ -83,29 +85,7 @@ struct LibraryView: View {
             }
             .navigationTitle("Library")
             .searchable(text: $searchText, prompt: "Search library")
-            .toolbar {
-                if isEditingLibrary {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
-                                isEditingLibrary = false
-                            }
-                        }
-                        .bold()
-                    }
-                } else {
-                    LibraryToolbar(
-                        sort: activeSortBinding,
-                        hasSortOverride: sortStore.hasOverride(for: selectedCategory?.name),
-                        scopeName: selectedCategory?.name ?? "All",
-                        onResetSort: resetActiveSort,
-                        displayMode: $displayMode,
-                        activeFilterCount: activeFilter.activeCount,
-                        onShowFilters: { showFilterSheet = true },
-                        onImport: { showFileImporter = true }
-                    )
-                }
-            }
+            .toolbar { libraryToolbar }
             .sheet(isPresented: $showFilterSheet) {
                 LibraryFilterSheet(
                     filter: activeFilterBinding,
@@ -181,6 +161,35 @@ struct LibraryView: View {
         }
     }
 
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var libraryToolbar: some ToolbarContent {
+        if isEditingLibrary {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") {
+                    withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
+                        isEditingLibrary = false
+                    }
+                }
+                .bold()
+            }
+        } else {
+            LibraryToolbar(
+                sort: activeSortBinding,
+                displayMode: displayModeBinding,
+                hasDisplayOverride: displayStore.hasOverride(for: selectedCategory?.name),
+                onResetDisplay: resetDisplayMode,
+                hasSortOverride: sortStore.hasOverride(for: selectedCategory?.name),
+                scopeName: selectedCategory?.name ?? "All",
+                onResetSort: resetActiveSort,
+                activeFilterCount: activeFilter.activeCount,
+                onShowFilters: { showFilterSheet = true },
+                onImport: { showFileImporter = true }
+            )
+        }
+    }
+
     // MARK: - Content
 
     /// Only the selected kind is built; the segmented control and the swipe both move it.
@@ -213,7 +222,10 @@ struct LibraryView: View {
             if !categories.isEmpty {
                 CategoryTabView(
                     categories: categories,
-                    selectedCategory: $selectedCategory
+                    selectedCategory: $selectedCategory,
+                    isUpdating: libraryManager.isUpdating,
+                    onUpdate: updateCategory,
+                    onToggleUpdates: toggleUpdates
                 )
                 .padding(.horizontal)
             }
@@ -231,7 +243,9 @@ struct LibraryView: View {
             return true
         }
         .refreshable {
-            await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
+            // Pulling down inside a category refreshes just that category.
+            await libraryManager.updateLibrary(
+                context: modelContext, sourceManager: sourceManager, category: selectedCategory?.name)
         }
     }
 
@@ -378,6 +392,47 @@ struct LibraryView: View {
     }
 
     private var needsChapterDates: Bool { activeSort.needsChapterDates }
+
+    // MARK: Categories
+
+    private func updateCategory(_ category: Category) {
+        Task {
+            await libraryManager.updateLibrary(
+                context: modelContext, sourceManager: sourceManager, category: category.name)
+        }
+    }
+
+    private func toggleUpdates(_ category: Category) {
+        category.flags = CategoryFlags.setting(category.flags, excluded: !CategoryFlags.isExcluded(category.flags))
+        try? modelContext.save()
+    }
+
+    // MARK: Display
+
+    private var displayStore: LibraryDisplayStore { LibraryDisplayStore(json: displaysJSON) }
+
+    /// The display mode for the selected category, else the global default.
+    private var displayMode: DisplayMode {
+        displayStore.mode(for: selectedCategory?.name, default: defaultDisplayMode)
+    }
+
+    private var displayModeBinding: Binding<DisplayMode> {
+        let name = selectedCategory?.name
+        return Binding(
+            get: { displayStore.mode(for: name, default: defaultDisplayMode) },
+            set: {
+                var store = displayStore
+                store.set($0, for: name)
+                displaysJSON = store.json
+            }
+        )
+    }
+
+    private func resetDisplayMode() {
+        var store = displayStore
+        store.reset(selectedCategory?.name)
+        displaysJSON = store.json
+    }
 
     // MARK: Sorts
 

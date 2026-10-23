@@ -287,7 +287,7 @@ enum SchemaV1: VersionedSchema {
 
         var name: String = ""
         var order: Int = 0
-        /// Yokai's category flags (visible / exclude from updates).
+        /// Bit flags; see `CategoryFlags` (bit 0: excluded from library updates).
         var flags: Int = 0
 
         @Relationship(inverse: \Entry.categories)

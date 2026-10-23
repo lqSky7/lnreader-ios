@@ -5,11 +5,13 @@ import SwiftUI
 
 struct LibraryToolbar: ToolbarContent {
     @Binding var sort: LibrarySort
+    @Binding var displayMode: DisplayMode
+    var hasDisplayOverride = false
+    var onResetDisplay: () -> Void = {}
     /// Whether this category has its own sort rather than the global default.
     var hasSortOverride = false
     var scopeName = "All"
     var onResetSort: () -> Void = {}
-    @Binding var displayMode: DisplayMode
     var activeFilterCount = 0
     var onShowFilters: () -> Void = {}
     var onImport: () -> Void
@@ -27,12 +29,15 @@ struct LibraryToolbar: ToolbarContent {
             }
 
             Menu {
-                ForEach(DisplayMode.allCases) { mode in
-                    Button {
-                        displayMode = mode
-                    } label: {
-                        Label(mode.displayName, systemImage: mode.iconName)
+                Section("Display \(scopeName)") {
+                    Picker("Display", selection: $displayMode) {
+                        ForEach(DisplayMode.allCases) { mode in
+                            Label(mode.displayName, systemImage: mode.iconName).tag(mode)
+                        }
                     }
+                }
+                if hasDisplayOverride {
+                    Button("Use default display", systemImage: "arrow.uturn.backward", action: onResetDisplay)
                 }
             } label: {
                 Label("Display", systemImage: displayMode.iconName)

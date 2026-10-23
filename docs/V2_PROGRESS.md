@@ -49,7 +49,7 @@ per-series settings store comes first because reader modes, filters and incognit
 | R6 | Hold to scroll, with swipe-to-change-speed | **Implemented; device check pending** | R5 |
 | R7 | Library filters | **Implemented; device check pending** | — |
 | R8 | Library sorts (per category) | **Implemented; device check pending** | R7 |
-| R9 | Categories: per-category sort, display, update scope | Planned | R7, R8 |
+| R9 | Categories: per-category sort, display, update scope | **Implemented; device check pending** | R7, R8 |
 | R10 | Library badges | Planned | — |
 | R11 | Duplicate detection | Planned | — |
 | R12 | Migrate manga / novel to another source | Planned | R11 |
@@ -163,6 +163,22 @@ the range, and the volume is restored after closing the reader or backgrounding 
   category keeps its own sort, and unread/latest-chapter sorts fill in after the count pass.
 - **R9 categories.** Per-category display mode, sort, filter and update scope. The category
   chip row already exists; this adds the per-category state behind it.
+- **R9 as built.** Sort (R8) and filter (R7) were already per category; R9 adds the other two.
+  *Display mode* is a `LibraryDisplayStore` (`Models/Enums/CategorySettings.swift`), one JSON
+  value under `library.displays`; the toolbar Display menu now edits the selected category,
+  falls back to the Settings default, and offers "Use default display" (it used to overwrite
+  that Settings default). *Update scope* is the `CategoryFlags.excludedFromUpdates` bit of
+  `Category.flags` (already carried by `.lnbk`): long-press a chip → "Include in library
+  updates"; excluded chips show a pause glyph. `LibraryUpdateScope` decides who updates:
+  automatic, background and library-wide runs skip a title if **any** of its categories is
+  excluded (exclusion wins, as in Mihon); `updateLibrary(category:)` updates exactly that
+  category's titles and ignores its exclusion. Pull-to-refresh inside a category, and the
+  chip menu's "Update this category", use it. Checked headless by
+  `scripts/check-library-categories.sh`; typechecks. **Gap:** there is still no UI to
+  create, rename, reorder, delete or assign categories (they only arrive from a Mihon
+  restore), so this is only reachable after an import until a category editor exists.
+  Device check: a category's display mode stays with it, an excluded category is skipped
+  by Updates and the background refresh, and a category refresh updates only its titles.
 - **R10 badges.** Unread, downloaded, source/language, "new". Compute off-main and cache;
   badges are the main per-cell cost in the grid.
 
@@ -325,6 +341,7 @@ are separate from the implemented local `.lnbk` snapshot.
 | `scripts/check-v2-extensions.sh` | Bundle through the real host against a localhost fixture |
 | `scripts/check-v2-scanlators.sh` | Dedup/hide rules, hidden-winner fallback |
 | `scripts/check-library-sorts.sh` | Every sort order and direction, nil dates, tie-breaks, per-category store |
+| `scripts/check-library-categories.sh` | Per-category display store, exclude-from-updates flag, update scope |
 | `scripts/check-v2-reader-settings.sh` | Per-series reader settings: resolution, persistence, reset, make default |
 | `scripts/try-mangafire.sh` | Live MangaFire through the host (network required) |
 | `scripts/profile-hotpaths.sh` | Library counts, progress writes, chapter rows and ordering at library scale |
