@@ -5,6 +5,7 @@
 #   ./scripts/install-release.sh            # build, install, launch
 #   ./scripts/install-release.sh --no-launch
 #
+# Works over USB or Wi-Fi (the phone must be on the same network).
 # Signs with the project's automatic signing settings, so the
 # device must be unlocked, trusted, and have Developer Mode on. Run this from a
 # normal terminal; inside an agent sandbox xcodebuild cannot resolve packages.
@@ -24,24 +25,32 @@ DEVICES_JSON=$(mktemp)
 trap 'rm -f "$DEVICES_JSON"' EXIT
 
 xcrun devicectl list devices --json-output "$DEVICES_JSON" >/dev/null 2>&1 || true
-# First physical device that is currently connected: "<identifier>\t<name>".
+# First paired physical device, over USB or Wi-Fi: "<identifier>\t<name>".
 DEVICE=$(python3 -I - "$DEVICES_JSON" <<'PY'
 import json, sys
 try:
     devices = json.load(open(sys.argv[1]))["result"]["devices"]
 except (OSError, ValueError, KeyError):
     sys.exit(0)
+# A paired device over Wi-Fi reports tunnelState "disconnected" until a command
+# opens the tunnel, so accept any paired device and prefer one already connected.
+best = None
 for d in devices:
     hardware = d.get("hardwareProperties", {})
-    if hardware.get("reality") == "physical" and d.get("connectionProperties", {}).get("tunnelState") == "connected":
-        print(f'{d["identifier"]}\t{d.get("deviceProperties", {}).get("name", "device")}')
-        break
+    connection = d.get("connectionProperties", {})
+    if hardware.get("reality") != "physical" or connection.get("pairingState") != "paired":
+        continue
+    connected = connection.get("tunnelState") == "connected"
+    if best is None or (connected and not best[0]):
+        best = (connected, f'{d["identifier"]}\t{d.get("deviceProperties", {}).get("name", "device")}')
+if best:
+    print(best[1])
 PY
 )
 
 if [ -z "$DEVICE" ]; then
-  echo "install-release: no connected physical device." >&2
-  echo "Connect and unlock it, tap Trust, then check:  xcrun devicectl list devices" >&2
+  echo "install-release: no paired physical device." >&2
+  echo "Pair it (USB once, then Connect via network in Xcode > Devices), then check:  xcrun devicectl list devices" >&2
   exit 1
 fi
 DEVICE_ID=${DEVICE%%	*}
