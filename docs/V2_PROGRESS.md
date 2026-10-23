@@ -168,7 +168,7 @@ the range, and the volume is restored after closing the reader or backgrounding 
   value under `library.displays`; the toolbar Display menu now edits the selected category,
   falls back to the Settings default, and offers "Use default display" (it used to overwrite
   that Settings default). *Update scope* is the `CategoryFlags.excludedFromUpdates` bit of
-  `Category.flags` (already carried by `.lnbk`): long-press a chip → "Include in library
+  `Category.flags` (already carried by `.lnbk`): long-press a chip (action dialog) → "Include in library
   updates"; excluded chips show a pause glyph. `LibraryUpdateScope` decides who updates:
   automatic, background and library-wide runs skip a title if **any** of its categories is
   excluded (exclusion wins, as in Mihon); `updateLibrary(category:)` updates exactly that

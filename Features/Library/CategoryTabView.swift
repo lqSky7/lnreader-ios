@@ -11,6 +11,10 @@ struct CategoryTabView: View {
     var onUpdate: (Category) -> Void = { _ in }
     var onToggleUpdates: (Category) -> Void = { _ in }
     @Namespace private var namespace
+    /// Category whose actions are showing, opened by a long press.
+    @State private var actionsFor: Category?
+    /// A long press ends with a lift that would also count as a tap.
+    @State private var suppressTap = false
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -29,19 +33,10 @@ struct CategoryTabView: View {
                     categoryPill(
                         title: category.name,
                         isSelected: selectedCategory?.id == category.id,
-                        isExcluded: CategoryFlags.isExcluded(category.flags)
+                        isExcluded: CategoryFlags.isExcluded(category.flags),
+                        onLongPress: { actionsFor = category }
                     ) {
                         selectedCategory = category
-                    }
-                    .contextMenu {
-                        Button("Update this category", systemImage: "arrow.clockwise") { onUpdate(category) }
-                            .disabled(isUpdating)
-                        Toggle(isOn: Binding(
-                            get: { !CategoryFlags.isExcluded(category.flags) },
-                            set: { _ in onToggleUpdates(category) }
-                        )) {
-                            Label("Include in library updates", systemImage: "arrow.triangle.2.circlepath")
-                        }
                     }
                     .glassEffectID(category.id, in: namespace)
                 }
@@ -50,6 +45,21 @@ struct CategoryTabView: View {
             }
         }
         .padding(.vertical, 8)
+        .confirmationDialog(
+            actionsFor?.name ?? "",
+            isPresented: Binding(get: { actionsFor != nil }, set: { if !$0 { actionsFor = nil } }),
+            titleVisibility: .visible,
+            presenting: actionsFor
+        ) { category in
+            Button("Update this category") { onUpdate(category) }
+                .disabled(isUpdating)
+            if CategoryFlags.isExcluded(category.flags) {
+                Button("Include in library updates") { onToggleUpdates(category) }
+            } else {
+                Button("Exclude from library updates") { onToggleUpdates(category) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     @ViewBuilder
@@ -57,9 +67,14 @@ struct CategoryTabView: View {
         title: String,
         isSelected: Bool,
         isExcluded: Bool = false,
+        onLongPress: (() -> Void)? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button {
+            if suppressTap {
+                suppressTap = false
+                return
+            }
             withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { action() }
         } label: {
             HStack(spacing: 4) {
@@ -79,5 +94,15 @@ struct CategoryTabView: View {
         }
         .glassEffect(.regular, in: .capsule)
         .contentShape(.capsule)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                guard let onLongPress else { return }
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                suppressTap = true
+                // The lift may not report a tap at all; do not eat the next real one.
+                Task { try? await Task.sleep(for: .milliseconds(600)); suppressTap = false }
+                onLongPress()
+            }
+        )
     }
 }
