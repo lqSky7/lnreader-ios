@@ -30,6 +30,12 @@ struct NovelDetailView: View {
     @State private var selectedRange: ChapterRange = .progress
     @State private var selectedFilter: ChapterFilter = .all
     @State private var errorMessage: String?
+    /// A manual refetch is running; the page stays up while it does.
+    @State private var isRefetching = false
+    @State private var refetchError: String?
+    /// When this screen last fetched from the source, for entries with no
+    /// stored `lastUpdate` (a browse result).
+    @State private var fetchedAt: Date?
 
     // Search + navigation state
     @State private var chapterSearch = ""
@@ -114,6 +120,8 @@ struct NovelDetailView: View {
                         .padding(.horizontal)
                         .padding(.vertical, 16)
 
+                    fetchStatusRow
+
                     ChapterListView(
                         entry: localEntry,
                         allChapters: allChapters,
@@ -172,6 +180,48 @@ struct NovelDetailView: View {
         // has to be rebuilt — it is no longer a computed property.
         .onChange(of: scanlatorSettings.value) { rebuildOrderedChapters() }
         .task { await fetchDetails() }
+        .alert("Couldn't refresh", isPresented: Binding(
+            get: { refetchError != nil },
+            set: { if !$0 { refetchError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(refetchError ?? "")
+        }
+    }
+
+    // MARK: - Fetch status
+
+    /// Whether this entry has a source to fetch from (local books do not).
+    private var canRefetch: Bool { sourceManager.source(forKey: sourceKey) != nil }
+
+    private var lastFetched: Date? { fetchedAt ?? localEntry?.lastUpdate }
+
+    private var fetchStatusRow: some View {
+        HStack(spacing: 8) {
+            if let lastFetched {
+                Text("Last fetched \(lastFetched.formatted(.relative(presentation: .named)))")
+            } else {
+                Text("Not fetched yet")
+            }
+            Spacer()
+            if canRefetch {
+                Button {
+                    Task { await fetchDetails(force: true) }
+                } label: {
+                    if isRefetching {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(isRefetching)
+            }
+        }
+        .font(Typography.small)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Chapter Computation
@@ -375,16 +425,30 @@ struct NovelDetailView: View {
         }
     }
 
-    private func fetchDetails() async {
+    /// Opening an entry never refetches one that already has stored chapters:
+    /// the user decides, with Refresh. A fetch happens on its own only when
+    /// there is nothing to show yet (a browse result, or a library entry that
+    /// was never fetched). `force` is the Refresh button.
+    private func fetchDetails(force: Bool = false) async {
         syncLocalEntry()
         refreshChapters()
 
-        // `CatalogSource` covers both kinds: details and the chapter list are
-        // shared, only the reader differs.
-        guard details == nil, let source = sourceManager.source(forKey: sourceKey) else {
+        if !force, let stored = localEntry, stored.lastUpdate != nil {
             isLoading = false
             return
         }
+
+        // `CatalogSource` covers both kinds: details and the chapter list are
+        // shared, only the reader differs.
+        guard force || details == nil, let source = sourceManager.source(forKey: sourceKey) else {
+            isLoading = false
+            return
+        }
+        if force {
+            guard !isRefetching else { return }
+            isRefetching = true
+        }
+        defer { isRefetching = false }
 
         let url = localEntry?.url ?? sourceEntry?.url ?? ""
         guard !url.isEmpty else {
@@ -405,13 +469,18 @@ struct NovelDetailView: View {
 
             details = fetchedDetails
             sourceChapters = chapters
+            fetchedAt = .now
             if let localEntry {
                 libraryManager.applyUpdate(localEntry, details: fetchedDetails, chapters: chapters, context: modelContext)
             }
             isLoading = false
             refreshChapters()
         } catch {
-            errorMessage = error.localizedDescription
+            if force {
+                refetchError = error.localizedDescription
+            } else {
+                errorMessage = error.localizedDescription
+            }
             isLoading = false
         }
     }

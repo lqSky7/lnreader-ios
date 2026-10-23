@@ -84,6 +84,7 @@ final class LibraryManager {
             existing.inLibrary = true
             if existing.chapters.isEmpty {
                 insertChapters(chapters, into: existing, context: context)
+                if !chapters.isEmpty { existing.lastUpdate = .now }
             }
             try? context.save()
             return existing
@@ -106,6 +107,9 @@ final class LibraryManager {
         context.insert(entry)
 
         insertChapters(chapters, into: entry, context: context)
+        // Chapters that came with the add count as a fetch, so opening the
+        // entry later does not refetch what the user just saw.
+        if !chapters.isEmpty { entry.lastUpdate = .now }
         try? context.save()
         return entry
     }

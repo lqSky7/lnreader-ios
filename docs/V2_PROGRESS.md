@@ -220,6 +220,18 @@ queue, per-title progress, swipe actions, a visible download state on chapter ro
 storage summary with a clear-all, and a sensible empty state. The queue and guards already
 exist; this is UI and information design, so it needs a device pass.
 
+## Chapter fetching is manual
+
+Opening an entry no longer refetches it. `NovelDetailView.fetchDetails` fetches on its own only
+when there is nothing stored to show: a browse result, or a library entry with no `lastUpdate`.
+A stored entry shows "Last fetched …" (from `Entry.lastUpdate`, or this screen's own fetch time
+for a browse result) with a **Refresh** button; a failed refresh raises an alert and leaves the
+page up. `addToLibrary` stamps `lastUpdate` when chapters came with the add, so a title just added
+from Browse does not refetch on first open. Library-wide updates (pull to refresh, background)
+are unchanged. Device check: opening a library entry makes no network request, Refresh updates
+the time and the chapter list, and a title added from Browse before its fetch finishes still
+gets its chapters.
+
 ## Landed
 
 | Commit | What |
