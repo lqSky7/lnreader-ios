@@ -8,7 +8,7 @@ struct NovelInfoSection: View {
     let genres: [String]
     let author: String?
     let artist: String?
-    let status: NovelStatus
+    let status: EntryStatus
     let source: String
     @Binding var showFullDescription: Bool
 

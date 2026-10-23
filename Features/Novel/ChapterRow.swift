@@ -4,26 +4,25 @@
 import SwiftUI
 
 struct ChapterRow: View {
+    @Environment(ReaderRouter.self) private var readerRouter
     @Namespace private var chapterTransition
     @ObservedObject private var audioLibrary = TTSOfflineLibrary.shared
     @State private var showAudioDownloads = false
     let chapter: ChapterDisplay
-    let novel: Novel?
-    let pluginId: String
-    private var bookPath: String { novel?.path ?? chapter.novelPath ?? chapter.path }
-    private var bookID: String { TTSBookIdentity.make(pluginId: pluginId, novelPath: bookPath) }
+    let entry: Entry?
+    let sourceKey: String
+    private var bookPath: String { entry?.url ?? chapter.entryURL ?? chapter.path }
+    private var bookID: String { TTSBookIdentity.make(pluginId: sourceKey, novelPath: bookPath) }
     private var audioCount: Int { audioLibrary.downloads(bookId: bookID, chapterId: chapter.path).filter(\.isAvailable).count }
 
     var body: some View {
-        NavigationLink {
-            ReaderView(
-                chapterPath: chapter.path,
-                chapterName: chapter.name,
-                pluginId: pluginId,
-                novelPath: novel?.path ?? chapter.novelPath
+        Button {
+            readerRouter.open(
+                chapter,
+                sourceKey: sourceKey,
+                entryURL: entry?.url ?? chapter.entryURL,
+                kind: entry?.kind ?? chapter.kind
             )
-            .id(chapter.path)
-            .bookZoom(from: chapter.path, in: chapterTransition)
         } label: {
             HStack(spacing: 12) {
                 // Unread indicator dot
@@ -38,6 +37,13 @@ struct ChapterRow: View {
                         .lineLimit(2)
 
                     HStack(spacing: 8) {
+                        if let scanlator = chapter.scanlator, !scanlator.isEmpty {
+                            Text(scanlator.prefix(1).uppercased() + scanlator.dropFirst())
+                                .font(Typography.small)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+
                         if let releaseTime = chapter.releaseTime {
                             Text(releaseTime)
                                 .font(Typography.small)
@@ -79,11 +85,18 @@ struct ChapterRow: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Chapter audio", systemImage: "headphones") { showAudioDownloads = true }
+            if let saved = entry?.chapters.first(where: { $0.url == chapter.path }), entry?.isLocal == false {
+                Button(chapter.downloaded ? "Downloaded" : "Download chapter", systemImage: "arrow.down.circle") {
+                    ChapterDownloadManager.shared.enqueue([saved])
+                }.disabled(chapter.downloaded)
+            }
+            if (entry?.kind ?? chapter.kind) == .novel {
+                Button("Chapter audio", systemImage: "headphones") { showAudioDownloads = true }
+            }
         }
         .sheet(isPresented: $showAudioDownloads) {
-            BookAudioDownloadsView(bookId: bookID, bookTitle: novel?.name ?? chapter.name, pluginId: pluginId, novelPath: bookPath,
-                chapters: [TTSChapterChoice(chapter)], coverURL: novel?.cover, initialChapter: chapter.path)
+            BookAudioDownloadsView(bookId: bookID, bookTitle: entry?.displayTitle ?? chapter.name, sourceKey: sourceKey, entryURL: bookPath,
+                chapters: [TTSChapterChoice(chapter)], coverURL: entry?.displayThumbnailURL, initialChapter: chapter.path)
         }
     }
 }

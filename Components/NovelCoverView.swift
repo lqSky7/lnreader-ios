@@ -10,30 +10,33 @@ struct NovelCoverView: View {
     var cornerRadius: CGFloat = LayoutConstants.cornerRadius
 
     var body: some View {
-        GeometryReader { geo in
-            if let urlString = url, let imageURL = URL(string: urlString) {
-                CustomAsyncImage(url: imageURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                    case .failure:
-                        placeholderView
-                    case .empty:
-                        shimmerPlaceholder
-                    @unknown default:
-                        placeholderView
+        // `Color.clear` + `aspectRatio` gives a flexible box with a fixed ratio
+        // without a `GeometryReader` per cell. A GeometryReader in every grid
+        // cell costs a layout pass each and is a known scroll-time drag.
+        Color.clear
+            .aspectRatio(aspectRatio, contentMode: .fit)
+            .overlay {
+                if let urlString = url, let imageURL = URL(string: urlString) {
+                    CustomAsyncImage(url: imageURL) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            placeholderView
+                        case .empty:
+                            shimmerPlaceholder
+                        @unknown default:
+                            placeholderView
+                        }
                     }
+                } else {
+                    placeholderView
                 }
-            } else {
-                placeholderView
             }
-        }
-        .aspectRatio(aspectRatio, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
 
     private var placeholderView: some View {

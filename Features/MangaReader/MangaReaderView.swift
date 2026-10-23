@@ -1,0 +1,784 @@
+// MangaReaderView.swift - The manga reader: paged or continuous strip.
+//
+// One view for both layouts; the mode is a setting, not a different screen.
+// Pages come from `MangaSource`, bytes from `PageLoader`, progress goes back
+// through `LibraryManager`. See docs/MANGA_SUPPORT_PLAN.md §4.
+
+import SwiftData
+import SwiftUI
+import GlurBackdrop
+#if canImport(UIKit)
+import UIKit
+#endif
+
+struct MangaReaderView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Environment(LibraryManager.self) private var libraryManager
+    @Environment(SourceManager.self) private var sourceManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let sourceKey: String
+    let entryURL: String?
+
+    /// Layout settings for this series: its own overrides over the global defaults.
+    @State private var seriesSettings: MangaSeriesSettings
+    // Observed so a changed global default re-renders a series that follows it.
+    @AppStorage(MangaReaderSettingsKey.readingMode) private var defaultModeRaw = MangaReadingMode.pager.rawValue
+    @AppStorage(MangaReaderSettingsKey.direction) private var defaultDirectionRaw = MangaPagingDirection.leftToRight.rawValue
+
+    @State private var chapterURL: String
+    @State private var chapterName: String
+
+    @State private var loader = PageLoader()
+    @State private var pages: [SourcePage] = []
+    @State private var storedChapters: [Chapter] = []
+    @State private var sourceChapters: [SourceChapter] = []
+    @State private var isLoadingChapters = false
+    @State private var chapterListError: String?
+    @State private var chapterSourceEntry: SourceEntry?
+    /// `chapterChoices` after scanlator rules.
+    ///
+    /// State, not a computed property: `hasChapter` asks for it twice per body
+    /// evaluation, and rebuilding it means mapping every chapter plus a
+    /// scanlator pass — over the whole list, for every tap and page turn.
+    @State private var navigable: [SourceChapter] = []
+    @State private var webtoonProxy: ScrollViewProxy?
+    @State private var isRestoringPosition = false
+    @State private var readerSize: CGSize = .zero
+    @State private var scroller = WebtoonScrollController()
+    @State private var showReaderSettings = false
+    /// Volume keys, auto scroll and hold-to-scroll: one stored value for the user.
+    @AppStorage(MangaControlSettings.storageKey) private var inputSettings = MangaControlSettings()
+    @State private var currentIndex = 0
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var chrome: ReaderChromeState = .control
+    @State private var showChapterSheet = false
+    @State private var isDismissing = false
+    @State private var scanlatorSettings: ScanlatorSettings
+
+    init(sourceKey: String, entryURL: String?, chapterURL: String, chapterName: String) {
+        self.sourceKey = sourceKey
+        self.entryURL = entryURL
+        self._chapterURL = State(initialValue: chapterURL)
+        self._chapterName = State(initialValue: chapterName)
+        self._scanlatorSettings = State(initialValue: ScanlatorSettings(key: "\(sourceKey)::\(entryURL ?? "")"))
+        // A chapter opened outside a library entry has no series to remember,
+        // so it is keyed by the chapter instead of sharing one empty-URL key.
+        self._seriesSettings = State(initialValue: MangaSeriesSettings(key: "\(sourceKey)::\(entryURL ?? chapterURL)"))
+    }
+
+    private var mode: MangaReadingMode {
+        _ = defaultModeRaw
+        return seriesSettings.resolved.readingMode
+    }
+
+    private var direction: MangaPagingDirection {
+        _ = defaultDirectionRaw
+        return seriesSettings.resolved.direction
+    }
+
+    private var storedChapter: Chapter? {
+        storedChapters.first { $0.url == chapterURL }
+    }
+
+    private var chapterChoices: [SourceChapter] {
+        if !storedChapters.isEmpty {
+            return storedChapters.map {
+                SourceChapter(url: $0.url, name: $0.name, chapterNumber: $0.chapterNumber,
+                              scanlator: $0.scanlator)
+            }
+        }
+        return sourceChapters
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            content
+                .contentShape(Rectangle())
+                // A simultaneous gesture, not an overlay: an overlay of
+                // `Color.clear` sits above the scroll view and eats the drag, so
+                // the webtoon would not scroll and the pager would not swipe.
+                .simultaneousGesture(
+                    SpatialTapGesture()
+                        .onEnded { value in handleTap(at: value.location) }
+                )
+
+            if chrome.isControl {
+                controls
+            }
+
+            scrollOverlays
+        }
+        .background { volumeKeys }
+        .background(EdgeSwipeDismiss {
+            guard !isDismissing else { return }
+            isDismissing = true
+            dismiss()
+        })
+        .statusBarHidden(true)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { readerSize = $0 }
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .task {
+            await loadChapter()
+            await loadChapterChoices()
+        }
+        .sheet(isPresented: $showChapterSheet) { chapterSheet }
+        .sheet(isPresented: $showReaderSettings) {
+            MangaReaderSettingsSheet(series: seriesSettings, controls: $inputSettings)
+        }
+        .onAppear {
+            setScreenAwake(true)
+            configureScroller()
+        }
+        .onChange(of: inputSettings) { configureScroller() }
+        .onChange(of: mode) { _, newMode in
+            if newMode != .webtoon { scroller.stopAuto() }
+        }
+        .onDisappear {
+            scroller.detach()
+            setScreenAwake(false)
+            libraryManager.flushProgress(context: modelContext)
+        }
+        .onChange(of: currentIndex) { _, index in handlePageChange(index) }
+        .onChange(of: scanlatorSettings.value) { rebuildNavigable() }
+        .onChange(of: mode) { _, _ in
+            // Re-run the layout without refetching the page list.
+            chrome = .control
+        }
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        if isLoading {
+            ProgressView().tint(.white)
+        } else if let errorMessage {
+            errorView(errorMessage)
+        } else if pages.isEmpty {
+            errorView("This chapter has no pages.")
+        } else if mode == .webtoon {
+            webtoon
+        } else {
+            pager
+        }
+    }
+
+    private var pager: some View {
+        TabView(selection: $currentIndex) {
+            ForEach(pages.indices, id: \.self) { index in
+                MangaPageView(page: pages[index], sourceKey: sourceKey, loader: loader)
+                    .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .id(chapterURL)
+        .environment(\.layoutDirection, direction.layoutDirection)
+        .ignoresSafeArea()
+    }
+
+    /// The strip. Which page is on screen is *read* from the scroll view
+    /// (`onScrollTargetVisibilityChange`) and jumps are one-shot
+    /// (`ScrollViewReader`). There is deliberately no `scrollPosition(id:)`
+    /// binding: that treats the binding as the position of record, so when auto
+    /// scroll, hold-to-scroll or the volume keys move the offset underneath it,
+    /// the next re-render pushes the stale id back and the strip snaps to the
+    /// top of the page it was leaving.
+    private var webtoon: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 0) {
+                    ForEach(pages.indices, id: \.self) { index in
+                        MangaPageView(page: pages[index], sourceKey: sourceKey, loader: loader)
+                            .id(index)
+                    }
+                }
+                .scrollTargetLayout()
+                .background(WebtoonScrollBridge(controller: scroller))
+            }
+            // Low threshold: a page taller than the screen can never be half visible.
+            .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.05) { visible in
+                guard !isRestoringPosition, let top = visible.min(),
+                      pages.indices.contains(top), top != currentIndex else { return }
+                currentIndex = top
+            }
+            .onAppear {
+                webtoonProxy = proxy
+                restoreWebtoonPosition(proxy)
+            }
+        }
+        .id(chapterURL)
+        .ignoresSafeArea()
+    }
+
+    /// Scroll to the resume page without the first visibility report (page 0)
+    /// overwriting it.
+    private func restoreWebtoonPosition(_ proxy: ScrollViewProxy) {
+        let target = currentIndex
+        guard target > 0 else { return }
+        isRestoringPosition = true
+        Task { @MainActor in
+            proxy.scrollTo(target, anchor: .top)
+            try? await Task.sleep(for: .milliseconds(350))
+            isRestoringPosition = false
+        }
+    }
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(.white.opacity(0.8))
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+            Button("Try again") {
+                Task { await loadChapter() }
+            }
+            .buttonStyle(.bordered)
+            .tint(.white)
+        }
+        .padding(32)
+    }
+
+    // MARK: - Chrome
+
+    /// Keep the image legible beneath the controls with a light edge blur.
+    private var controls: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                GlurView(radius: 8, direction: .up)
+                    .frame(height: 140)
+                Spacer(minLength: 0)
+                GlurView(radius: 8, direction: .down)
+                    .frame(height: 140)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+
+            VStack(spacing: 0) {
+                topBar
+                Spacer(minLength: 0)
+                bottomBar
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private var topBar: some View {
+        GlassEffectContainer {
+            ZStack {
+                HStack {
+                    glassCircleButton("chevron.left", label: "Close reader") { dismiss() }
+                    Spacer()
+                    optionsMenu
+                }
+
+                Button { showChapterSheet = true } label: {
+                    Text(chapterName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                        .frame(height: 46)
+                        .padding(.horizontal, 20)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 60)
+                .accessibilityLabel("Chapters: \(chapterName)")
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+    }
+
+    private var optionsMenu: some View {
+        Menu {
+            Picker("Layout", selection: Binding(
+                get: { mode },
+                set: { seriesSettings.setReadingMode($0) }
+            )) {
+                ForEach(MangaReadingMode.allCases) { readingMode in
+                    Label(readingMode.displayName, systemImage: readingMode.iconName)
+                        .tag(readingMode)
+                }
+            }
+            if mode == .pager {
+                Picker("Direction", selection: Binding(
+                    get: { direction },
+                    set: { seriesSettings.setDirection($0) }
+                )) {
+                    ForEach(MangaPagingDirection.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+            }
+            Section("This series") {
+                Button("Use for all series", systemImage: "square.stack") {
+                    seriesSettings.makeDefault()
+                }
+                if seriesSettings.hasOverrides {
+                    Button("Reset to default", systemImage: "arrow.uturn.backward") {
+                        seriesSettings.reset()
+                    }
+                }
+            }
+            if mode == .webtoon {
+                Button(
+                    scroller.isAutoScrolling ? "Stop auto scroll" : "Start auto scroll",
+                    systemImage: scroller.isAutoScrolling ? "pause.circle" : "play.circle"
+                ) { toggleAutoScroll() }
+            }
+            Button("Reader settings…", systemImage: "gearshape") { showReaderSettings = true }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: .circle)
+        }
+        .accessibilityLabel("Reader options")
+    }
+
+    private var bottomBar: some View {
+        GlassEffectContainer {
+            HStack(spacing: 12) {
+                if pages.count > 1 {
+                    MangaPageSlider(index: Binding(get: { currentIndex }, set: seekPage), pageCount: pages.count)
+                }
+                HStack(spacing: 0) {
+                    chapterButton(offset: -1, symbol: "chevron.left", label: "Previous chapter")
+                    Divider().frame(height: 24)
+                    chapterButton(offset: 1, symbol: "chevron.right", label: "Next chapter")
+                }
+                .glassEffect(.regular.interactive(), in: .capsule)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+    }
+
+    private func glassCircleButton(
+        _ symbol: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: .circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func chapterButton(offset: Int, symbol: String, label: String) -> some View {
+        let available = !isLoading && hasChapter(offset: offset)
+        return Button {
+            Task { await moveChapter(by: offset) }
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
+        .disabled(!available)
+        .opacity(available ? 1 : 0.35)
+        .accessibilityLabel(label)
+    }
+
+    // MARK: - Loading
+
+    private func loadChapter() async {
+        let requestedURL = chapterURL
+        // Progress writes are deferred while reading; a chapter change is a
+        // natural place to land them.
+        libraryManager.flushProgress(context: modelContext)
+        scroller.stopAuto()
+        isLoading = true
+        pages = []
+        errorMessage = nil
+        loadStoredChapters()
+
+        if let entryURL, let downloaded = OfflineChapters.manga(sourceKey: sourceKey, entryURL: entryURL, chapterURL: requestedURL) {
+            pages = downloaded
+            currentIndex = resumeIndex(pageCount: downloaded.count)
+            isLoading = false
+            if let storedChapter, let entry = storedChapter.entry {
+                libraryManager.recordHistory(entry: entry, chapter: storedChapter, context: modelContext)
+            }
+            return
+        }
+
+        guard let source = sourceManager.mangaSource(forKey: sourceKey) else {
+            errorMessage = "This source is not available. Reinstall it and try again."
+            isLoading = false
+            return
+        }
+
+        let chapter = SourceChapter(url: chapterURL, name: chapterName)
+        do {
+            let fetched = try await source.pages(chapter)
+            guard !Task.isCancelled, chapterURL == requestedURL else { return }
+            pages = fetched
+            currentIndex = resumeIndex(pageCount: fetched.count)
+            isLoading = false
+
+            if let storedChapter, let entry = storedChapter.entry {
+                libraryManager.recordHistory(entry: entry, chapter: storedChapter, context: modelContext)
+            }
+            await loader.prefetch(pages, current: currentIndex, sourceKey: sourceKey)
+        } catch {
+            guard !Task.isCancelled, chapterURL == requestedURL else { return }
+            pages = []
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
+    }
+
+    private func loadStoredChapters() {
+        guard let entryURL else {
+            storedChapters = []
+            return
+        }
+        let key = sourceKey
+        let predicate = #Predicate<Chapter> { $0.entry?.url == entryURL && $0.entry?.sourceKey == key }
+        let descriptor = FetchDescriptor<Chapter>(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\.sourceOrder)]
+        )
+        storedChapters = ((try? modelContext.fetch(descriptor)) ?? []).sorted { lhs, rhs in
+            if lhs.chapterNumber != rhs.chapterNumber {
+                return lhs.chapterNumber < rhs.chapterNumber
+            }
+            return lhs.sourceOrder < rhs.sourceOrder
+        }
+        rebuildNavigable()
+    }
+
+    private func loadChapterChoices() async {
+        guard !isLoadingChapters, storedChapters.isEmpty, sourceChapters.isEmpty, let entryURL,
+              let source = sourceManager.mangaSource(forKey: sourceKey) else { return }
+        isLoadingChapters = true
+        chapterListError = nil
+        defer { isLoadingChapters = false }
+        do {
+            let entry = SourceEntry(sourceKey: sourceKey, kind: .manga, url: entryURL, title: "")
+            sourceChapters = try await source.chapters(entry).sorted { lhs, rhs in
+                if lhs.chapterNumber != rhs.chapterNumber {
+                    return lhs.chapterNumber < rhs.chapterNumber
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+            chapterSourceEntry = try? await source.details(entry)
+            rebuildNavigable()
+        } catch {
+            chapterListError = error.localizedDescription
+        }
+    }
+
+    /// Resume a chapter that was left part-read, otherwise start at the top.
+    private func resumeIndex(pageCount: Int) -> Int {
+        guard pageCount > 0 else { return 0 }
+        guard let storedChapter, !storedChapter.read else { return 0 }
+        return min(max(storedChapter.lastPageRead, 0), pageCount - 1)
+    }
+
+    // MARK: - Progress
+
+    private func handlePageChange(_ index: Int) {
+        guard !isLoading, pages.indices.contains(index) else { return }
+
+        if let storedChapter {
+            libraryManager.recordMangaProgress(
+                chapter: storedChapter,
+                pageIndex: index,
+                pageCount: pages.count,
+                context: modelContext
+            )
+        }
+        Task { await loader.prefetch(pages, current: index, sourceKey: sourceKey) }
+    }
+
+    // MARK: - Scrolling and volume keys
+
+    private func configureScroller() {
+        scroller.autoSpeed = inputSettings.autoScrollSpeed
+        scroller.hold = inputSettings.hold
+        scroller.isHoldEnabled = inputSettings.holdScrollEnabled
+        scroller.onReachedEnd = {
+            // Out of pages: bring the controls back so the next chapter is one tap away.
+            setChrome(.control)
+        }
+    }
+
+    private func toggleAutoScroll() {
+        if scroller.isAutoScrolling {
+            scroller.stopAuto()
+        } else {
+            // Hide the controls so the page is what is on screen.
+            setChrome(.focus)
+            scroller.startAuto()
+        }
+    }
+
+    /// Volume up goes back and volume down goes forward, unless inverted.
+    private func handleVolumeKey(_ key: VolumeKey) {
+        let forward = inputSettings.isForward(key)
+        if mode == .webtoon {
+            scroller.scrollScreen(forward: forward)
+        } else {
+            turnPage(forward: forward)
+        }
+    }
+
+    @ViewBuilder
+    private var volumeKeys: some View {
+        if inputSettings.volumeKeys {
+            VolumeKeyHost(onPress: handleVolumeKey)
+                .frame(width: 1, height: 1)
+        }
+    }
+
+    /// Auto scroll's stop button and the hold-to-scroll speed readout.
+    private var scrollOverlays: some View {
+        VStack {
+            if let speed = scroller.holdSpeed {
+                Text("\(Int(speed)) pt/s")
+                    .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.top, 60)
+                    .transition(.opacity)
+            }
+            Spacer()
+            if scroller.isAutoScrolling {
+                Button { scroller.stopAuto() } label: {
+                    Label("Auto scroll", systemImage: "pause.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, chrome.isControl ? 96 : 28)
+                .accessibilityLabel("Stop auto scroll")
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: scroller.holdSpeed != nil)
+        .allowsHitTesting(scroller.isAutoScrolling)
+    }
+
+    // MARK: - Chapter navigation
+
+    private func hasChapter(offset: Int) -> Bool {
+        guard let current = navigableChapters.firstIndex(where: { $0.url == chapterURL }) else {
+            return false
+        }
+        let target = current + offset
+        return navigableChapters.indices.contains(target)
+    }
+
+    // MARK: - Interaction
+
+    private func seekPage(_ index: Int) {
+        guard pages.indices.contains(index) else { return }
+        currentIndex = index
+        if mode == .webtoon { webtoonProxy?.scrollTo(index, anchor: .top) }
+    }
+
+    /// The series' tap-zone layout decides between previous, next and the
+    /// controls. Paged mode turns the page (right-to-left swaps the sides);
+    /// webtoon scrolls a screenful, and reading direction does not apply to a
+    /// vertical strip.
+    private func handleTap(at point: CGPoint) {
+        // The finger lifting after a hold-to-scroll is not a tap.
+        guard !scroller.justHeld else { return }
+
+        let preferences = seriesSettings.resolved
+        let isPager = mode == .pager
+        switch preferences.tapZones.action(
+            at: point,
+            in: readerSize,
+            inverted: preferences.invertTapZones,
+            rightToLeft: isPager && direction == .rightToLeft
+        ) {
+        case .previous: isPager ? turnPage(forward: false) : scroller.scrollScreen(forward: false)
+        case .next: isPager ? turnPage(forward: true) : scroller.scrollScreen(forward: true)
+        case .menu: toggleControls()
+        }
+    }
+
+    private func turnPage(forward: Bool) {
+        let target = currentIndex + (forward ? 1 : -1)
+        guard pages.indices.contains(target) else { return }
+        currentIndex = target
+    }
+
+    private func setChrome(_ state: ReaderChromeState) {
+        guard chrome != state else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { chrome = state }
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+    }
+
+    private func toggleControls() {
+        setChrome(chrome.toggled)
+    }
+
+    /// Reading should not be interrupted by the idle timer.
+    private func setScreenAwake(_ awake: Bool) {
+        #if canImport(UIKit)
+        UIApplication.shared.isIdleTimerDisabled = awake
+        #endif
+    }
+
+    // MARK: - Chapter sheet
+
+    private var directoryChapters: [ChapterDisplay] {
+        let stored = Dictionary(storedChapters.map { ($0.url, $0) }, uniquingKeysWith: { first, _ in first })
+        return navigableChapters.enumerated().map { index, chapter in
+            if let saved = stored[chapter.url] {
+                return ChapterDisplay(chapter: saved, position: index)
+            }
+            return ChapterDisplay(sourceChapter: chapter, position: index, sourceKey: sourceKey,
+                                  entryURL: entryURL, kind: .manga)
+        }
+    }
+
+    private var navigableChapters: [SourceChapter] { navigable }
+
+    private func rebuildNavigable() {
+        let choices = chapterChoices
+        let items = choices.map {
+            ScanlatorRules.Item(number: $0.chapterNumber > 0 ? $0.chapterNumber : nil, scanlator: $0.scanlator)
+        }
+        navigable = ScanlatorRules.keptIndices(for: items, preference: scanlatorSettings.value).map { choices[$0] }
+    }
+
+    private var chapterSheet: some View {
+        Group {
+            if !chapterChoices.isEmpty {
+                ChapterDirectoryView(
+                    entry: storedChapters.first?.entry,
+                    chapters: directoryChapters,
+                    sourceKey: sourceKey,
+                    currentChapterPath: chapterURL,
+                    onSelect: { selected in
+                        guard let chapter = chapterChoices.first(where: { $0.url == selected.path }) else { return }
+                        showChapterSheet = false
+                        Task { await jumpToChapter(chapter) }
+                    },
+                    onClose: { showChapterSheet = false },
+                    sourceEntry: chapterSourceEntry
+                )
+            } else {
+                NavigationStack {
+                    Group {
+                        if isLoadingChapters {
+                            ProgressView("Loading chapters…")
+                        } else {
+                            VStack(spacing: 16) {
+                                ContentUnavailableView("Chapters unavailable", systemImage: "list.bullet",
+                                    description: Text(chapterListError ?? "This source has no chapters to show."))
+                                Button("Try again") { Task { await loadChapterChoices() } }
+                            }
+                        }
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showChapterSheet = false }
+                        }
+                    }
+                }
+            }
+        }
+        .task { await loadChapterChoices() }
+    }
+
+    private func jumpToChapter(_ chapter: SourceChapter) async {
+        guard chapter.url != chapterURL else { return }
+        chapterURL = chapter.url
+        chapterName = chapter.name
+        currentIndex = 0
+        await loadChapter()
+    }
+
+    private func moveChapter(by offset: Int) async {
+        guard !isLoading, let current = navigableChapters.firstIndex(where: { $0.url == chapterURL }) else { return }
+        let target = current + offset
+        guard navigableChapters.indices.contains(target) else { return }
+
+        let next = navigableChapters[target]
+        chapterURL = next.url
+        chapterName = next.name
+        currentIndex = 0
+        await loadChapter()
+    }
+}
+
+/// A 44-point control so the scrubber aligns with the chapter navigation capsule.
+private struct MangaPageSlider: View {
+    @Binding var index: Int
+    let pageCount: Int
+
+    private var progress: CGFloat {
+        CGFloat(index) / CGFloat(max(pageCount - 1, 1))
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let trackWidth = max(geometry.size.width - 88, 1)
+            HStack(spacing: 8) {
+                Text("\(index + 1)")
+                    .frame(width: 24, alignment: .trailing)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.25))
+                    Capsule().fill(.white)
+                        .frame(width: max(6, trackWidth * progress))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 6)
+                .accessibilityHidden(true)
+                Text("\(pageCount)")
+                    .frame(width: 24, alignment: .leading)
+            }
+            .font(.caption.monospacedDigit().weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .contentShape(Capsule())
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let fraction = min(max((value.location.x - 44) / trackWidth, 0), 1)
+                        index = Int((fraction * CGFloat(max(pageCount - 1, 0))).rounded())
+                    }
+            )
+        }
+        .frame(height: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page")
+        .accessibilityValue("\(index + 1) of \(pageCount)")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: index = min(index + 1, pageCount - 1)
+            case .decrement: index = max(index - 1, 0)
+            @unknown default: break
+            }
+        }
+    }
+}

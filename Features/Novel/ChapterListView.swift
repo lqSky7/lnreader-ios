@@ -6,21 +6,31 @@ import SwiftUI
 
 struct ChapterListView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let novel: Novel?
+    let entry: Entry?
     var allChapters: [ChapterDisplay] = []
     let chapters: [ChapterDisplay]
     let totalCount: Int
     let filteredCount: Int
-    let pluginId: String
+    /// Manga sources hand over the whole chapter list at once, so there is
+    /// nothing to page through — show all of it.
+    var showsAllChapters = false
+    /// Per-entry scanlator priority, when the parent owns one.
+    var scanlatorSettings: ScanlatorSettings? = nil
+    let sourceKey: String
+    /// The chapter list is still being fetched. Without this the screen said
+    /// "No chapters yet" while the request was in flight.
+    var isLoading: Bool = false
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
     @State private var showSearchField = false
     @State private var showDirectory = false
+    @State private var showScanlators = false
     @FocusState private var searchFocused: Bool
 
     private var isFiltered: Bool { selectedFilter != .all || !searchText.isEmpty }
     private var rangeDescription: String {
+        if showsAllChapters { return "\(totalCount) chapters" }
         guard let first = chapters.first, let last = chapters.last else { return "No chapters" }
         return "\(first.position + 1)–\(last.position + 1) of \(totalCount)"
     }
@@ -50,6 +60,17 @@ struct ChapterListView: View {
                 } label: {
                     Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill").frame(width: 40, height: 40)
                 }.buttonStyle(.glass).accessibilityLabel("Filter chapters")
+
+                if let scanlatorSettings {
+                    Button {
+                        showScanlators = true
+                    } label: {
+                        Image(systemName: scanlatorSettings.hasActiveRules ? "person.2.fill" : "person.2")
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Scanlator priority")
+                }
             }
             .padding(.top, 8)
 
@@ -63,7 +84,7 @@ struct ChapterListView: View {
                 .transition(.opacity.combined(with: .offset(y: -4)))
             }
 
-            if !isFiltered {
+            if !isFiltered && !showsAllChapters {
                 Picker("Chapter range", selection: $selectedRange) {
                     Text("Continue").tag(ChapterRange.progress)
                     Text("First").tag(ChapterRange.first)
@@ -71,12 +92,21 @@ struct ChapterListView: View {
                 }.pickerStyle(.segmented)
             }
 
-            if chapters.isEmpty {
+            if chapters.isEmpty && isLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading chapters…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 88)
+                .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
+            } else if chapters.isEmpty {
                 ContentUnavailableView(isFiltered ? "No matching chapters" : "No chapters yet", systemImage: "text.magnifyingglass")
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(chapters) { chapter in
-                        ChapterRow(chapter: chapter, novel: novel, pluginId: pluginId)
+                        ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey)
                             .padding(.horizontal, 12)
                         if chapter.id != chapters.last?.id { Divider().padding(.leading, 34) }
                     }
@@ -84,34 +114,55 @@ struct ChapterListView: View {
                 .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
             }
 
-            Button { showDirectory = true } label: {
-                HStack {
-                    Label(isFiltered && filteredCount > chapters.count ? "See all \(filteredCount) results" : "All \(totalCount) chapters", systemImage: "list.bullet.rectangle")
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
-                }.font(.subheadline.weight(.medium)).padding(.vertical, 12)
-                .contentShape(Rectangle())
-            }.buttonStyle(.plain)
+            if !showsAllChapters {
+                Button { showDirectory = true } label: {
+                    HStack {
+                        Label(isFiltered && filteredCount > chapters.count ? "See all \(filteredCount) results" : "All \(totalCount) chapters", systemImage: "list.bullet.rectangle")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }.font(.subheadline.weight(.medium)).padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            }
         }
         .padding(.horizontal)
         .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showSearchField)
         .sheet(isPresented: $showDirectory) {
-            ChapterDirectoryView(novel: novel, chapters: allChapters.isEmpty ? chapters : allChapters,
-                pluginId: pluginId, currentChapterPath: chapters.first(where: { $0.unread })?.path ?? chapters.first?.path,
+            ChapterDirectoryView(entry: entry, chapters: allChapters.isEmpty ? chapters : allChapters,
+                sourceKey: sourceKey, currentChapterPath: chapters.first(where: { $0.unread })?.path ?? chapters.first?.path,
                 initialSearch: searchText, initialFilter: selectedFilter)
         }
         .onAppear { showSearchField = !searchText.isEmpty }
+        .sheet(isPresented: $showScanlators) {
+            if let scanlatorSettings {
+                ScanlatorSettingsView(
+                    settings: scanlatorSettings,
+                    scanlators: Set(allChapters.isEmpty ? chapters : allChapters)
+                        .compactMap(\.scanlator)
+                        .filter { !$0.isEmpty }
+                        .sorted()
+                )
+            }
+        }
     }
 }
 
 // MARK: - Unified Chapter Display
 
-/// Bridges SwiftData Chapter and SourceChapter into a single displayable type.
+/// Bridges a stored chapter and a source chapter into a single displayable type.
+///
+/// The two sources of chapters differ (SwiftData rows carry read state, source
+/// rows do not), so the list only ever renders this value.
 struct ChapterDisplay: Identifiable, Hashable {
     let id: String
     let name: String
     let path: String
-    let releaseTime: String?
+    /// Release date, formatted on demand.
+    ///
+    /// It used to be a `String` formatted inside the initializer, which meant
+    /// building and running a date formatter for every chapter in the book —
+    /// thousands of them — to display ten rows.
+    let releaseDate: Date?
     let unread: Bool
     let bookmarked: Bool
     let downloaded: Bool
@@ -119,56 +170,90 @@ struct ChapterDisplay: Identifiable, Hashable {
     let isInProgress: Bool
     let position: Int
     let chapterNumber: Double?
-    let pluginId: String
-    let novelPath: String?
+    /// Which group released this chapter, when the source says.
+    let scanlator: String?
+    /// Ordering key that does not depend on how the source listed the chapters.
+    /// MangaFire returns newest-first, most novel sources oldest-first, so
+    /// `position` is not comparable across sources — the number is.
+    let sortNumber: Double
+    let sourceKey: String
+    let entryURL: String?
+    /// Which reader opens this chapter. Needed because a browse result has no
+    /// stored entry to ask.
+    let kind: ContentKind
 
-    init(chapter: Chapter) {
-        self.id = chapter.path
-        self.name = chapter.name
-        self.path = chapter.path
-        self.releaseTime = chapter.releaseTime
-        self.unread = chapter.unread
-        self.bookmarked = chapter.bookmark
-        self.downloaded = chapter.isDownloaded
-        self.progress = chapter.progress
-        self.isInProgress = chapter.isInProgress
-        self.position = chapter.position
-        self.chapterNumber = chapter.chapterNumber
-        self.pluginId = chapter.novel?.pluginId ?? ""
-        self.novelPath = chapter.novel?.path
+    /// Shared so a row does not rebuild a format style per access.
+    private static let releaseStyle = Date.FormatStyle()
+
+    var releaseTime: String? {
+        releaseDate.map { $0.formatted(Self.releaseStyle) }
     }
 
-    init(sourceChapter: SourceChapter, position: Int, pluginId: String = "", novelPath: String? = nil) {
-        self.id = sourceChapter.path
+    init(chapter: Chapter, position: Int? = nil) {
+        self.id = chapter.url
+        self.name = chapter.name
+        self.path = chapter.url
+        self.releaseDate = chapter.dateUpload
+        self.unread = !chapter.read
+        self.bookmarked = chapter.bookmark
+        self.downloaded = chapter.isDownloaded
+        self.progress = chapter.progress > 0 ? Int(chapter.progress) : nil
+        self.isInProgress = chapter.isInProgress
+        self.position = position ?? chapter.sourceOrder
+        self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
+        self.scanlator = chapter.scanlator
+        self.sortNumber = chapter.chapterNumber > 0
+            ? chapter.chapterNumber
+            : Double((position ?? chapter.sourceOrder) + 1)
+        self.sourceKey = chapter.entry?.sourceKey ?? ""
+        self.entryURL = chapter.entry?.url
+        self.kind = chapter.entry?.kind ?? .novel
+    }
+
+    init(
+        sourceChapter: SourceChapter,
+        position: Int,
+        sourceKey: String = "",
+        entryURL: String? = nil,
+        kind: ContentKind = .novel
+    ) {
+        self.id = sourceChapter.url
         self.name = sourceChapter.name
-        self.path = sourceChapter.path
-        self.releaseTime = sourceChapter.releaseTime
+        self.path = sourceChapter.url
+        self.releaseDate = sourceChapter.dateUpload
         self.unread = true
         self.bookmarked = false
         self.downloaded = false
         self.progress = nil
         self.isInProgress = false
         self.position = position
-        self.chapterNumber = sourceChapter.chapterNumber
-        self.pluginId = pluginId
-        self.novelPath = novelPath
+        self.chapterNumber = sourceChapter.chapterNumber >= 0 ? sourceChapter.chapterNumber : nil
+        self.scanlator = sourceChapter.scanlator
+        let parsed = sourceChapter.chapterNumber > 0
+            ? sourceChapter.chapterNumber
+            : ChapterRecognition.parseChapterNumber(sourceChapter.name)
+        self.sortNumber = parsed > 0 ? parsed : Double(position + 1)
+        self.sourceKey = sourceKey
+        self.entryURL = entryURL
+        self.kind = kind
     }
 }
 
 /// Bounded chapter pages keep navigation manageable even for very long novels.
 struct ChapterDirectoryView: View {
     @Environment(\.dismiss) private var dismiss
-    let novel: Novel?
+    let entry: Entry?
+    let sourceEntry: SourceEntry?
     let chapters: [ChapterDisplay]
-    let pluginId: String
+    let sourceKey: String
     let currentChapterPath: String?
     var onSelect: ((ChapterDisplay) -> Void)? = nil
     var onClose: (() -> Void)? = nil
     let initialSearch: String
     let initialFilter: ChapterFilter
 
-    init(novel: Novel?, chapters: [ChapterDisplay], pluginId: String, currentChapterPath: String?, onSelect: ((ChapterDisplay) -> Void)? = nil, onClose: (() -> Void)? = nil, initialSearch: String = "", initialFilter: ChapterFilter = .all) {
-        self.novel = novel; self.chapters = chapters; self.pluginId = pluginId; self.currentChapterPath = currentChapterPath
+    init(entry: Entry?, chapters: [ChapterDisplay], sourceKey: String, currentChapterPath: String?, onSelect: ((ChapterDisplay) -> Void)? = nil, onClose: (() -> Void)? = nil, initialSearch: String = "", initialFilter: ChapterFilter = .all, sourceEntry: SourceEntry? = nil) {
+        self.entry = entry; self.sourceEntry = sourceEntry; self.chapters = chapters; self.sourceKey = sourceKey; self.currentChapterPath = currentChapterPath
         self.onSelect = onSelect; self.onClose = onClose; self.initialSearch = initialSearch; self.initialFilter = initialFilter
         self._search = State(initialValue: initialSearch); self._selectedFilter = State(initialValue: initialFilter)
     }
@@ -216,9 +301,9 @@ struct ChapterDirectoryView: View {
             List {
                 Section {
                     HStack(spacing: 12) {
-                        NovelCoverView(url: novel?.cover, aspectRatio: LayoutConstants.coverAspectRatio).frame(width: 42, height: 60)
+                        NovelCoverView(url: entry?.displayThumbnailURL ?? sourceEntry?.thumbnailURL, aspectRatio: LayoutConstants.coverAspectRatio).frame(width: 42, height: 60)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(novel?.name ?? "Chapters").font(.headline).lineLimit(2)
+                            Text(entry?.displayTitle ?? sourceEntry?.title ?? "Chapters").font(.headline).lineLimit(2)
                             Text("\(chapters.count) chapters").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -245,8 +330,15 @@ struct ChapterDirectoryView: View {
                                         else if chapter.bookmarked { Image(systemName: "bookmark.fill").foregroundStyle(.secondary) }
                                     }.frame(minHeight: 44).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
-                            } else { ChapterRow(chapter: chapter, novel: novel, pluginId: pluginId) }
+                            } else { ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey) }
                         }.id(chapter.path)
+                        .contextMenu {
+                            if let saved = entry?.chapters.first(where: { $0.url == chapter.path }), entry?.isLocal == false {
+                                Button(chapter.downloaded ? "Downloaded" : "Download chapter", systemImage: "arrow.down.circle") {
+                                    ChapterDownloadManager.shared.enqueue([saved])
+                                }.disabled(chapter.downloaded)
+                            }
+                        }
                     }
                     if visible.isEmpty { ContentUnavailableView("No chapters", systemImage: "text.magnifyingglass", description: Text("Try another number, title, or filter.")) }
                 } header: { Text(search.isEmpty ? "Chapters \(pageLabel)" : "\(filtered.count) results") }

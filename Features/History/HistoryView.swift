@@ -5,11 +5,11 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
+    @Environment(ReaderRouter.self) private var readerRouter
     @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ReadingHistory.lastReadAt, order: .reverse)
-    private var history: [ReadingHistory]
-    @Query private var novels: [Novel]
+    @Query(sort: \History.lastRead, order: .reverse)
+    private var history: [History]
 
     @State private var searchText = ""
 
@@ -26,19 +26,21 @@ struct HistoryView: View {
                     List {
                         ForEach(groupedHistory, id: \.key) { date, entries in
                             Section(date) {
-                                ForEach(entries) { entry in
-                                    NavigationLink {
-                                        ReaderView(
-                                            chapterPath: entry.chapterPath,
-                                            chapterName: entry.chapterName,
-                                            pluginId: entry.pluginId,
-                                            novelPath: entry.novelPath
-                                        )
-                                        .id(entry.chapterPath)
-                                        .bookZoom(from: entry.persistentModelID, in: chapterTransitions)
-                                    } label: {
-                                        HistoryRow(entry: entry)
-                                            .bookTransitionSource(entry.persistentModelID, in: chapterTransitions)
+                                ForEach(entries) { item in
+                                    if let chapter = item.chapter {
+                                        Button {
+                                            readerRouter.open(
+                                                sourceKey: chapter.entry?.sourceKey ?? "",
+                                                entryURL: chapter.entry?.url,
+                                                kind: chapter.entry?.kind ?? .novel,
+                                                chapterURL: chapter.url,
+                                                chapterName: chapter.name
+                                            )
+                                        } label: {
+                                            HistoryRow(history: item)
+                                                .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
                                 .onDelete { offsets in
@@ -64,30 +66,42 @@ struct HistoryView: View {
         }
     }
 
-    private func novel(for entry: ReadingHistory) -> Novel? {
-        novels.first { $0.path == entry.novelPath && $0.pluginId == entry.pluginId }
-    }
-
     // MARK: - Filtering & Grouping
 
-    private var filteredHistory: [ReadingHistory] {
+    /// One formatter for the whole screen. `Date.formatted` builds a format
+    /// style per call, and grouping by the fully formatted string put every row
+    /// in a section of its own.
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    private var filteredHistory: [History] {
         if searchText.isEmpty { return history }
-        return history.filter {
-            $0.novelName.localizedCaseInsensitiveContains(searchText)
-            || $0.chapterName.localizedCaseInsensitiveContains(searchText)
+        return history.filter { item in
+            let bookTitle = item.chapter?.entry?.displayTitle ?? ""
+            let chapterName = item.chapter?.name ?? ""
+            return bookTitle.localizedCaseInsensitiveContains(searchText)
+                || chapterName.localizedCaseInsensitiveContains(searchText)
         }
     }
 
-    private var groupedHistory: [(key: String, value: [ReadingHistory])] {
-        let grouped = Dictionary(grouping: filteredHistory) { entry in
-            entry.lastReadAt.formatted
+    private var groupedHistory: [(key: String, value: [History])] {
+        let calendar = Calendar.current
+        var buckets: [Date: [History]] = [:]
+        for item in filteredHistory {
+            buckets[calendar.startOfDay(for: item.lastRead), default: []].append(item)
         }
-        return grouped.sorted { $0.key > $1.key }
+        return buckets.keys.sorted(by: >).map { day in
+            (Self.dayFormatter.string(from: day), buckets[day] ?? [])
+        }
     }
 
     // MARK: - Actions
 
-    private func deleteEntries(_ offsets: IndexSet, from entries: [ReadingHistory]) {
+    private func deleteEntries(_ offsets: IndexSet, from entries: [History]) {
         for index in offsets {
             modelContext.delete(entries[index])
         }
@@ -95,8 +109,8 @@ struct HistoryView: View {
     }
 
     private func clearAllHistory() {
-        for entry in history {
-            modelContext.delete(entry)
+        for item in history {
+            modelContext.delete(item)
         }
         try? modelContext.save()
     }

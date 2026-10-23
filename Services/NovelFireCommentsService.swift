@@ -261,11 +261,11 @@ extension NovelFireCommentsService {
         for element in elements.prefix(1000) {
             let id = String(element.id().dropFirst("lnw-comment-".count))
             guard !id.isEmpty, id.allSatisfy(\.isNumber), seen.insert(id).inserted else { continue }
-            let parent = try element.parents().array().first { $0.id().hasPrefix("lnw-comment-") }
+            let parent = element.parents().array().first { $0.id().hasPrefix("lnw-comment-") }
             let parentID = parent.map { String($0.id().dropFirst("lnw-comment-".count)) }
             guard let content = try element.select(".comment-text, .comment-content").first() else { continue }
             // A parent's content must never be borrowed from one of its replies.
-            guard try content.parents().array().first(where: { $0.id().hasPrefix("lnw-comment-") })?.id() == element.id() else { continue }
+            guard content.parents().array().first(where: { $0.id().hasPrefix("lnw-comment-") })?.id() == element.id() else { continue }
             let body = try content.text().trimmingCharacters(in: .whitespacesAndNewlines)
             if body.isEmpty { continue }
             let author = try element.select(".username, .user-name").first()?.text() ?? "Reader"

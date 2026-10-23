@@ -1,5 +1,5 @@
 // UpdateRow.swift
-// Single update entry showing novel cover thumbnail and chapter info.
+// Single update entry showing book cover thumbnail and chapter info.
 
 import SwiftUI
 
@@ -8,10 +8,10 @@ struct UpdateRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Novel cover thumbnail
-            if let novel = chapter.novel {
+            // Book cover thumbnail
+            if let entry = chapter.entry {
                 NovelCoverView(
-                    url: novel.cover,
+                    url: entry.displayThumbnailURL,
                     aspectRatio: LayoutConstants.coverAspectRatio
                 )
                 .frame(width: 44, height: 63)
@@ -19,9 +19,9 @@ struct UpdateRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                // Novel name
-                if let novel = chapter.novel {
-                    Text(novel.name)
+                // Book title
+                if let entry = chapter.entry {
+                    Text(entry.displayTitle)
                         .font(Typography.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -32,9 +32,9 @@ struct UpdateRow: View {
                     .font(Typography.body)
                     .lineLimit(2)
 
-                // Release time
-                if let releaseTime = chapter.releaseTime {
-                    Text(releaseTime)
+                // Release date
+                if let released = chapter.dateUpload?.formatted {
+                    Text(released)
                         .font(Typography.small)
                         .foregroundStyle(.tertiary)
                 }
@@ -43,7 +43,7 @@ struct UpdateRow: View {
             Spacer()
 
             // Unread indicator
-            if chapter.unread {
+            if !chapter.read {
                 Circle()
                     .fill(Color.primary)
                     .frame(width: 8, height: 8)

@@ -1,22 +1,31 @@
 // UpdatesView.swift
-// Feed of newly available chapters from library novels.
+// Feed of newly available chapters from library entries.
 
 import SwiftData
 import SwiftUI
 
 struct UpdatesView: View {
+    @Environment(ReaderRouter.self) private var readerRouter
     @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
     @State private var showClearConfirmation = false
 
-    @Query(
-        filter: #Predicate<Chapter> { $0.updatedTime != nil },
-        sort: \Chapter.updatedTime,
-        order: .reverse
-    )
-    private var recentChapters: [Chapter]
+    @Query private var recentChapters: [Chapter]
+
+    /// Newest-first, capped: grouping and diffing every chapter ever fetched
+    /// froze the main thread for over a second on a large library.
+    private static let feedLimit = 300
+
+    init() {
+        var descriptor = FetchDescriptor<Chapter>(
+            predicate: #Predicate { $0.dateFetch != nil },
+            sortBy: [SortDescriptor(\Chapter.dateFetch, order: .reverse)]
+        )
+        descriptor.fetchLimit = Self.feedLimit
+        _recentChapters = Query(descriptor)
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,36 +34,36 @@ struct UpdatesView: View {
                     EmptyStateView(
                         icon: "bell.badge",
                         title: "No Updates",
-                        subtitle: "New chapters from your library novels will appear here."
+                        subtitle: "New chapters from your library will appear here."
                     )
                     .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                     }
                 } else {
                     List {
                         ForEach(groupedUpdates, id: \.key) { date, chapters in
                             Section(date) {
                                 ForEach(chapters) { chapter in
-                                    NavigationLink {
-                                        ReaderView(
-                                            chapterPath: chapter.path,
-                                            chapterName: chapter.name,
-                                            pluginId: chapter.novel?.pluginId ?? "",
-                                            novelPath: chapter.novel?.path
+                                    Button {
+                                        readerRouter.open(
+                                            sourceKey: chapter.entry?.sourceKey ?? "",
+                                            entryURL: chapter.entry?.url,
+                                            kind: chapter.entry?.kind ?? .novel,
+                                            chapterURL: chapter.url,
+                                            chapterName: chapter.name
                                         )
-                                        .id(chapter.path)
-                                        .bookZoom(from: chapter.persistentModelID, in: chapterTransitions)
                                     } label: {
                                         UpdateRow(chapter: chapter)
-                                            .bookTransitionSource(chapter.persistentModelID, in: chapterTransitions)
+                                            .contentShape(Rectangle())
                                     }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
                     }
                     .listStyle(.plain)
                     .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                     }
                 }
             }
@@ -71,7 +80,7 @@ struct UpdatesView: View {
 
                     Button(action: {
                         Task {
-                            await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
+                            await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
                         }
                     }) {
                         if libraryManager.isUpdating {
@@ -98,12 +107,33 @@ struct UpdatesView: View {
 
     // MARK: - Grouping
 
-    /// Group chapters by their update date (formatted as relative date).
+    /// One formatter for the whole screen; `Date.formatted` allocates a style
+    /// per call, and the fully formatted string made every row its own section.
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    /// Group chapters by the day they were fetched.
     private var groupedUpdates: [(key: String, value: [Chapter])] {
-        let grouped = Dictionary(grouping: recentChapters) { chapter -> String in
-            guard let date = chapter.updatedTime else { return "Unknown" }
-            return date.formatted
+        let calendar = Calendar.current
+        var buckets: [Date: [Chapter]] = [:]
+        var undated: [Chapter] = []
+        for chapter in recentChapters {
+            guard let date = chapter.dateFetch else {
+                undated.append(chapter)
+                continue
+            }
+            buckets[calendar.startOfDay(for: date), default: []].append(chapter)
         }
-        return grouped.sorted { $0.key > $1.key }
+        var groups = buckets.keys.sorted(by: >).map { day in
+            (Self.dayFormatter.string(from: day), buckets[day] ?? [])
+        }
+        if !undated.isEmpty {
+            groups.append(("Unknown", undated))
+        }
+        return groups
     }
 }

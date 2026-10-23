@@ -9,10 +9,16 @@ struct NovelHeaderView: View {
     let name: String
     let author: String?
     let cover: String?
-    let status: NovelStatus
+    let status: EntryStatus
     let inLibrary: Bool
+    /// True while the entry is being written to the store. The button shows a
+    /// spinner and refuses taps instead of silently doing the work twice.
+    var isAddingToLibrary: Bool = false
     let onToggleLibrary: () -> Void
     var hasStartedReading: Bool = true
+    /// False until there is a chapter to open. The button used to look enabled
+    /// and do nothing when tapped.
+    var canStartReading: Bool = true
     let onContinueReading: () -> Void
 
     @Namespace private var namespace
@@ -105,27 +111,47 @@ struct NovelHeaderView: View {
                             .background(.white, in: .capsule)
                     }
                     .buttonStyle(.plain)
+                    .disabled(!canStartReading)
+                    .opacity(canStartReading ? 1 : 0.45)
                     .glassEffectID("continue", in: namespace)
                     .bookTransitionSource("continue", in: transitionNamespace)
 
                     Button(action: onToggleLibrary) {
-                        Label(
-                            inLibrary ? "In Library" : "Add to Library",
-                            systemImage: inLibrary ? "checkmark.circle.fill" : "plus.circle"
-                        )
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        HStack(spacing: 6) {
+                            if isAddingToLibrary {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(.black)
+                            } else {
+                                Image(systemName: inLibrary ? "checkmark.circle.fill" : "plus.circle")
+                            }
+                            Text(libraryButtonTitle)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                        }
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .foregroundStyle(.black)
                         .background(.white, in: .capsule)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isAddingToLibrary)
                     .glassEffectID("library", in: namespace)
                 }
             }
             .contentShape(.rect)
+            // Tapping "Add" now answers immediately: the label changes to a
+            // spinner, then to "In Library" with a spring, and the change is
+            // acknowledged by a haptic.
+            .animation(.spring(response: 0.32, dampingFraction: 0.8), value: inLibrary)
+            .animation(.easeInOut(duration: 0.18), value: isAddingToLibrary)
+            .sensoryFeedback(.success, trigger: inLibrary)
         }
         .padding()
         .padding(.bottom, 8)
+    }
+
+    private var libraryButtonTitle: String {
+        if isAddingToLibrary { return "Adding…" }
+        return inLibrary ? "In Library" : "Add to Library"
     }
 }

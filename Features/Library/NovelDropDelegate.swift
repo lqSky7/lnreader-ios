@@ -4,10 +4,10 @@
 import SwiftUI
 
 struct NovelDropDelegate: DropDelegate {
-    let item: Novel
-    let novels: [Novel]
-    @Binding var draggedItem: Novel?
-    var onReorder: (Novel, Novel) -> Void
+    let item: Entry
+    let novels: [Entry]
+    @Binding var draggedItem: Entry?
+    var onReorder: (Entry, Entry) -> Void
 
     func dropEntered(info: DropInfo) {
         guard let draggedItem = draggedItem,

@@ -14,24 +14,67 @@ private enum Pastel {
     static let teal = Color(red: 0.62, green: 0.78, blue: 0.78)     // Soft Sage/Teal
 }
 
+// MARK: - Snapshot and chart value types
+
+/// Everything the statistics screen shows, counted in one background pass.
+private struct StatisticsSnapshot: Sendable {
+    var libraryCount = 0
+    var totalChapters = 0
+    var unreadChapters = 0
+    var downloadedChapters = 0
+    var lastRead: Date?
+    /// One entry per history row, reduced to the only thing the charts need.
+    var historyDates: [Date] = []
+    var categoryCounts: [CategoryCount] = []
+    /// Grouped by source *key*; resolved to a display name on the main actor.
+    var sourceCounts: [SourceCount] = []
+}
+
+private struct DayActivity: Identifiable, Sendable {
+    let id = UUID()
+    let date: Date
+    let dayLabel: String
+    let count: Int
+}
+
+private struct CategoryCount: Identifiable, Sendable {
+    let id = UUID()
+    let name: String
+    let count: Int
+}
+
+private struct HourActivity: Identifiable, Sendable {
+    let id = UUID()
+    let hour: Int
+    let hourLabel: String
+    let count: Int
+}
+
+private struct SourceCount: Identifiable, Sendable {
+    let id = UUID()
+    let name: String
+    let count: Int
+}
+
 struct StatisticsView: View {
-    @Environment(PluginManager.self) private var pluginManager
-    @Query(filter: #Predicate<Novel> { $0.inLibrary }) private var libraryNovels: [Novel]
-    @Query private var chapters: [Chapter]
-    @Query private var categories: [Category]
-    @Query(sort: \ReadingHistory.lastReadAt, order: .reverse) private var historyEntries: [ReadingHistory]
+    @Environment(SourceManager.self) private var sourceManager
+    @Environment(\.modelContext) private var modelContext
+
+    /// Everything the screen needs, counted once off the main thread.
+    ///
+    /// This used to be `@Query private var chapters: [Chapter]`, which pulls
+    /// every chapter in the store into memory and re-runs on any write; the
+    /// "downloaded" tile then faulted each chapter's `downloadItem`. On a real
+    /// library that is tens of thousands of objects to render five numbers.
+    @State private var stats = StatisticsSnapshot()
 
     // Summary calculations
-    private var unreadCount: Int {
-        chapters.filter(\.unread).count
-    }
+    private var unreadCount: Int { stats.unreadChapters }
 
-    private var downloadedCount: Int {
-        chapters.filter(\.isDownloaded).count
-    }
+    private var downloadedCount: Int { stats.downloadedChapters }
 
     private var lastReadText: String {
-        historyEntries.first?.lastReadAt.timeAgo ?? "Never"
+        stats.lastRead?.timeAgo ?? "Never"
     }
 
     private var columns: [GridItem] {
@@ -43,8 +86,8 @@ struct StatisticsView: View {
             VStack(spacing: 24) {
                 // Summary Overview Grid (systemGray6 cards, flat pastel icons)
                 LazyVGrid(columns: columns, spacing: 16) {
-                    summaryCard(title: "Library Novels", value: "\(libraryNovels.count)", icon: "books.vertical.fill", color: Pastel.blue)
-                    summaryCard(title: "Total Chapters", value: "\(chapters.count)", icon: "list.number", color: Pastel.purple)
+                    summaryCard(title: "Library", value: "\(stats.libraryCount)", icon: "books.vertical.fill", color: Pastel.blue)
+                    summaryCard(title: "Total Chapters", value: "\(stats.totalChapters)", icon: "list.number", color: Pastel.purple)
                     summaryCard(title: "Downloaded", value: "\(downloadedCount)", icon: "arrow.down.circle.fill", color: Pastel.green)
                     summaryCard(title: "Last Read", value: lastReadText, icon: "clock.arrow.circlepath", color: Pastel.orange)
                 }
@@ -67,6 +110,57 @@ struct StatisticsView: View {
             .padding()
         }
         .navigationTitle("Statistics")
+        .task { await loadStatistics() }
+    }
+
+    // MARK: - Snapshot
+
+    private func loadStatistics() async {
+        let container = modelContext.container
+        let snapshot = await Task.detached(priority: .userInitiated) { () -> StatisticsSnapshot in
+            let context = ModelContext(container)
+            var snapshot = StatisticsSnapshot()
+
+            snapshot.libraryCount =
+                (try? context.fetchCount(FetchDescriptor<Entry>(predicate: #Predicate { $0.inLibrary }))) ?? 0
+            snapshot.totalChapters =
+                (try? context.fetchCount(FetchDescriptor<Chapter>())) ?? 0
+            snapshot.unreadChapters =
+                (try? context.fetchCount(FetchDescriptor<Chapter>(predicate: #Predicate { $0.read == false }))) ?? 0
+            // Download rows are few (one per downloaded chapter), and a
+            // predicate cannot compare an enum case, so count them here.
+            let downloads = (try? context.fetch(FetchDescriptor<DownloadItem>())) ?? []
+            snapshot.downloadedChapters = downloads.count { $0.state == DownloadState.completed }
+
+            // History rows are needed as dates, not objects, so map them here
+            // and let the model objects go.
+            let historyDescriptor = FetchDescriptor<History>(
+                sortBy: [SortDescriptor(\.lastRead, order: .reverse)]
+            )
+            let history = (try? context.fetch(historyDescriptor)) ?? []
+            snapshot.historyDates = history.map(\.lastRead)
+            snapshot.lastRead = history.first?.lastRead
+
+            let entries = (try? context.fetch(
+                FetchDescriptor<Entry>(predicate: #Predicate { $0.inLibrary })
+            )) ?? []
+            var bySource: [String: Int] = [:]
+            for entry in entries { bySource[entry.sourceKey, default: 0] += 1 }
+            snapshot.sourceCounts = bySource
+                .map { SourceCount(name: $0.key, count: $0.value) }
+                .sorted { $0.count > $1.count }
+
+            let categories = (try? context.fetch(
+                FetchDescriptor<Category>(sortBy: [SortDescriptor(\.order)])
+            )) ?? []
+            snapshot.categoryCounts = categories
+                .map { CategoryCount(name: $0.name, count: $0.entries.count) }
+                .sorted { $0.count > $1.count }
+
+            return snapshot
+        }.value
+
+        stats = snapshot
     }
 
     // MARK: - Card Container
@@ -111,48 +205,23 @@ struct StatisticsView: View {
     }
 
     // MARK: - Data Models
-
-    private struct DayActivity: Identifiable {
-        let id = UUID()
-        let date: Date
-        let dayLabel: String
-        let count: Int
-    }
-
-    private struct CategoryCount: Identifiable {
-        let id = UUID()
-        let name: String
-        let count: Int
-    }
-
-    private struct HourActivity: Identifiable {
-        let id = UUID()
-        let hour: Int
-        let hourLabel: String
-        let count: Int
-    }
-
-    private struct SourceCount: Identifiable {
-        let id = UUID()
-        let name: String
-        let count: Int
-    }
+    // The value types live at file scope so the snapshot can hold them.
 
     // MARK: - 1. Weekly Reading Activity
 
     private var weeklyActivityData: [DayActivity] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        
+
         var dayCounts: [Date: Int] = [:]
-        for entry in historyEntries {
-            let dayStart = calendar.startOfDay(for: entry.lastReadAt)
+        for date in stats.historyDates {
+            let dayStart = calendar.startOfDay(for: date)
             dayCounts[dayStart, default: 0] += 1
         }
-        
+
         let dayFormatter = DateFormatter()
         dayFormatter.dateFormat = "E"
-        
+
         var data: [DayActivity] = []
         for offset in (0..<7).reversed() {
             if let date = calendar.date(byAdding: .day, value: -offset, to: today) {
@@ -218,7 +287,7 @@ struct StatisticsView: View {
     // MARK: - 2. Reading Progress (Stacked Bar)
 
     private var totalChaptersCount: Int {
-        max(chapters.count, 0)
+        max(stats.totalChapters, 0)
     }
 
     private var readChaptersCount: Int {
@@ -306,12 +375,9 @@ struct StatisticsView: View {
     // MARK: - 3. Category Breakdown
 
     private var categoryData: [CategoryCount] {
-        categories.map { category in
-            CategoryCount(name: category.name, count: category.novels.count)
-        }
-        .sorted { $0.count > $1.count }
-        .prefix(5)
-        .map { $0 }
+        stats.categoryCounts
+            .prefix(5)
+            .map { $0 }
     }
 
     private var maxCategoryNovelCount: Int {
@@ -330,7 +396,7 @@ struct StatisticsView: View {
                     Spacer()
                 }
                 
-                Text("Distribution of novels across categories (top 5)")
+                Text("Distribution of library entries across categories (top 5)")
                     .font(Typography.caption)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 4)
@@ -380,9 +446,9 @@ struct StatisticsView: View {
 
     private var hourlyActivityData: [HourActivity] {
         var hourCounts: [Int: Int] = [:]
-        for entry in historyEntries {
-            let hour = Calendar.current.component(.hour, from: entry.lastReadAt)
-            hourCounts[hour, default: 0] += 1
+        let calendar = Calendar.current
+        for date in stats.historyDates {
+            hourCounts[calendar.component(.hour, from: date), default: 0] += 1
         }
         
         return (0..<24).map { hour in
@@ -463,23 +529,17 @@ struct StatisticsView: View {
         }
     }
 
-    // MARK: - 5. Novels by Source
+    // MARK: - 5. Books by Source
 
-    private func pluginName(for id: String) -> String {
-        pluginManager.installedPlugins[id]?.name ?? id.capitalized
+    private func sourceName(for key: String) -> String {
+        sourceManager.source(forKey: key)?.name ?? SourceKey.identifier(from: key)
     }
 
     private var sourceCountData: [SourceCount] {
-        var counts: [String: Int] = [:]
-        for novel in libraryNovels {
-            counts[novel.pluginId, default: 0] += 1
-        }
-        return counts.map { (pluginId, count) in
-            SourceCount(name: pluginName(for: pluginId), count: count)
-        }
-        .sorted { $0.count > $1.count }
-        .prefix(5)
-        .map { $0 }
+        stats.sourceCounts
+            .map { SourceCount(name: sourceName(for: $0.name), count: $0.count) }
+            .prefix(5)
+            .map { $0 }
     }
 
     private var maxSourceNovelCount: Int {
@@ -492,13 +552,13 @@ struct StatisticsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "globe")
                         .foregroundStyle(Pastel.teal)
-                    Text("Novels by Source")
+                    Text("Books by Source")
                         .font(.headline)
                         .foregroundStyle(.primary)
                     Spacer()
                 }
                 
-                Text("Distribution of library novels by source plugin")
+                Text("Distribution of library entries by source")
                     .font(Typography.caption)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 4)

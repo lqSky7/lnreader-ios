@@ -1,10 +1,10 @@
 // GlobalSearchView.swift
-// Search across all installed source plugins concurrently.
+// Search across every installed source concurrently.
 
 import SwiftUI
 
 struct GlobalSearchView: View {
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @State private var searchText = ""
     @State private var results: [SourceSearchResult] = []
     @State private var isSearching = false
@@ -22,7 +22,7 @@ struct GlobalSearchView: View {
 
             LazyVStack(alignment: .leading, spacing: 24) {
                 ForEach(results) { result in
-                    if !result.novels.isEmpty {
+                    if !result.entries.isEmpty {
                         SourceResultSection(result: result)
                     }
                 }
@@ -30,7 +30,7 @@ struct GlobalSearchView: View {
             .padding(.horizontal)
 
             if isSearching {
-                LoadingView(message: "Searching \(pluginManager.installedPlugins.count) sources...")
+                LoadingView(message: "Searching \(sourceManager.novelSources.count) sources...")
                     .padding()
             }
         }
@@ -49,17 +49,17 @@ struct GlobalSearchView: View {
         results = []
 
         let query = searchText
-        let plugins = pluginManager.installedPlugins
+        let sources = sourceManager.novelSources
 
         await withTaskGroup(of: SourceSearchResult?.self) { group in
-            for (id, plugin) in plugins {
+            for source in sources {
                 group.addTask {
                     do {
-                        let novels = try await plugin.searchNovels(query: query, page: 1)
+                        let page = try await source.search(query: query, page: 1, filters: FilterState())
                         return SourceSearchResult(
-                            pluginId: id,
-                            pluginName: plugin.name,
-                            novels: novels
+                            sourceKey: source.key,
+                            sourceName: source.name,
+                            entries: page.entries
                         )
                     } catch {
                         return nil
@@ -68,13 +68,13 @@ struct GlobalSearchView: View {
             }
 
             for await result in group {
-                if let result, !result.novels.isEmpty {
+                if let result, !result.entries.isEmpty {
                     results.append(result)
                 }
             }
         }
 
-        results.sort { $0.novels.count > $1.novels.count }
+        results.sort { $0.entries.count > $1.entries.count }
         isSearching = false
     }
 }
@@ -83,9 +83,9 @@ struct GlobalSearchView: View {
 
 struct SourceSearchResult: Identifiable {
     let id = UUID()
-    let pluginId: String
-    let pluginName: String
-    let novels: [PartialNovel]
+    let sourceKey: String
+    let sourceName: String
+    let entries: [SourceEntry]
 }
 
 // MARK: - Result Section
@@ -96,28 +96,25 @@ struct SourceResultSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(result.pluginName)
+            Text(result.sourceName)
                 .font(Typography.title)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(result.novels.prefix(10)) { novel in
+                    ForEach(result.entries.prefix(10)) { entry in
                         NavigationLink {
-                            NovelDetailView(
-                                partialNovel: novel,
-                                pluginId: result.pluginId
-                            )
-                            .bookZoom(from: novel.path, in: bookTransitions)
+                            NovelDetailView(sourceEntry: entry)
+                                .bookZoom(from: entry.url, in: bookTransitions)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 NovelCoverView(
-                                    url: novel.cover,
+                                    url: entry.thumbnailURL,
                                     aspectRatio: LayoutConstants.coverAspectRatio
                                 )
                                 .frame(width: 120)
-                                .bookTransitionSource(novel.path, in: bookTransitions)
+                                .bookTransitionSource(entry.url, in: bookTransitions)
 
-                                Text(novel.name)
+                                Text(entry.title)
                                     .font(Typography.small)
                                     .lineLimit(2)
                                     .frame(width: 120, alignment: .leading)

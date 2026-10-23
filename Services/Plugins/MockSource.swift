@@ -11,8 +11,8 @@ struct MockSource: SourcePlugin {
 
     // MARK: - Sample Data
 
-    private static let sampleNovels: [PartialNovel] = (1...10).map { i in
-        PartialNovel(
+    private static let sampleNovels: [PluginNovelRef] = (1...10).map { i in
+        PluginNovelRef(
             name: MockSource.novelNames[i - 1],
             path: "/novel/\(i)",
             cover: "https://picsum.photos/300/420?random=\(i)"
@@ -61,25 +61,25 @@ struct MockSource: SourcePlugin {
     // MARK: - Protocol Methods
 
     func popularNovels(page: Int, showLatest: Bool, filterValues: FilterValues?) async throws
-        -> [PartialNovel]
+        -> [PluginNovelRef]
     {
         try await Task.sleep(for: .milliseconds(500))
         return Self.sampleNovels
     }
 
-    func searchNovels(query: String, page: Int) async throws -> [PartialNovel] {
+    func searchNovels(query: String, page: Int) async throws -> [PluginNovelRef] {
         try await Task.sleep(for: .milliseconds(300))
         let lowered = query.lowercased()
         return Self.sampleNovels.filter { $0.name.lowercased().contains(lowered) }
     }
 
-    func parseNovel(path: String) async throws -> SourceNovel {
+    func parseNovel(path: String) async throws -> PluginNovel {
         try await Task.sleep(for: .milliseconds(400))
 
         let index = novelIndex(from: path)
 
-        let chapters: [SourceChapter] = (1...20).map { ch in
-            SourceChapter(
+        let chapters: [PluginChapter] = (1...20).map { ch in
+            PluginChapter(
                 name: "Chapter \(ch): \(chapterTitle(ch))",
                 path: "\(path)/chapter/\(ch)",
                 chapterNumber: Double(ch),
@@ -87,7 +87,7 @@ struct MockSource: SourcePlugin {
             )
         }
 
-        return SourceNovel(
+        return PluginNovel(
             name: Self.novelNames[index],
             path: path,
             cover: "https://picsum.photos/300/420?random=\(index + 1)",

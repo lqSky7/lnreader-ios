@@ -1,14 +1,19 @@
 // SourceDetailView.swift
-// Browse novels from a single installed source with search and pagination.
+// Browse one source with search and pagination.
+//
+// Talks to the v2 source layer: the registry entry (`PluginListItem`) only
+// identifies which source to ask for, everything else goes through
+// `CatalogSource`.
 
 import SwiftUI
 
 struct SourceDetailView: View {
     @Namespace private var bookTransitions
-    let plugin: PluginListItem
-    @Environment(PluginManager.self) private var pluginManager
+    let sourceKey: String
+    let title: String
+    @Environment(SourceManager.self) private var sourceManager
 
-    @State private var novels: [PartialNovel] = []
+    @State private var entries: [SourceEntry] = []
     @State private var searchText = ""
     @State private var currentPage = 1
     @State private var isLoading = false
@@ -19,29 +24,36 @@ struct SourceDetailView: View {
         [GridItem(.adaptive(minimum: LayoutConstants.gridItemMinSize), spacing: 12)]
     }
 
+    /// `CatalogSource`, not `NovelSource`: browse is identical for both kinds.
+    private var source: (any CatalogSource)? {
+        sourceManager.source(forKey: sourceKey)
+    }
+
     var body: some View {
         ScrollView {
-            if novels.isEmpty && !isLoading {
+            if entries.isEmpty && !isLoading {
                 EmptyStateView(
                     icon: "books.vertical",
-                    title: "No Novels Found",
-                    subtitle: isSearching ? "Try a different search term." : "This source may be unavailable."
+                    title: "No Results",
+                    subtitle: isSearching
+                        ? "Try a different search term."
+                        : "This source is not installed, or returned nothing."
                 )
                 .padding(.top, 100)
             }
 
             LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(novels) { novel in
+                ForEach(entries) { entry in
                     NavigationLink {
-                        NovelDetailView(partialNovel: novel, pluginId: plugin.id)
-                            .bookZoom(from: novel.path, in: bookTransitions)
+                        NovelDetailView(sourceEntry: entry)
+                            .bookZoom(from: entry.url, in: bookTransitions)
                     } label: {
-                        BrowseNovelCell(novel: novel, transitionNamespace: bookTransitions)
+                        BrowseEntryCell(entry: entry, transitionNamespace: bookTransitions)
                     }
                     .buttonStyle(.plain)
                 }
 
-                if hasMore && !novels.isEmpty {
+                if hasMore && !entries.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -50,8 +62,8 @@ struct SourceDetailView: View {
             }
             .padding(.horizontal)
         }
-        .navigationTitle(plugin.name)
-        .searchable(text: $searchText, prompt: "Search \(plugin.name)")
+        .navigationTitle(title)
+        .searchable(text: $searchText, prompt: "Search \(title)")
         .onSubmit(of: .search) {
             Task { await search() }
         }
@@ -62,13 +74,13 @@ struct SourceDetailView: View {
             }
         }
         .overlay {
-            if isLoading && novels.isEmpty {
-                LoadingView(message: "Loading novels...")
+            if isLoading && entries.isEmpty {
+                LoadingView(message: "Loading...")
             }
         }
         .task { await loadPopular() }
         .toolbar {
-            if let site = CommentSite.site(for: plugin.id) {
+            if let site = CommentSite.site(for: SourceKey.identifier(from: sourceKey)) {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink(destination: NovelFireLoginView(onLoginSuccess: {
                         Task { await loadPopular() }
@@ -82,36 +94,42 @@ struct SourceDetailView: View {
 
     // MARK: - Data Loading
 
+    /// Filters are not surfaced in the UI yet; the protocol takes a state so the
+    /// browse redesign can add a filter sheet without touching this call site.
+    private var emptyFilters: FilterState { FilterState() }
+
     private func loadPopular() async {
-        guard let source = pluginManager.plugin(for: plugin.id) else { return }
+        guard let source else { return }
         isLoading = true
         currentPage = 1
         hasMore = true
 
         do {
-            novels = try await source.popularNovels(page: 1)
-            hasMore = !novels.isEmpty
+            let page = try await source.popular(page: 1, filters: emptyFilters)
+            entries = page.entries
+            hasMore = page.hasNextPage
         } catch {
-            print("⚠️ Failed to load popular novels: \(error)")
+            print("⚠️ Failed to load popular entries: \(error)")
         }
         isLoading = false
     }
 
     private func loadMore() async {
-        guard let source = pluginManager.plugin(for: plugin.id), hasMore else { return }
+        guard let source, hasMore else { return }
         currentPage += 1
 
         do {
-            let nextPage: [PartialNovel]
+            let page: EntriesPage
             if isSearching {
-                nextPage = try await source.searchNovels(query: searchText, page: currentPage)
+                page = try await source.search(query: searchText, page: currentPage, filters: emptyFilters)
             } else {
-                nextPage = try await source.popularNovels(page: currentPage)
+                page = try await source.popular(page: currentPage, filters: emptyFilters)
             }
-            if nextPage.isEmpty {
+            if page.entries.isEmpty {
                 hasMore = false
             } else {
-                novels.append(contentsOf: nextPage)
+                entries.append(contentsOf: page.entries)
+                hasMore = page.hasNextPage
             }
         } catch {
             hasMore = false
@@ -119,15 +137,15 @@ struct SourceDetailView: View {
     }
 
     private func search() async {
-        guard let source = pluginManager.plugin(for: plugin.id) else { return }
-        guard !searchText.isEmpty else { return }
+        guard let source, !searchText.isEmpty else { return }
         isLoading = true
         isSearching = true
         currentPage = 1
 
         do {
-            novels = try await source.searchNovels(query: searchText, page: 1)
-            hasMore = !novels.isEmpty
+            let page = try await source.search(query: searchText, page: 1, filters: emptyFilters)
+            entries = page.entries
+            hasMore = page.hasNextPage
         } catch {
             print("⚠️ Search failed: \(error)")
         }
@@ -135,21 +153,21 @@ struct SourceDetailView: View {
     }
 }
 
-// MARK: - Browse Novel Cell
+// MARK: - Browse Entry Cell
 
-struct BrowseNovelCell: View {
-    let novel: PartialNovel
+struct BrowseEntryCell: View {
+    let entry: SourceEntry
     var transitionNamespace: Namespace.ID? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             NovelCoverView(
-                url: novel.cover,
+                url: entry.thumbnailURL,
                 aspectRatio: LayoutConstants.coverAspectRatio
             )
-            .bookTransitionSource(novel.path, in: transitionNamespace)
+            .bookTransitionSource(entry.url, in: transitionNamespace)
 
-            Text(novel.name)
+            Text(entry.title)
                 .font(Typography.caption)
                 .lineLimit(2)
                 .foregroundStyle(.primary)

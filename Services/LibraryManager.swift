@@ -1,13 +1,17 @@
 // LibraryManager.swift
-// Manages library operations: adding/removing novels, updating chapters.
+// Library operations: adding entries, updating chapters, recording progress.
 
 import Foundation
 import Network
 import Observation
 import SwiftData
 
-/// Coordinates library-level operations such as adding novels from sources,
-/// updating chapters, and managing reading progress.
+/// Coordinates library-level operations: adding entries from a source,
+/// refreshing chapter lists, and recording reading progress.
+///
+/// Source-agnostic by design: it works with `SourceEntry` / `SourceChapter`
+/// values and the `SourceManager` registry, so a novel and a manga go through
+/// exactly the same code path.
 @Observable
 @MainActor
 final class LibraryManager {
@@ -15,228 +19,408 @@ final class LibraryManager {
     /// Whether a library-wide update is in progress.
     private(set) var isUpdating = false
 
-    /// Add a novel to the library from source data, inserting into SwiftData.
+    /// What the current (or most recent) library update is doing, for the UI.
+    /// Stays set after the update ends so its outcome can be read; the user
+    /// dismisses it.
+    private(set) var updateProgress: LibraryUpdateProgress?
+    private var updateCancelRequested = false
+
+    /// Stop starting new titles. Ones already being fetched finish.
+    func cancelUpdate() {
+        guard isUpdating else { return }
+        updateCancelRequested = true
+        updateProgress?.isCancelling = true
+    }
+
+    func dismissUpdateSummary() {
+        if !isUpdating { updateProgress = nil }
+    }
+
+    // MARK: - Progress persistence
+    //
+    // Reading position changes on every scroll tick (the reader debounces its
+    // JS scroll listener by 300 ms). Saving each one costs a SQLite write plus
+    // a store-change notification, and that notification re-runs every `@Query`
+    // in the app — the library's entry query included, which re-sorts and
+    // re-walks chapter arrays. Doing that four times a second while the user
+    // scrolls is what made the reader stutter.
+    //
+    // So: mutate the model in memory immediately (the UI stays live) and let
+    // the write coalesce. `flushProgress` is called when the reader closes or
+    // the app backgrounds, so the window where a crash loses position is the
+    // same few seconds the reader was already tolerant of.
+
+    /// Minimum gap between two progress writes.
+    static let progressSaveInterval: Duration = .seconds(3)
+    static let deferredSaveInterval: Duration = .seconds(30)
+
+    /// Timestamp bump inside `History` / `Entry` is only useful at a coarse
+    /// granularity — nothing reads it below a minute.
+    private static let timestampRefreshInterval: TimeInterval = 60
+
+    private var pendingProgressSave = false
+    private var progressSaveTask: Task<Void, Never>?
+    private var lastProgressSave = Date.distantPast
+
+    // MARK: - Adding and removing
+
+    /// Add an entry to the library, or return the existing row.
+    ///
+    /// Chapters already known for the entry are left untouched, so re-adding a
+    /// removed entry keeps its read state.
+    @discardableResult
     func addToLibrary(
-        sourceNovel: SourceNovel,
-        pluginId: String,
+        entry sourceEntry: SourceEntry,
+        chapters: [SourceChapter],
         context: ModelContext
-    ) {
-        // Check if novel already exists
-        let path = sourceNovel.path
-        let predicate = #Predicate<Novel> { $0.path == path && $0.pluginId == pluginId }
-        let descriptor = FetchDescriptor(predicate: predicate)
+    ) -> Entry {
+        let sourceKey = sourceEntry.sourceKey
+        let url = sourceEntry.url
+        let predicate = #Predicate<Entry> { $0.sourceKey == sourceKey && $0.url == url }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
 
         if let existing = try? context.fetch(descriptor).first {
             existing.inLibrary = true
-            return
-        }
-
-        let novel = Novel(
-            path: sourceNovel.path,
-            pluginId: pluginId,
-            name: sourceNovel.name,
-            cover: sourceNovel.cover,
-            summary: sourceNovel.summary,
-            author: sourceNovel.author,
-            artist: sourceNovel.artist,
-            status: NovelStatus(rawValue: sourceNovel.status ?? "") ?? NovelStatus.unknown,
-            genres: sourceNovel.genres
-        )
-        novel.inLibrary = true
-        novel.totalPages = sourceNovel.totalPages ?? 0
-        context.insert(novel)
-
-        // Insert chapters
-        for (index, sourceChapter) in sourceNovel.chapters.enumerated() {
-            let chapter = Chapter(
-                path: sourceChapter.path,
-                name: sourceChapter.name
-            )
-            chapter.chapterNumber = sourceChapter.chapterNumber
-            chapter.releaseTime = sourceChapter.releaseTime
-            chapter.page = sourceChapter.page ?? "1"
-            chapter.position = index
-            chapter.novel = novel
-            context.insert(chapter)
-        }
-
-        try? context.save()
-    }
-
-    /// Remove a novel from the library (keeps data but marks as not in library).
-    func removeFromLibrary(novel: Novel, context: ModelContext) {
-        novel.inLibrary = false
-        try? context.save()
-    }
-
-    /// Record a reading history entry.
-    func recordHistory(
-        novel: Novel,
-        chapter: Chapter,
-        context: ModelContext
-    ) {
-        // Delete any existing history entries for this novel to only keep the latest
-        let targetPath = novel.path
-        let targetPlugin = novel.pluginId
-        let predicate = #Predicate<ReadingHistory> { $0.novelPath == targetPath && $0.pluginId == targetPlugin }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        if let existingEntries = try? context.fetch(descriptor) {
-            for entry in existingEntries {
-                context.delete(entry)
+            if existing.chapters.isEmpty {
+                insertChapters(chapters, into: existing, context: context)
             }
+            try? context.save()
+            return existing
         }
 
-        let entry = ReadingHistory(
-            novelId: novel.persistentModelID.hashValue,
-            chapterID: chapter.persistentModelID.hashValue,
-            novelPath: novel.path,
-            chapterPath: chapter.path,
-            novelName: novel.name,
-            novelCover: novel.cover,
-            chapterName: chapter.name,
-            pluginId: novel.pluginId,
-            progress: chapter.progress
+        let entry = Entry(
+            kind: sourceEntry.kind,
+            sourceKey: sourceEntry.sourceKey,
+            url: sourceEntry.url,
+            title: sourceEntry.title
         )
+        entry.thumbnailURL = sourceEntry.thumbnailURL
+        entry.author = sourceEntry.author
+        entry.artist = sourceEntry.artist
+        entry.summary = sourceEntry.description
+        entry.genres = sourceEntry.genres
+        entry.status = sourceEntry.status
+        entry.inLibrary = true
+        entry.dateAdded = .now
         context.insert(entry)
 
-        // Opening a chapter is not reading it: `unread` flips only once the reader reaches the end.
-        novel.lastReadAt = .now
-        chapter.readTime = .now
+        insertChapters(chapters, into: entry, context: context)
+        try? context.save()
+        return entry
+    }
 
+    /// Remove an entry from the library but keep its chapters and history.
+    func removeFromLibrary(entry: Entry, context: ModelContext) {
+        entry.inLibrary = false
+        try? context.save()
+    }
+
+    private func insertChapters(
+        _ chapters: [SourceChapter],
+        into entry: Entry,
+        context: ModelContext
+    ) {
+        for (index, sourceChapter) in chapters.enumerated() {
+            let number = sourceChapter.chapterNumber > -1
+                ? sourceChapter.chapterNumber
+                : ChapterRecognition.parseChapterNumber(sourceChapter.name, mangaTitle: entry.title)
+            let chapter = Chapter(
+                url: sourceChapter.url,
+                name: sourceChapter.name,
+                chapterNumber: number,
+                sourceOrder: index
+            )
+            chapter.scanlator = sourceChapter.scanlator
+            chapter.dateUpload = sourceChapter.dateUpload
+            chapter.entry = entry
+            context.insert(chapter)
+        }
+    }
+
+    // MARK: - Reading state
+
+    /// Record that a chapter was opened.
+    ///
+    /// Opening is not reading: `read` only flips once the reader reaches the
+    /// end, which is why this only touches history and the "recently read"
+    /// timestamp.
+    func recordHistory(entry: Entry, chapter: Chapter, context: ModelContext) {
+        let chapterURL = chapter.url
+        let predicate = #Predicate<History> { $0.chapterURL == chapterURL }
+        var descriptor = FetchDescriptor(predicate: predicate)
+        descriptor.fetchLimit = 1
+
+        if let existing = try? context.fetch(descriptor).first {
+            existing.lastRead = .now
+        } else {
+            let history = History(chapterURL: chapter.url)
+            history.chapter = chapter
+            context.insert(history)
+        }
+
+        entry.lastReadAt = .now
         try? context.save()
     }
 
     /// Record how far the user has read into a chapter.
-    /// Reaching `Chapter.finishedThreshold` marks the chapter read; a finished chapter keeps 100%
-    /// and reopens from the top, while rereading it never moves it back to unread.
+    ///
+    /// Reaching `Chapter.finishedThreshold` marks the chapter read; a finished
+    /// chapter keeps 100% and reopens from the top, and rereading it never
+    /// moves it back to unread.
     func recordReadingPosition(
         chapter: Chapter,
         paragraphIndex: Int,
         percent: Int,
         context: ModelContext
     ) {
-        let finished = !chapter.unread && chapter.progress == 100
-        if finished {
-            chapter.lastReadParagraphIndex = percent >= Chapter.finishedThreshold ? 0 : paragraphIndex
-        } else if percent >= Chapter.finishedThreshold {
-            chapter.unread = false
-            chapter.progress = 100
-            chapter.lastReadParagraphIndex = 0
-        } else {
-            chapter.progress = percent
-            chapter.lastReadParagraphIndex = paragraphIndex
-        }
-        chapter.readTime = .now
+        let finished = chapter.read && chapter.progress >= 100
+        let clamped = min(max(percent, 0), 100)
+        let wasRead = chapter.read
 
-        if let novel = chapter.novel {
-            let novelPath = novel.path, pluginId = novel.pluginId
-            let predicate = #Predicate<ReadingHistory> { $0.novelPath == novelPath && $0.pluginId == pluginId }
-            if let entries = try? context.fetch(FetchDescriptor(predicate: predicate)) {
-                for entry in entries where entry.chapterPath == chapter.path { entry.progress = chapter.progress }
+        if finished {
+            chapter.paragraphIndex = clamped >= Int(Chapter.finishedThreshold) ? 0 : paragraphIndex
+        } else if clamped >= Int(Chapter.finishedThreshold) {
+            chapter.read = true
+            chapter.progress = 100
+            chapter.paragraphIndex = 0
+        } else {
+            chapter.progress = Double(clamped)
+            chapter.paragraphIndex = paragraphIndex
+        }
+
+        // A chapter flipping to read is the one change the library cares about.
+        if chapter.read != wasRead { LibraryChapterCounts.shared.invalidate() }
+
+        touchTimestamps(chapter)
+        scheduleProgressSave(context)
+    }
+
+    /// Refresh the "recently read" timestamps, but not on every scroll tick.
+    ///
+    /// `Entry.lastReadAt` is a cached column that the library sorts on, so
+    /// rewriting it 4×/second invalidates the library query for no benefit:
+    /// nothing distinguishes two reads one second apart.
+    private func touchTimestamps(_ chapter: Chapter) {
+        let now = Date.now
+        if let history = chapter.history {
+            if now.timeIntervalSince(history.lastRead) > Self.timestampRefreshInterval {
+                history.lastRead = now
             }
         }
+        if let entry = chapter.entry {
+            if let lastReadAt = entry.lastReadAt,
+               now.timeIntervalSince(lastReadAt) <= Self.timestampRefreshInterval {
+                return
+            }
+            entry.lastReadAt = now
+        }
+    }
+
+    /// Coalesce a progress write. Safe to call as often as the reader likes.
+    ///
+    /// `deferred` is for readers that turn a page every few seconds. The
+    /// "first write after idle lands immediately" rule below fits a scroll
+    /// stream but not page-by-page reading: every turn is a fresh idle stretch,
+    /// so every turn saved, and each save re-runs every `@Query` on the main
+    /// thread. Deferred writes wait out `deferredSaveInterval` instead; the
+    /// reader still flushes on close, on a chapter change and on backgrounding.
+    private func scheduleProgressSave(_ context: ModelContext, deferred: Bool = false) {
+        pendingProgressSave = true
+        guard progressSaveTask == nil else { return }
+
+        // First write after an idle stretch lands immediately, so closing the
+        // reader right after opening it still persists.
+        if !deferred, Date.now.timeIntervalSince(lastProgressSave) >= 3 {
+            flushProgress(context: context)
+            return
+        }
+
+        let interval = deferred ? Self.deferredSaveInterval : Self.progressSaveInterval
+        progressSaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: interval)
+            guard let self, !Task.isCancelled else { return }
+            self.progressSaveTask = nil
+            self.flushProgress(context: context)
+        }
+    }
+
+    /// Write any pending reading progress now.
+    ///
+    /// Called when a reader closes and when the app backgrounds, so the
+    /// coalescing window never outlives the screen that produced it.
+    func flushProgress(context: ModelContext) {
+        progressSaveTask?.cancel()
+        progressSaveTask = nil
+        guard pendingProgressSave else { return }
+        pendingProgressSave = false
+        lastProgressSave = .now
         try? context.save()
     }
 
-    /// Update reading progress for a chapter.
-    func updateProgress(
+    /// Record a manga page turn.
+    ///
+    /// Separate from `recordReadingPosition` because a manga chapter is measured
+    /// in pages, not paragraphs, and "finished" means the reader reached the
+    /// last page rather than a percentage threshold.
+    func recordMangaProgress(
         chapter: Chapter,
-        progress: Int,
-        position: Int,
+        pageIndex: Int,
+        pageCount: Int,
         context: ModelContext
     ) {
-        chapter.progress = progress
-        chapter.position = position
-        try? context.save()
+        let update = MangaProgress.update(pageIndex: pageIndex, pageCount: pageCount)
+        let wasRead = chapter.read
+
+        chapter.lastPageRead = update.lastPageRead
+        chapter.pagesLeft = update.pagesLeft
+        chapter.progress = update.progress
+        if update.finished {
+            chapter.read = true
+        }
+
+        if chapter.read != wasRead { LibraryChapterCounts.shared.invalidate() }
+
+        touchTimestamps(chapter)
+        scheduleProgressSave(context, deferred: true)
     }
 
-    /// Check if the current network connection is cellular.
-    /// Uses a shared NWPathMonitor instead of spinning one up per call
-    /// (the old code created a monitor + semaphore + thread on every update).
+    // MARK: - Network state
+
+    /// Whether the current connection is cellular.
     private func isCellularConnection() -> Bool {
         NetworkMonitor.shared.isCellular()
     }
 
-    /// Update all novels in the library by fetching the latest details and chapters from sources.
-    func updateLibrary(context: ModelContext, pluginManager: PluginManager) async {
+    // MARK: - Library updates
+
+    /// Refresh every library entry from its source.
+    func updateLibrary(context: ModelContext, sourceManager: SourceManager, automatic: Bool = false) async {
         guard !isUpdating else { return }
 
-        // Wi-Fi only restriction check
         if UserDefaults.standard.object(forKey: "general.updateOnWifiOnly") as? Bool ?? true {
-            if isCellularConnection() {
+            await NetworkMonitor.shared.waitForPath()
+            if !NetworkMonitor.shared.isOnWiFi() {
                 print("📶 Library update skipped: Wi-Fi only setting is enabled and current network is cellular.")
+                var skipped = LibraryUpdateProgress(total: 0, automatic: automatic)
+                skipped.note = "Skipped: updates are set to Wi-Fi only and this device is not on Wi-Fi."
+                skipped.finishedAt = .now
+                updateProgress = skipped
                 return
             }
         }
 
         isUpdating = true
-        defer { isUpdating = false }
+        updateCancelRequested = false
+        defer {
+            isUpdating = false
+            updateProgress?.finishedAt = .now
+        }
 
-        let predicate = #Predicate<Novel> { $0.inLibrary }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        guard let novels = try? context.fetch(descriptor), !novels.isEmpty else { return }
+        let predicate = #Predicate<Entry> { $0.inLibrary }
+        guard let entries = try? context.fetch(FetchDescriptor(predicate: predicate)),
+              !entries.isEmpty
+        else { return }
 
-        // Fetch all sources CONCURRENTLY (network-bound, max 4 at a time),
-        // then apply SwiftData updates SEQUENTIALLY on the MainActor context.
-        // The old code awaited each novel one-by-one: N novels × latency.
-        //
-        // Concurrency-safety: plugin instances are snapshotted on the MainActor
-        // before the group (same pattern as GlobalSearchView) and each child
-        // task only touches its own snapshot plus its Sendable job. Chapter
-        // results are Sendable value types; failures travel as plain strings
-        // so the group's result type stays Sendable under Swift 6 checking.
+        // Fetch sources concurrently (network-bound, 4 at a time) and apply each
+        // result to the store as it arrives, so new chapters show up while a long
+        // update is still running instead of all at the end.
         struct UpdateJob: Sendable {
             let id: PersistentIdentifier
-            let pluginId: String
-            let path: String
-            let name: String
+            let sourceKey: String
+            let url: String
+            let kind: ContentKind
+            let title: String
+            let sourceName: String
         }
         struct UpdateWork {
-            let source: any SourcePlugin
-            let hasParsePage: Bool
+            let source: any CatalogSource
             let job: UpdateJob
         }
-        var pending: [UpdateWork] = []
-        for novel in novels {
-            let job = UpdateJob(id: novel.persistentModelID, pluginId: novel.pluginId, path: novel.path, name: novel.name)
-            if let source = pluginManager.plugin(for: job.pluginId) {
-                pending.append(UpdateWork(source: source, hasParsePage: source.hasParsePage, job: job))
-            }
+        struct UpdateResult: Sendable {
+            let job: UpdateJob
+            let details: SourceEntry?
+            let chapters: [SourceChapter]
+            let error: String?
         }
+
+        var pending: [UpdateWork] = []
+        var notInstalled = 0
+        let unreadOnly = UserDefaults.standard.bool(forKey: "updates.unreadOnly")
+        let skipCompleted = UserDefaults.standard.bool(forKey: "updates.skipCompleted")
+        for entry in entries where !entry.isLocal {
+            guard !Task.isCancelled else { return }
+            // `hasUnread` faults in every chapter of the entry on the main actor,
+            // so only ask when the answer can change the outcome.
+            guard LibraryUpdatePolicy.permits(strategy: entry.updateStrategy, hasFetched: entry.lastUpdate != nil,
+                status: entry.status, hasUnread: automatic && unreadOnly ? entry.hasUnread : true, automatic: automatic,
+                unreadOnly: unreadOnly, skipCompleted: skipCompleted) else { continue }
+            guard let source = sourceManager.source(forKey: entry.sourceKey) else {
+                notInstalled += 1
+                continue
+            }
+            let job = UpdateJob(
+                id: entry.persistentModelID,
+                sourceKey: entry.sourceKey,
+                url: entry.url,
+                kind: entry.kind,
+                title: entry.title,
+                sourceName: source.name
+            )
+            pending.append(UpdateWork(source: source, job: job))
+        }
+        var progress = LibraryUpdateProgress(total: pending.count, automatic: automatic)
+        progress.notInstalled = notInstalled
+        updateProgress = progress
         guard !pending.isEmpty else { return }
 
-        typealias UpdateResult = (id: PersistentIdentifier, novel: SourceNovel?, error: String?)
-        let results = await withTaskGroup(of: UpdateResult.self, returning: [UpdateResult].self) { group in
+        let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.persistentModelID, $0) })
+        var unsaved = 0
+
+        func finish(_ result: UpdateResult) {
+            updateProgress?.inFlight.removeAll { $0 == result.job.title }
+            updateProgress?.completed += 1
+            guard let entry = byID[result.job.id] else { return }
+            if let details = result.details, result.error == nil {
+                let merged = applyUpdate(entry, details: details, chapters: result.chapters,
+                                         context: context, saveImmediately: false)
+                unsaved += 1
+                updateProgress?.newChapters += merged.added
+                if merged.added > 0 { updateProgress?.titlesWithNewChapters += 1 }
+            } else {
+                let message = result.error ?? "unknown error"
+                print("Failed to update \(entry.title): \(message)")
+                updateProgress?.failures.append(.init(
+                    title: result.job.title, source: result.job.sourceName, message: message))
+            }
+            if unsaved >= 10 {
+                try? context.save()
+                unsaved = 0
+            }
+        }
+
+        await withTaskGroup(of: UpdateResult.self) { group in
             let maxConcurrent = 4
             var queue = pending[...]
-            var collected: [UpdateResult] = []
-            collected.reserveCapacity(pending.count)
 
-            func submit(_ work: UpdateWork) {
+            @MainActor func submit(_ work: UpdateWork) {
+                updateProgress?.inFlight.append(work.job.title)
                 group.addTask {
+                    let entry = SourceEntry(
+                        sourceKey: work.job.sourceKey,
+                        kind: work.job.kind,
+                        url: work.job.url,
+                        title: work.job.title
+                    )
                     do {
-                        var sourceNovel = try await work.source.parseNovel(path: work.job.path)
-                        if work.hasParsePage, let totalPages = sourceNovel.totalPages, totalPages > 1 {
-                            #if DEBUG
-                            print("🔌 [\(work.job.pluginId)] Paginated chapters detected during library update, fetching \(totalPages) pages...")
-                            #endif
-                            let allChapters = try await work.source.fetchAllChapters(path: work.job.path, totalPages: totalPages)
-                            sourceNovel = SourceNovel(
-                                name: sourceNovel.name,
-                                path: sourceNovel.path,
-                                cover: sourceNovel.cover,
-                                genres: sourceNovel.genres,
-                                summary: sourceNovel.summary,
-                                author: sourceNovel.author,
-                                artist: sourceNovel.artist,
-                                status: sourceNovel.status,
-                                chapters: allChapters,
-                                totalPages: sourceNovel.totalPages
-                            )
-                        }
-                        return (work.job.id, sourceNovel, nil)
+                        try Task.checkCancellation()
+                        let details = try await work.source.details(entry)
+                        try Task.checkCancellation()
+                        let chapters = try await work.source.chapters(entry)
+                        return UpdateResult(job: work.job, details: details, chapters: chapters, error: nil)
                     } catch {
-                        return (work.job.id, nil, error.localizedDescription)
+                        return UpdateResult(job: work.job, details: nil, chapters: [],
+                                            error: error.localizedDescription)
                     }
                 }
             }
@@ -245,89 +429,186 @@ final class LibraryManager {
                 submit(queue.removeFirst())
             }
             while let result = await group.next() {
-                collected.append(result)
-                if !queue.isEmpty {
+                finish(result)
+                if updateCancelRequested || Task.isCancelled {
+                    queue.removeAll()
+                } else if !queue.isEmpty {
                     submit(queue.removeFirst())
                 }
             }
-            return collected
         }
 
-        let byID = Dictionary(uniqueKeysWithValues: novels.map { ($0.persistentModelID, $0) })
-        var didChange = false
-        for result in results {
-            guard let novel = byID[result.id] else { continue }
-            if let sourceNovel = result.novel {
-                updateNovel(novel, sourceNovel: sourceNovel, context: context, saveImmediately: false)
-                didChange = true
-            } else {
-                print("Failed to update novel \(novel.name): \(result.error ?? "unknown error")")
-            }
-        }
-        if didChange {
-            try? context.save()
-        }
+        // Flush the last partial batch. Unconditional: `unsaved` is changed inside
+        // `finish`, which the compiler's flow analysis does not see.
+        try? context.save()
+        if updateCancelRequested { updateProgress?.wasCancelled = true }
     }
 
-    /// Update a single novel's chapters and metadata from source.
-    func updateNovel(_ novel: Novel, sourceNovel: SourceNovel, context: ModelContext, saveImmediately: Bool = true) {
-        novel.name = sourceNovel.name
-        if let cover = sourceNovel.cover {
-            novel.cover = cover
-        }
-        if let summary = sourceNovel.summary {
-            novel.summary = summary
-        }
-        if let author = sourceNovel.author {
-            novel.author = author
-        }
-        if let artist = sourceNovel.artist {
-            novel.artist = artist
-        }
-        novel.status = NovelStatus(rawValue: sourceNovel.status ?? "") ?? .unknown
-        novel.genres = sourceNovel.genres
-        novel.totalPages = sourceNovel.totalPages ?? 0
-        novel.lastUpdatedAt = .now
+    /// Merge source metadata and a chapter list into a stored entry.
+    ///
+    /// Metadata is overwritten from the source; the chapter list goes through
+    /// `ChapterSourceSync`, which matches by URL, keeps read state, stamps new
+    /// chapters for Updates and prunes chapters the source dropped.
+    @discardableResult
+    func applyUpdate(
+        _ entry: Entry,
+        details: SourceEntry,
+        chapters: [SourceChapter],
+        context: ModelContext,
+        saveImmediately: Bool = true
+    ) -> ChapterSyncResult {
+        if !details.title.isEmpty { entry.title = details.title }
+        if let thumbnail = details.thumbnailURL { entry.thumbnailURL = thumbnail }
+        if let summary = details.description, !summary.isEmpty { entry.summary = summary }
+        if let author = details.author { entry.author = author }
+        if let artist = details.artist { entry.artist = artist }
+        if !details.genres.isEmpty { entry.genres = details.genres }
+        entry.status = details.status
+        entry.lastUpdate = .now
 
-        // O(n) lookup via dictionary. The old `first(where:)` inside the loop
-        // was O(n²) — painful for 2000-chapter novels on every library update.
-        let existingByPath = Dictionary(uniqueKeysWithValues: novel.chapters.map { ($0.path, $0) })
+        let result = ChapterSourceSync.merge(chapters, into: entry, context: context)
+        LibraryChapterCounts.shared.invalidate()
 
-        for (index, sourceChapter) in sourceNovel.chapters.enumerated() {
-            if let existing = existingByPath[sourceChapter.path] {
-                existing.name = sourceChapter.name
-                existing.releaseTime = sourceChapter.releaseTime
-                existing.chapterNumber = sourceChapter.chapterNumber
-                existing.position = index
-            } else {
-                let newChapter = Chapter(
-                    path: sourceChapter.path,
-                    name: sourceChapter.name
-                )
-                newChapter.chapterNumber = sourceChapter.chapterNumber
-                newChapter.releaseTime = sourceChapter.releaseTime
-                newChapter.page = sourceChapter.page ?? "1"
-                newChapter.position = index
-                newChapter.updatedTime = .now // Marks it as an update!
-                newChapter.novel = novel
-                context.insert(newChapter)
-            }
-        }
         if saveImmediately {
             try? context.save()
         }
+        return result
     }
 
-    /// Clear all updates by setting updatedTime to nil for all chapters.
+    /// Mark every "new chapter" badge as seen.
     func clearUpdates(context: ModelContext) {
-        let predicate = #Predicate<Chapter> { $0.updatedTime != nil }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        if let chapters = try? context.fetch(descriptor) {
+        let predicate = #Predicate<Chapter> { $0.dateFetch != nil }
+        if let chapters = try? context.fetch(FetchDescriptor(predicate: predicate)) {
             for chapter in chapters {
-                chapter.updatedTime = nil
+                chapter.dateFetch = nil
             }
             try? context.save()
         }
+    }
+}
+
+// MARK: - Update progress
+
+/// A snapshot of a library update, shown by `LibraryUpdateBanner`.
+struct LibraryUpdateProgress: Equatable {
+    struct Failure: Equatable, Identifiable {
+        let id = UUID()
+        let title: String
+        let source: String
+        let message: String
+    }
+
+    var total: Int
+    var automatic: Bool
+    var completed = 0
+    var newChapters = 0
+    var titlesWithNewChapters = 0
+    var failures: [Failure] = []
+    /// Titles being fetched right now.
+    var inFlight: [String] = []
+    /// Library titles skipped because their source is not installed.
+    var notInstalled = 0
+    var isCancelling = false
+    var wasCancelled = false
+    var note: String?
+    let startedAt = Date()
+    var finishedAt: Date?
+
+    var isFinished: Bool { finishedAt != nil }
+    var fraction: Double { total == 0 ? 1 : Double(completed) / Double(total) }
+}
+
+// MARK: - Library chapter counts
+
+/// Cached per-entry chapter totals for the library.
+///
+/// `Entry.unreadCount` and `Entry.totalChapterCount` resolve the `chapters`
+/// relationship, which faults every chapter row for that entry. A grid cell
+/// asks for both, three times over (`totalChapterCount`, `unreadCount > 0`,
+/// `unreadCount`), and sorting by unread asks for them for every entry. With a
+/// few hundred books that is tens of thousands of row faults per body pass —
+/// the single largest cost in library scrolling and sorting.
+///
+/// This counts with `fetchCount` (a SQL `COUNT`, not a materialised array) on a
+/// background context, caches the answer per entry, and lets cells read it
+/// synchronously. Nothing is stored on the model, so the count cannot drift
+/// from the chapters themselves — it is only ever a cached read of them.
+@MainActor
+final class LibraryChapterCounts {
+
+    static let shared = LibraryChapterCounts()
+
+    struct Counts: Equatable, Sendable {
+        var total = 0
+        var unread = 0
+        /// Chapters whose download finished and is on disk.
+        var downloaded = 0
+    }
+
+    /// How long a count is trusted. Short enough that finishing a chapter shows
+    /// up once the reader closes, long enough that scrolling never re-queries.
+    private let ttl: TimeInterval = 5
+
+    private var cache: [PersistentIdentifier: (counts: Counts, at: Date)] = [:]
+    private var inFlight: [PersistentIdentifier: Task<Counts, Never>] = [:]
+    /// Bumped by `invalidate()` so a count that started before a change cannot
+    /// write a stale answer back into the cache.
+    private var generation = 0
+
+    private init() {}
+
+    /// Synchronous read for body code. `nil` means "not known yet".
+    func cached(_ id: PersistentIdentifier) -> Counts? {
+        guard let entry = cache[id],
+              Date.now.timeIntervalSince(entry.at) < ttl
+        else { return nil }
+        return entry.counts
+    }
+
+    func invalidate() {
+        generation &+= 1
+        cache.removeAll()
+    }
+
+    func counts(for entry: Entry, container: ModelContainer) async -> Counts {
+        let id = entry.persistentModelID
+        if let cached = cached(id) { return cached }
+        if let running = inFlight[id] { return await running.value }
+
+        let url = entry.url
+        let sourceKey = entry.sourceKey
+        let startGeneration = generation
+        let completedState = DownloadState.completed
+
+        let task = Task.detached(priority: .userInitiated) { () -> Counts in
+            let context = ModelContext(container)
+            do {
+                let inEntry = #Predicate<Chapter> {
+                    $0.entry?.url == url && $0.entry?.sourceKey == sourceKey
+                }
+                let unreadInEntry = #Predicate<Chapter> {
+                    $0.entry?.url == url && $0.entry?.sourceKey == sourceKey && !$0.read
+                }
+                let downloadedInEntry = #Predicate<Chapter> {
+                    $0.entry?.url == url && $0.entry?.sourceKey == sourceKey
+                        && $0.downloadItem?.state == completedState
+                }
+                let total = try context.fetchCount(FetchDescriptor<Chapter>(predicate: inEntry))
+                let unread = try context.fetchCount(FetchDescriptor<Chapter>(predicate: unreadInEntry))
+                let downloaded = try context.fetchCount(FetchDescriptor<Chapter>(predicate: downloadedInEntry))
+                return Counts(total: total, unread: unread, downloaded: downloaded)
+            } catch {
+                return Counts()
+            }
+        }
+
+        inFlight[id] = task
+        let counts = await task.value
+        inFlight[id] = nil
+        if startGeneration == generation {
+            cache[id] = (counts, .now)
+        }
+        return counts
     }
 }
 
@@ -336,13 +617,16 @@ final class LibraryManager {
 /// Singleton wrapper around NWPathMonitor. Creating a monitor per check
 /// (plus a semaphore wait) blocks the caller and spins up threads;
 /// share one long-lived monitor instead.
-final class NetworkMonitor: Sendable {
+final class NetworkMonitor: @unchecked Sendable {
     static let shared = NetworkMonitor()
 
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.lnreader.network-monitor")
     private let lock = NSLock()
     private var _isCellular = false
+    private var _isOnWiFi = false
+    private var _isConnected = false
+    private var _hasPath = false
     private var started = false
 
     private init() {}
@@ -356,7 +640,11 @@ final class NetworkMonitor: Sendable {
             guard let self else { return }
             self.lock.lock()
             self._isCellular = path.usesInterfaceType(.cellular)
+            self._isOnWiFi = path.status == .satisfied && path.usesInterfaceType(.wifi)
+            self._isConnected = path.status == .satisfied
+            self._hasPath = true
             self.lock.unlock()
+            NotificationCenter.default.post(name: Notification.Name("LNReaderNetworkChanged"), object: nil)
         }
         monitor.start(queue: queue)
     }
@@ -366,5 +654,24 @@ final class NetworkMonitor: Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _isCellular
+    }
+
+    func isOnWiFi() -> Bool {
+        ensureStarted()
+        lock.lock(); defer { lock.unlock() }
+        return _isOnWiFi
+    }
+    func isConnected() -> Bool {
+        ensureStarted(); lock.lock(); defer { lock.unlock() }; return _isConnected
+    }
+    private func hasPath() -> Bool {
+        lock.lock(); defer { lock.unlock() }; return _hasPath
+    }
+    func waitForPath() async {
+        ensureStarted()
+        for _ in 0..<20 {
+            if hasPath() || Task.isCancelled { return }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 }

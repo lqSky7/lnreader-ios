@@ -25,51 +25,24 @@ extension String {
         return formatter.date(from: self)
     }
 
-    /// Formats the string for Bionic Reading by returning a concatenated SwiftUI `Text` view
+    /// Formats the string for Bionic Reading by returning a SwiftUI `Text` view
     /// where the first part of each word is bolded.
     func bionicFormatted() -> Text {
-        var formattedText = Text("")
-        
-        let pattern = "\\p{L}+"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+        guard let regex = try? NSRegularExpression(pattern: "\\p{L}+", options: []) else {
             return Text(self)
         }
-        
-        let range = NSRange(self.startIndex..<self.endIndex, in: self)
-        let matches = regex.matches(in: self, options: [], range: range)
-        
-        var lastIndex = self.startIndex
-        
-        for match in matches {
-            if let matchRange = Range(match.range, in: self) {
-                // Append preceding text
-                if matchRange.lowerBound > lastIndex {
-                    let preceding = String(self[lastIndex..<matchRange.lowerBound])
-                    formattedText = formattedText + Text(preceding)
-                }
-                
-                // Format word
-                let word = String(self[matchRange])
-                let len = word.count
-                let boldLen = len <= 3 ? (len == 3 ? 2 : 1) : Int(ceil(Double(len) * 0.5))
-                
-                let boldPart = String(word.prefix(boldLen))
-                let normalPart = String(word.dropFirst(boldLen))
-                
-                formattedText = formattedText + Text(boldPart).bold()
-                if !normalPart.isEmpty {
-                    formattedText = formattedText + Text(normalPart)
-                }
-                
-                lastIndex = matchRange.upperBound
-            }
+
+        var result = AttributedString(self)
+        let range = NSRange(startIndex..<endIndex, in: self)
+        for match in regex.matches(in: self, options: [], range: range) {
+            guard let wordRange = Range(match.range, in: self) else { continue }
+            let len = self[wordRange].count
+            let boldLen = len <= 3 ? (len == 3 ? 2 : 1) : Int(ceil(Double(len) * 0.5))
+            let boldEnd = self.index(wordRange.lowerBound, offsetBy: boldLen)
+            guard let lower = AttributedString.Index(wordRange.lowerBound, within: result),
+                  let upper = AttributedString.Index(boldEnd, within: result) else { continue }
+            result[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
         }
-        
-        if lastIndex < self.endIndex {
-            let remaining = String(self[lastIndex..<self.endIndex])
-            formattedText = formattedText + Text(remaining)
-        }
-        
-        return formattedText
+        return Text(result)
     }
 }

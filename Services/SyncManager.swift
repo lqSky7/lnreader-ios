@@ -178,7 +178,7 @@ final class SyncManager {
         }
     }
 
-    func push(profile: UserProfile, novels: [Novel], sources: [PluginListItem]) async {
+    func push(profile: UserProfile, entries: [Entry], sources: [PluginListItem]) async {
         let payload = SyncPayload(
             profile: SyncProfilePayload(
                 username: currentUser?.username,
@@ -186,7 +186,7 @@ final class SyncManager {
                 name: profile.name,
                 image: profile.avatarData?.base64EncodedString()
             ),
-            library: novels.filter { $0.inLibrary && !$0.isLocal }.map { SyncNovelPayload(novel: $0) },
+            library: entries.filter { $0.inLibrary && !$0.isLocal }.map { SyncNovelPayload(entry: $0) },
             sources: sources.map { SyncSourcePayload(plugin: $0) }
         )
 
@@ -220,46 +220,48 @@ final class SyncManager {
         }
 
         for remoteNovel in data.library {
+            // The wire format still uses the v1 `pluginId`; v2 stores the
+            // prefixed source key.
+            let sourceKey = SourceKey.make(kind: .novel, id: remoteNovel.pluginId)
             let path = remoteNovel.path
-            let pluginId = remoteNovel.pluginId
-            let predicate = #Predicate<Novel> { $0.path == path && $0.pluginId == pluginId }
+            let predicate = #Predicate<Entry> { $0.url == path && $0.sourceKey == sourceKey }
             let existing = try context.fetch(FetchDescriptor(predicate: predicate)).first
-            let novel = existing ?? Novel(path: remoteNovel.path, pluginId: remoteNovel.pluginId, name: remoteNovel.name)
+            let novel = existing
+                ?? Entry(kind: .novel, sourceKey: sourceKey, url: remoteNovel.path, title: remoteNovel.name)
             if existing == nil {
                 context.insert(novel)
             }
 
-            novel.name = remoteNovel.name
-            novel.cover = remoteNovel.cover
+            novel.title = remoteNovel.name
+            novel.thumbnailURL = remoteNovel.cover
             novel.summary = remoteNovel.summary
             novel.author = remoteNovel.author
             novel.artist = remoteNovel.artist
-            novel.status = NovelStatus(rawValue: remoteNovel.status) ?? .unknown
-            novel.genres = remoteNovel.genres
+            novel.status = EntryStatus.parse(remoteNovel.status)
+            novel.genres = LNPluginSource.splitGenres(remoteNovel.genres)
             novel.inLibrary = remoteNovel.inLibrary
-            novel.totalPages = remoteNovel.totalPages
-            novel.libraryPosition = remoteNovel.libraryPosition
+            novel.libraryOrder = remoteNovel.libraryPosition
 
             var existingChapters: [String: Chapter] = [:]
             for chapter in novel.chapters {
-                existingChapters[chapter.path] = chapter
+                existingChapters[chapter.url] = chapter
             }
             for remoteChapter in remoteNovel.chapters {
-                let chapter = existingChapters[remoteChapter.path] ?? Chapter(path: remoteChapter.path, name: remoteChapter.name)
-                if chapter.novel == nil {
-                    chapter.novel = novel
+                let chapter = existingChapters[remoteChapter.path]
+                    ?? Chapter(url: remoteChapter.path, name: remoteChapter.name)
+                if chapter.entry == nil {
+                    chapter.entry = novel
                     context.insert(chapter)
                 }
                 chapter.name = remoteChapter.name
-                chapter.releaseTime = remoteChapter.releaseTime
+                chapter.dateUpload = DateParsing.parse(remoteChapter.releaseTime)
                 chapter.bookmark = remoteChapter.bookmark
-                chapter.unread = remoteChapter.unread
+                chapter.read = !remoteChapter.unread
                 // Download availability is verified from local files, never copied from another device.
-                chapter.chapterNumber = remoteChapter.chapterNumber
-                chapter.page = remoteChapter.page
-                chapter.position = remoteChapter.position
-                chapter.progress = remoteChapter.progress
-                chapter.lastReadParagraphIndex = remoteChapter.lastReadParagraphIndex
+                chapter.chapterNumber = remoteChapter.chapterNumber ?? -1
+                chapter.sourceOrder = remoteChapter.position
+                chapter.progress = Double(remoteChapter.progress ?? 0)
+                chapter.paragraphIndex = remoteChapter.lastReadParagraphIndex
             }
         }
 
@@ -328,36 +330,55 @@ private enum SyncError: LocalizedError {
 }
 
 extension SyncNovelPayload {
-    init(novel: Novel) {
-        self.path = novel.path
-        self.pluginId = novel.pluginId
-        self.name = novel.name
-        self.cover = novel.cover
-        self.summary = novel.summary
-        self.author = novel.author
-        self.artist = novel.artist
-        self.status = novel.status.rawValue
-        self.genres = novel.genres
-        self.inLibrary = novel.inLibrary
-        self.totalPages = novel.totalPages
-        self.libraryPosition = novel.libraryPosition
-        self.chapters = novel.chapters.sorted { $0.position < $1.position }.map { SyncChapterPayload(chapter: $0) }
+    /// Maps a v2 entry onto the v1 wire format the backend still stores.
+    init(entry: Entry) {
+        self.path = entry.url
+        self.pluginId = SourceKey.identifier(from: entry.sourceKey)
+        self.name = entry.title
+        self.cover = entry.thumbnailURL
+        self.summary = entry.summary
+        self.author = entry.author
+        self.artist = entry.artist
+        self.status = entry.status.legacyRawValue
+        self.genres = entry.genres.isEmpty ? nil : entry.genres.joined(separator: ", ")
+        self.inLibrary = entry.inLibrary
+        // v1 field: only LN plugins paginate their chapter lists.
+        self.totalPages = 0
+        self.libraryPosition = entry.libraryOrder
+        self.chapters = entry.chapters
+            .sorted { $0.sourceOrder < $1.sourceOrder }
+            .map { SyncChapterPayload(chapter: $0) }
     }
 }
 
 extension SyncChapterPayload {
     init(chapter: Chapter) {
-        self.path = chapter.path
+        self.path = chapter.url
         self.name = chapter.name
-        self.releaseTime = chapter.releaseTime
+        self.releaseTime = chapter.dateUpload?.formatted
         self.bookmark = chapter.bookmark
-        self.unread = chapter.unread
+        self.unread = !chapter.read
         self.isDownloaded = chapter.isDownloaded
-        self.chapterNumber = chapter.chapterNumber
-        self.page = chapter.page
-        self.position = chapter.position
-        self.progress = chapter.progress
-        self.lastReadParagraphIndex = chapter.lastReadParagraphIndex
+        self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
+        self.page = "1"
+        self.position = chapter.sourceOrder
+        self.progress = chapter.progress > 0 ? Int(chapter.progress) : nil
+        self.lastReadParagraphIndex = chapter.paragraphIndex
+    }
+}
+
+private extension EntryStatus {
+    /// The v1 status names, which is what other clients still parse.
+    var legacyRawValue: String {
+        switch self {
+        case .unknown: "Unknown"
+        case .ongoing: "Ongoing"
+        case .completed: "Completed"
+        case .licensed: "Licensed"
+        case .publishingFinished: "Publishing Finished"
+        case .cancelled: "Cancelled"
+        case .onHiatus: "On Hiatus"
+        }
     }
 }
 

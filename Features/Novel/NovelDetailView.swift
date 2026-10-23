@@ -1,21 +1,30 @@
 // NovelDetailView.swift
-// Novel detail screen supporting both library and browse modes.
+// Entry detail screen supporting both library and browse modes.
+//
+// One view for both kinds: the header, metadata and chapter list are shared,
+// and kind-specific sections (manga reader entry, downloads) hang off the same
+// `Entry` once the manga reader lands.
 
 import SwiftData
 import SwiftUI
 
 struct NovelDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
+    @Environment(ReaderRouter.self) private var readerRouter
 
-    let novel: Novel?
-    let partialNovel: PartialNovel?
-    let pluginId: String
+    /// Stored entry, when opened from the library or from a search hit that is
+    /// already in the library.
+    let entry: Entry?
+    /// Source-side entry, when opened from browse/search.
+    let sourceEntry: SourceEntry?
+    let sourceKey: String
 
     @Namespace private var chapterTransition
-    @State private var localNovel: Novel? = nil
-    @State private var sourceNovel: SourceNovel?
+    @State private var localEntry: Entry? = nil
+    @State private var details: SourceEntry?
+    @State private var sourceChapters: [SourceChapter] = []
     @State private var isLoading = true
     @State private var showFullDescription = false
     @State private var selectedRange: ChapterRange = .progress
@@ -26,24 +35,41 @@ struct NovelDetailView: View {
     @State private var chapterSearch = ""
     @State private var navigateToChapter: ChapterDisplay? = nil
     @State private var allChapters: [ChapterDisplay] = []
+    /// `allChapters` after scanlator rules and number ordering.
+    ///
+    /// Kept as state, not a computed property: the sort compares localized
+    /// titles and the scanlator pass rebuilds the array, so recomputing it on
+    /// every body evaluation meant two full passes over every chapter each time
+    /// a chip, a search keystroke, or a scroll tick re-rendered the screen.
+    @State private var orderedChapters: [ChapterDisplay] = []
     @State private var showAudioDownloads = false
+    /// True while the entry is being written to the library.
+    @State private var isAddingToLibrary = false
+    /// Scanlator priority for this entry, loaded from its own defaults key.
+    @State private var scanlatorSettings: ScanlatorSettings
 
     // MARK: - Initializers
 
-    /// View a saved library novel.
-    init(novel: Novel) {
-        self.novel = novel
-        self.partialNovel = nil
-        self.pluginId = novel.pluginId
-        self._localNovel = State(initialValue: novel)
+    /// View a saved library entry.
+    init(entry: Entry) {
+        self.entry = entry
+        self.sourceEntry = nil
+        self.sourceKey = entry.sourceKey
+        self._localEntry = State(initialValue: entry)
+        self._scanlatorSettings = State(
+            initialValue: ScanlatorSettings(key: "\(entry.sourceKey)::\(entry.url)")
+        )
     }
 
-    /// View a novel discovered from browse/search.
-    init(partialNovel: PartialNovel, pluginId: String) {
-        self.novel = nil
-        self.partialNovel = partialNovel
-        self.pluginId = pluginId
-        self._localNovel = State(initialValue: nil)
+    /// View an entry discovered from browse/search.
+    init(sourceEntry: SourceEntry) {
+        self.entry = nil
+        self.sourceEntry = sourceEntry
+        self.sourceKey = sourceEntry.sourceKey
+        self._localEntry = State(initialValue: nil)
+        self._scanlatorSettings = State(
+            initialValue: ScanlatorSettings(key: "\(sourceEntry.sourceKey)::\(sourceEntry.url)")
+        )
     }
 
     var body: some View {
@@ -51,18 +77,20 @@ struct NovelDetailView: View {
             content: VStack(spacing: 0) {
                 NovelHeaderView(
                     transitionNamespace: chapterTransition,
-                    name: displayName,
+                    name: displayTitle,
                     author: displayAuthor,
                     cover: displayCover,
-                    status: localNovel?.status ?? statusFromSource,
-                    inLibrary: localNovel?.inLibrary ?? false,
+                    status: localEntry?.status ?? details?.status ?? .unknown,
+                    inLibrary: localEntry?.inLibrary ?? false,
+                    isAddingToLibrary: isAddingToLibrary,
                     onToggleLibrary: toggleLibrary,
-                    hasStartedReading: localNovel?.chapters.contains(where: { !$0.unread || $0.readTime != nil || ($0.progress ?? 0) > 0 }) ?? false,
+                    hasStartedReading: hasStartedReading,
+                    canStartReading: !allChapters.isEmpty,
                     onContinueReading: continueReading
                 )
 
-                if isLoading && localNovel == nil {
-                    LoadingView(message: "Loading novel details...")
+                if isLoading && localEntry == nil {
+                    LoadingView(message: "Loading entry details...")
                         .frame(height: 200)
                 } else if let error = errorMessage {
                     EmptyStateView(
@@ -72,12 +100,12 @@ struct NovelDetailView: View {
                     )
                 } else {
                     NovelInfoSection(
-                        summary: localNovel?.summary ?? sourceNovel?.summary,
+                        summary: localEntry?.displaySummary ?? details?.description,
                         genres: displayGenres,
                         author: displayAuthor,
-                        artist: localNovel?.artist ?? sourceNovel?.artist,
-                        status: localNovel?.status ?? statusFromSource,
-                        source: pluginManager.pluginName(for: pluginId),
+                        artist: localEntry?.displayArtist ?? details?.artist,
+                        status: localEntry?.status ?? details?.status ?? .unknown,
+                        source: sourceName,
                         showFullDescription: $showFullDescription
                     )
                     .padding(.bottom, 12)
@@ -87,12 +115,15 @@ struct NovelDetailView: View {
                         .padding(.vertical, 16)
 
                     ChapterListView(
-                        novel: localNovel,
+                        entry: localEntry,
                         allChapters: allChapters,
                         chapters: pagedChapters,
                         totalCount: allChapters.count,
                         filteredCount: filteredChapters.count,
-                        pluginId: pluginId,
+                        showsAllChapters: showsAllChapters,
+                        scanlatorSettings: scanlatorSettings,
+                        sourceKey: sourceKey,
+                        isLoading: isLoading,
                         selectedRange: $selectedRange,
                         selectedFilter: $selectedFilter,
                         searchText: $chapterSearch
@@ -106,85 +137,121 @@ struct NovelDetailView: View {
         )
         .toolbar(removing: .title)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showAudioDownloads = true } label: { Image(systemName: "headphones.circle").frame(width: 44, height: 44) }
-                    .accessibilityLabel("Manage chapter audio downloads")
+            // Audio is generated from chapter text, which manga don't have.
+            if !isManga {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAudioDownloads = true } label: { Image(systemName: "headphones.circle").frame(width: 44, height: 44) }
+                        .accessibilityLabel("Manage chapter audio downloads")
+                }
             }
         }
         .sheet(isPresented: $showAudioDownloads) {
-            BookAudioDownloadsView(bookId: TTSBookIdentity.make(pluginId: pluginId, novelPath: localNovel?.path ?? partialNovel?.path ?? ""),
-                bookTitle: displayName, pluginId: pluginId, novelPath: localNovel?.path ?? partialNovel?.path ?? "",
-                chapters: allChapters.map { TTSChapterChoice($0) }, coverURL: displayCover)
-        }
-        .navigationDestination(item: $navigateToChapter) { chapter in
-            ReaderView(
-                chapterPath: chapter.path,
-                chapterName: chapter.name,
-                pluginId: pluginId,
-                novelPath: localNovel?.path ?? partialNovel?.path ?? sourceNovel?.path
+            BookAudioDownloadsView(
+                bookId: TTSBookIdentity.make(pluginId: sourceKey, novelPath: bookPath),
+                bookTitle: displayTitle,
+                sourceKey: sourceKey,
+                entryURL: bookPath,
+                chapters: allChapters.map { TTSChapterChoice($0) },
+                coverURL: displayCover
             )
-            .id(chapter.path)
-            .bookZoom(from: "continue", in: chapterTransition)
+        }
+        // The reader is a full-screen window of its own; this screen only
+        // decides which chapter to open.
+        .onChange(of: navigateToChapter) { _, chapter in
+            guard let chapter else { return }
+            openReader(chapter)
+            navigateToChapter = nil
         }
         .onAppear {
-            syncLocalNovel()
+            syncLocalEntry()
             refreshChapters()
         }
-        .onChange(of: novel) { refreshChapters() }
-        .onChange(of: localNovel) { refreshChapters() }
-        .task { await fetchNovelData() }
+        .onChange(of: entry) { refreshChapters() }
+        .onChange(of: localEntry) { refreshChapters() }
+        // Scanlator priority changes the merge/hide result, so the ordered list
+        // has to be rebuilt — it is no longer a computed property.
+        .onChange(of: scanlatorSettings.value) { rebuildOrderedChapters() }
+        .task { await fetchDetails() }
     }
 
     // MARK: - Chapter Computation
 
+    private var bookPath: String {
+        localEntry?.url ?? sourceEntry?.url ?? ""
+    }
+
     private func refreshChapters() {
-        if let localNovel {
-            let novelPath = localNovel.path
-            let pluginId = localNovel.pluginId
+        if let localEntry {
+            let entryURL = localEntry.url
+            let entrySourceKey = localEntry.sourceKey
             let container = modelContext.container
-            
+
             Task.detached(priority: .userInitiated) {
                 let context = ModelContext(container)
-                let predicate = #Predicate<Chapter> { $0.novel?.path == novelPath && $0.novel?.pluginId == pluginId }
+                let predicate = #Predicate<Chapter> {
+                    $0.entry?.url == entryURL && $0.entry?.sourceKey == entrySourceKey
+                }
                 var descriptor = FetchDescriptor<Chapter>(
                     predicate: predicate,
-                    sortBy: [SortDescriptor(\.position)]
+                    sortBy: [SortDescriptor(\.sourceOrder)]
                 )
                 descriptor.relationshipKeyPathsForPrefetching = []
-                
+
                 do {
-                    let fetchedChapters = try context.fetch(descriptor)
-                    let mapped = fetchedChapters.map { ChapterDisplay(chapter: $0) }
-                    
+                    let fetched = try context.fetch(descriptor)
+                    let mapped = fetched.map { ChapterDisplay(chapter: $0) }
                     await MainActor.run {
                         self.allChapters = mapped
+                        self.rebuildOrderedChapters()
                     }
                 } catch {
                     print("⚠️ Failed to fetch chapters on background context: \(error)")
                     await MainActor.run {
-                        let mapped = localNovel.chapters.map { ChapterDisplay(chapter: $0) }
-                        let sorted = mapped.sorted { ch1, ch2 in
-                            if ch1.position != ch2.position {
-                                return ch1.position < ch2.position
-                            }
-                            if let num1 = ch1.chapterNumber, let num2 = ch2.chapterNumber {
+                        let mapped = localEntry.chapters.map { ChapterDisplay(chapter: $0) }
+                        self.allChapters = mapped.sorted { lhs, rhs in
+                            if lhs.position != rhs.position { return lhs.position < rhs.position }
+                            if let num1 = lhs.chapterNumber, let num2 = rhs.chapterNumber {
                                 return num1 < num2
                             }
-                            return ch1.name.localizedStandardCompare(ch2.name) == .orderedAscending
+                            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
                         }
-                        self.allChapters = sorted
+                        self.rebuildOrderedChapters()
                     }
                 }
             }
         } else {
-            let sourceChapters = sourceNovel?.chapters ?? []
-            let mapped = sourceChapters.enumerated().map { ChapterDisplay(sourceChapter: $1, position: $0, pluginId: pluginId, novelPath: partialNovel?.path ?? sourceNovel?.path) }
+            let kind = localEntry?.kind ?? sourceEntry?.kind ?? .novel
+            let mapped = sourceChapters.enumerated().map {
+                ChapterDisplay(
+                    sourceChapter: $1,
+                    position: $0,
+                    sourceKey: sourceKey,
+                    entryURL: sourceEntry?.url,
+                    kind: kind
+                )
+            }
             self.allChapters = mapped
+            rebuildOrderedChapters()
+        }
+    }
+
+    /// Newest first, ordered by chapter number.
+    ///
+    /// `sourceOrder` is whatever the source listed — MangaFire hands back
+    /// newest-first while most novel sources go oldest-first — so it cannot be
+    /// used to sort. The parsed number can.
+    private func rebuildOrderedChapters() {
+        // Merge and hide by scanlator before ordering, so the list shows what
+        // the user actually asked for.
+        let base = ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
+        orderedChapters = base.sorted { lhs, rhs in
+            if lhs.sortNumber != rhs.sortNumber { return lhs.sortNumber > rhs.sortNumber }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
         }
     }
 
     private var filteredChapters: [ChapterDisplay] {
-        var result = allChapters
+        var result = orderedChapters
         switch selectedFilter {
         case .all: break
         case .unread: result = result.filter { $0.unread }
@@ -192,54 +259,63 @@ struct NovelDetailView: View {
         case .bookmarked: result = result.filter { $0.bookmarked }
         }
         if !chapterSearch.isEmpty {
+            let query = chapterSearch.trimmingCharacters(in: .whitespaces)
             result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(chapterSearch) || String($0.position + 1) == chapterSearch.trimmingCharacters(in: .whitespaces)
+                $0.name.localizedCaseInsensitiveContains(query)
+                    || ($0.chapterNumber.map { String(Int($0)) } == query)
             }
         }
         return result
     }
 
+    /// Manga sources report every chapter at once, so the list shows all of
+    /// them. Novels keep the windowed preview: their sources paginate, and a
+    /// 2000-chapter web novel should not render 2000 rows on the detail screen.
+    private var showsAllChapters: Bool { isManga }
+
+    private var isManga: Bool {
+        (localEntry?.kind ?? sourceEntry?.kind ?? .novel) == .manga
+    }
+
     private var pagedChapters: [ChapterDisplay] {
         let list = filteredChapters
         guard !list.isEmpty else { return [] }
-        
+        if showsAllChapters { return list }
+
         if !chapterSearch.isEmpty || selectedFilter != .all { return Array(list.prefix(50)) }
         switch selectedRange {
         case .first:
-            return Array(list.prefix(10))
-            
-        case .last:
+            // Oldest chapters — the end of a newest-first list.
             return Array(list.suffix(10))
-            
+
+        case .last:
+            // Newest chapters.
+            return Array(list.prefix(10))
+
         case .progress:
-            // Find the latest read chapter in the entire book
-            let readChapterPaths = allChapters.filter { !$0.unread || $0.isInProgress }
+            let readChapters = allChapters.filter { !$0.unread || $0.isInProgress }
             let targetIndex: Int
-            
-            if !readChapterPaths.isEmpty,
-               let maxRead = readChapterPaths.max(by: { $0.position < $1.position }) {
-                // Find where it is in the filtered list
+
+            if let maxRead = readChapters.max(by: { $0.sortNumber < $1.sortNumber }) {
                 if let idx = list.firstIndex(where: { $0.path == maxRead.path }) {
                     targetIndex = idx
+                } else if let idx = list.firstIndex(where: { $0.sortNumber <= maxRead.sortNumber }) {
+                    targetIndex = idx
                 } else {
-                    // Fallback: first chapter in filtered list with position >= maxRead.position
-                    if let idx = list.firstIndex(where: { $0.position >= maxRead.position }) {
-                        targetIndex = idx
-                    } else {
-                        targetIndex = list.count - 1
-                    }
+                    targetIndex = list.count - 1
                 }
             } else {
-                targetIndex = 0
+                // Nothing read yet: start at the oldest chapter.
+                targetIndex = list.count - 1
             }
-            
+
             let totalCount = list.count
             let sliceSize = 11
             let halfSize = 5
-            
+
             var start = targetIndex - halfSize
             var end = targetIndex + halfSize
-            
+
             if start < 0 {
                 start = 0
                 end = min(sliceSize - 1, totalCount - 1)
@@ -248,97 +324,89 @@ struct NovelDetailView: View {
                 end = totalCount - 1
                 start = max(0, end - sliceSize + 1)
             }
-            
+
             return Array(list[start...end])
         }
     }
 
     // MARK: - Display Helpers
 
-    private var displayName: String {
-        localNovel?.name ?? partialNovel?.name ?? sourceNovel?.name ?? "Unknown"
+    private var displayTitle: String {
+        localEntry?.displayTitle ?? details?.title ?? sourceEntry?.title ?? "Unknown"
     }
 
     private var displayAuthor: String? {
-        localNovel?.author ?? sourceNovel?.author
+        localEntry?.displayAuthor ?? details?.author ?? sourceEntry?.author
     }
 
     private var displayCover: String? {
-        localNovel?.cover ?? partialNovel?.cover ?? sourceNovel?.cover
+        localEntry?.displayThumbnailURL ?? details?.thumbnailURL ?? sourceEntry?.thumbnailURL
     }
 
     private var displayGenres: [String] {
-        let raw = localNovel?.genres ?? sourceNovel?.genres
-        return raw?.components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty } ?? []
+        if let local = localEntry, !local.genres.isEmpty { return local.genres }
+        if let details, !details.genres.isEmpty { return details.genres }
+        return sourceEntry?.genres ?? []
     }
 
-    private var statusFromSource: NovelStatus {
-        NovelStatus(rawValue: sourceNovel?.status ?? "") ?? .unknown
+    private var sourceName: String {
+        sourceManager.source(forKey: sourceKey)?.name ?? SourceKey.identifier(from: sourceKey)
+    }
+
+    private var hasStartedReading: Bool {
+        localEntry?.chapters.contains { chapter in
+            chapter.read || chapter.progress > 0 || chapter.history != nil
+        } ?? false
     }
 
     // MARK: - Actions
 
-    private func syncLocalNovel() {
-        if localNovel == nil {
-            let path = novel?.path ?? partialNovel?.path ?? ""
-            guard !path.isEmpty else { return }
-            let predicate = #Predicate<Novel> { $0.path == path && $0.pluginId == pluginId }
-            var descriptor = FetchDescriptor<Novel>(predicate: predicate)
+    private func syncLocalEntry() {
+        if localEntry == nil {
+            let url = entry?.url ?? sourceEntry?.url ?? ""
+            guard !url.isEmpty else { return }
+            let entrySourceKey = sourceKey
+            let predicate = #Predicate<Entry> { $0.url == url && $0.sourceKey == entrySourceKey }
+            var descriptor = FetchDescriptor<Entry>(predicate: predicate)
             descriptor.fetchLimit = 1
             if let fetched = try? modelContext.fetch(descriptor).first {
-                self.localNovel = fetched
+                self.localEntry = fetched
             }
         }
     }
 
-    private func fetchNovelData() async {
-        syncLocalNovel()
+    private func fetchDetails() async {
+        syncLocalEntry()
         refreshChapters()
-        
-        guard sourceNovel == nil else { return }
-        let path = localNovel?.path ?? partialNovel?.path ?? ""
-        guard !path.isEmpty,
-            let source = pluginManager.plugin(for: pluginId)
-        else {
+
+        // `CatalogSource` covers both kinds: details and the chapter list are
+        // shared, only the reader differs.
+        guard details == nil, let source = sourceManager.source(forKey: sourceKey) else {
+            isLoading = false
+            return
+        }
+
+        let url = localEntry?.url ?? sourceEntry?.url ?? ""
+        guard !url.isEmpty else {
             isLoading = false
             return
         }
 
         do {
-            var parsed = try await source.parseNovel(path: path)
-            #if DEBUG
-            print("📖 [\(pluginId)] parseNovel returned: chapters=\(parsed.chapters.count), totalPages=\(parsed.totalPages ?? -1), hasParsePage=\(source.hasParsePage)")
-            #endif
-            if source.hasParsePage, let totalPages = parsed.totalPages, totalPages > 1 {
-                #if DEBUG
-                print("📖 [\(pluginId)] Paginated chapters detected, fetching \(totalPages) pages...")
-                #endif
-                let allChapters = try await source.fetchAllChapters(path: path, totalPages: totalPages)
-                #if DEBUG
-                print("📖 [\(pluginId)] fetchAllChapters returned \(allChapters.count) total chapters")
-                #endif
-                parsed = SourceNovel(
-                    name: parsed.name,
-                    path: parsed.path,
-                    cover: parsed.cover,
-                    genres: parsed.genres,
-                    summary: parsed.summary,
-                    author: parsed.author,
-                    artist: parsed.artist,
-                    status: parsed.status,
-                    chapters: allChapters,
-                    totalPages: parsed.totalPages
-                )
-            } else {
-                #if DEBUG
-                print("📖 [\(pluginId)] NOT fetching all pages. hasParsePage=\(source.hasParsePage), totalPages=\(parsed.totalPages ?? -1)")
-                #endif
-            }
-            sourceNovel = parsed
-            if let localNovel {
-                libraryManager.updateNovel(localNovel, sourceNovel: parsed, context: modelContext)
+            let entry = localEntry.map(Self.sourceEntry(from:))
+                ?? sourceEntry
+                ?? SourceEntry(sourceKey: sourceKey, kind: .novel, url: url, title: "")
+            // Two independent requests: run them together so the screen is not
+            // waiting on two round trips in series.
+            async let pendingDetails = source.details(entry)
+            async let pendingChapters = source.chapters(entry)
+            let fetchedDetails = try await pendingDetails
+            let chapters = try await pendingChapters
+
+            details = fetchedDetails
+            sourceChapters = chapters
+            if let localEntry {
+                libraryManager.applyUpdate(localEntry, details: fetchedDetails, chapters: chapters, context: modelContext)
             }
             isLoading = false
             refreshChapters()
@@ -348,75 +416,104 @@ struct NovelDetailView: View {
         }
     }
 
+    /// A stored entry has to be re-expressed as a source value to be refetched.
+    private static func sourceEntry(from entry: Entry) -> SourceEntry {
+        SourceEntry(
+            sourceKey: entry.sourceKey,
+            kind: entry.kind,
+            url: entry.url,
+            title: entry.title,
+            thumbnailURL: entry.thumbnailURL,
+            author: entry.author,
+            artist: entry.artist,
+            description: entry.summary,
+            genres: entry.genres,
+            status: entry.status
+        )
+    }
+
     private func toggleLibrary() {
-        if let localNovel {
-            if localNovel.inLibrary {
-                libraryManager.removeFromLibrary(novel: localNovel, context: modelContext)
-            } else {
-                localNovel.inLibrary = true
-                try? modelContext.save()
-            }
-        } else if let sourceNovel {
-            libraryManager.addToLibrary(
-                sourceNovel: sourceNovel,
-                pluginId: pluginId,
+        guard !isAddingToLibrary else { return }
+
+        // Removing is local and instant.
+        if let localEntry, localEntry.inLibrary {
+            libraryManager.removeFromLibrary(entry: localEntry, context: modelContext)
+            refreshChapters()
+            return
+        }
+
+        // Adding has to work the moment the screen opens, not only after the
+        // details request lands. A browse result already carries everything the
+        // library row needs, so seed from it and let `fetchDetails` merge the
+        // chapter list when it arrives.
+        let seed: SourceEntry? = localEntry.map(Self.sourceEntry(from:)) ?? details ?? sourceEntry
+        guard let seed else { return }
+
+        isAddingToLibrary = true
+        Task { @MainActor in
+            let added = libraryManager.addToLibrary(
+                entry: seed,
+                chapters: sourceChapters,
                 context: modelContext
             )
-            syncLocalNovel()
+            localEntry = added
+            isAddingToLibrary = false
+            refreshChapters()
         }
-        refreshChapters()
+    }
+
+    private func openReader(_ chapter: ChapterDisplay) {
+        readerRouter.open(
+            chapter,
+            sourceKey: sourceKey,
+            entryURL: localEntry?.url ?? sourceEntry?.url,
+            kind: localEntry?.kind ?? sourceEntry?.kind ?? .novel
+        )
     }
 
     private func continueReading() {
-        if let localNovel, !localNovel.chapters.isEmpty {
-            let chapters = localNovel.chapters
-            let readChapters = chapters.filter { !$0.unread }
+        guard let localEntry, !localEntry.chapters.isEmpty else {
+            if let first = sourceChapters.first {
+                navigateToChapter = ChapterDisplay(
+                    sourceChapter: first,
+                    position: 0,
+                    sourceKey: sourceKey,
+                    kind: sourceEntry?.kind ?? .novel
+                )
+            }
+            return
+        }
 
-            // The chapter opened most recently decides where to resume: if it is unfinished, reopen it.
-            if let lastOpened = chapters.filter({ $0.readTime != nil }).max(by: { ($0.readTime ?? .distantPast) < ($1.readTime ?? .distantPast) }),
-               lastOpened.unread {
-                navigateToChapter = ChapterDisplay(chapter: lastOpened)
+        let chapters = localEntry.chapters
+
+        // The chapter opened most recently decides where to resume: if it is
+        // unfinished, reopen it.
+        if let lastOpened = chapters
+            .filter({ $0.history != nil })
+            .max(by: { ($0.history?.lastRead ?? .distantPast) < ($1.history?.lastRead ?? .distantPast) }),
+           !lastOpened.read {
+            navigateToChapter = ChapterDisplay(chapter: lastOpened)
+            return
+        }
+
+        let readChapters = chapters.filter(\.read)
+        if let latestRead = readChapters.max(by: { $0.sourceOrder < $1.sourceOrder }) {
+            let next = chapters
+                .filter { !$0.read && $0.sourceOrder > latestRead.sourceOrder }
+                .min { $0.sourceOrder < $1.sourceOrder }
+            if let next {
+                navigateToChapter = ChapterDisplay(chapter: next)
                 return
             }
+        }
 
-            if !readChapters.isEmpty {
-                // Find the latest read chapter based on readTime (or fallback to position if no readTime is set)
-                let latestRead: Chapter? = {
-                    let chaptersWithTime = readChapters.filter { $0.readTime != nil }
-                    if !chaptersWithTime.isEmpty {
-                        return chaptersWithTime.max(by: { ($0.readTime ?? .distantPast) < ($1.readTime ?? .distantPast) })
-                    } else {
-                        return readChapters.max(by: { $0.position < $1.position })
-                    }
-                }()
-
-                if let latestRead {
-                    let unreadAfterLatest = chapters
-                        .filter { $0.unread && $0.position > latestRead.position }
-                        .sorted { $0.position < $1.position }
-
-                    if let nextChapter = unreadAfterLatest.first {
-                        navigateToChapter = ChapterDisplay(chapter: nextChapter)
-                        return
-                    }
-                }
-            }
-
-            // Fallback: if no chapters are read, or no unread chapters exist after the latest read, open the first unread chapter
-            let sorted = chapters.sorted { $0.position < $1.position }
-            if let firstUnread = sorted.first(where: { $0.unread }) {
-                navigateToChapter = ChapterDisplay(chapter: firstUnread)
-                return
-            }
-            if let last = sorted.last {
-                navigateToChapter = ChapterDisplay(chapter: last)
-                return
-            }
-        } else if let sourceNovel, !sourceNovel.chapters.isEmpty {
-            let chapters = sourceNovel.chapters
-            if let first = chapters.first {
-                navigateToChapter = ChapterDisplay(sourceChapter: first, position: 0)
-            }
+        let sorted = chapters.sorted { $0.sourceOrder < $1.sourceOrder }
+        if let firstUnread = sorted.first(where: { !$0.read }) {
+            navigateToChapter = ChapterDisplay(chapter: firstUnread)
+            return
+        }
+        if let last = sorted.last {
+            navigateToChapter = ChapterDisplay(chapter: last)
         }
     }
 }

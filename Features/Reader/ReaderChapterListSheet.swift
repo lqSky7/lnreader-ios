@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct ReaderChapterListSheet: View {
-    let novel: Novel?
+    let entry: Entry?
     let currentChapterPath: String
     let onSelectChapter: (Chapter) -> Void
     let onDismiss: () -> Void
@@ -10,14 +10,14 @@ struct ReaderChapterListSheet: View {
     @State private var chapterByPath: [String: Chapter] = [:]
 
     var body: some View {
-        ChapterDirectoryView(novel: novel, chapters: chapters, pluginId: novel?.pluginId ?? "",
+        ChapterDirectoryView(entry: entry, chapters: chapters, sourceKey: entry?.sourceKey ?? "",
             currentChapterPath: currentChapterPath,
             onSelect: { chapter in if let stored = chapterByPath[chapter.path] { onSelectChapter(stored) } },
             onClose: onDismiss)
             .onAppear {
-                let sorted = novel?.chapters.sorted { $0.position < $1.position } ?? []
+                let sorted = entry?.chapters.sorted { $0.sourceOrder < $1.sourceOrder } ?? []
                 chapters = sorted.map { ChapterDisplay(chapter: $0) }
-                chapterByPath = Dictionary(sorted.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+                chapterByPath = Dictionary(sorted.map { ($0.url, $0) }, uniquingKeysWith: { first, _ in first })
             }
     }
 }

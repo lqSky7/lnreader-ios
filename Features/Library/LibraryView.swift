@@ -9,15 +9,15 @@ struct LibraryView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
 
     @Query(
-        filter: #Predicate<Novel> { $0.inLibrary },
-        sort: \Novel.name
+        filter: #Predicate<Entry> { $0.inLibrary },
+        sort: \Entry.title
     )
-    private var novels: [Novel]
-    @Query(sort: \Category.sort) private var categories: [Category]
+    private var novels: [Entry]
+    @Query(sort: \Category.order) private var categories: [Category]
 
     @Namespace private var bookTransitions
     @State private var lastReorderTarget: PersistentIdentifier?
@@ -28,10 +28,17 @@ struct LibraryView: View {
     @AppStorage("general.defaultSortDirection") private var sortDirection: SortDirection = .descending
     @AppStorage("general.defaultDisplayMode") private var displayMode: DisplayMode = .comfortable
     @AppStorage("general.confirmRemove") private var confirmRemove = true
+    @AppStorage("library.kindFilter") private var kindFilterRaw = LibraryKindFilter.all.rawValue
+    /// Tri-state filters, one per category (`LibraryFilterStore`).
+    @AppStorage("library.filters") private var filtersJSON = "{}"
+    /// Chapter counts for the filters, loaded off the main thread. Filtering
+    /// reads this, not `Entry.chapters` (see `LibraryChapterCounts`).
+    @State private var filterCounts: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
+    @State private var showFilterSheet = false
 
     @State private var isEditingLibrary = false
-    @State private var draggedItem: Novel? = nil
-    @State private var novelToDelete: Novel? = nil
+    @State private var draggedItem: Entry? = nil
+    @State private var novelToDelete: Entry? = nil
     @State private var showDeleteConfirmation = false
     @State private var navigationPath = NavigationPath()
     @State private var showFileImporter = false
@@ -41,7 +48,7 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
-                if filteredNovels.isEmpty {
+                if novels.isEmpty {
                     EmptyStateView(
                         icon: "books.vertical",
                         title: "Your Library is Empty",
@@ -50,67 +57,22 @@ struct LibraryView: View {
                         action: { showFileImporter = true }
                     )
                 } else {
-                    ScrollView {
-                        if !categories.isEmpty {
-                            CategoryTabView(
-                                categories: categories,
-                                selectedCategory: $selectedCategory
-                            )
-                            .padding(.horizontal)
-                        }
-
-                        switch displayMode {
-                        case .list:
-                            LibraryListView(
-                                transitionNamespace: bookTransitions,
-                                novels: filteredNovels,
-                                isEditing: isEditingLibrary,
-                                draggedItem: $draggedItem,
-                                onReorder: { reorderNovels(dragged: $0, target: $1) },
-                                onDelete: { novel in
-                                    if confirmRemove {
-                                        novelToDelete = novel
-                                        showDeleteConfirmation = true
-                                    } else {
-                                        libraryManager.removeFromLibrary(novel: novel, context: modelContext)
-                                    }
-                                },
-                                onStartEditing: { startEditing() },
-                                onSelect: { novel in
-                                    navigationPath.append(novel)
+                    // The picker is chrome and stays put; only the grid pages.
+                    // Paging the whole screen made a swipe drag a duplicate of
+                    // the picker along with the books.
+                    Group {
+                        if showsKindPicker {
+                            libraryPager
+                                // `safeAreaInset`, not a VStack: the scroll view
+                                // has to know the picker is above it, or it adds
+                                // its own navigation-bar inset and leaves a gap.
+                                .safeAreaInset(edge: .top, spacing: 0) {
+                                    kindPicker
+                                        .background(Color(uiColor: .systemBackground))
                                 }
-                            )
-                        default:
-                            LibraryGridView(
-                                transitionNamespace: bookTransitions,
-                                novels: filteredNovels,
-                                displayMode: displayMode,
-                                isEditing: isEditingLibrary,
-                                draggedItem: $draggedItem,
-                                onReorder: { reorderNovels(dragged: $0, target: $1) },
-                                onDelete: { novel in
-                                    if confirmRemove {
-                                        novelToDelete = novel
-                                        showDeleteConfirmation = true
-                                    } else {
-                                        libraryManager.removeFromLibrary(novel: novel, context: modelContext)
-                                    }
-                                },
-                                onStartEditing: { startEditing() },
-                                onSelect: { novel in
-                                    navigationPath.append(novel)
-                                }
-                            )
+                        } else {
+                            libraryPage(.all)
                         }
-                    }
-                    .immediateScrollTouches()
-                    .onDrop(of: [UTType.text], isTargeted: nil) { _ in
-                        guard draggedItem != nil else { return false }
-                        draggedItem = nil
-                        return true
-                    }
-                    .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, pluginManager: pluginManager)
                     }
                 }
             }
@@ -131,10 +93,20 @@ struct LibraryView: View {
                         sortOrder: $sortOrder,
                         sortDirection: $sortDirection,
                         displayMode: $displayMode,
+                        activeFilterCount: activeFilter.activeCount,
+                        onShowFilters: { showFilterSheet = true },
                         onImport: { showFileImporter = true }
                     )
                 }
             }
+            .sheet(isPresented: $showFilterSheet) {
+                LibraryFilterSheet(
+                    filter: activeFilterBinding,
+                    scopeName: selectedCategory?.name ?? "All"
+                )
+                .presentationDetents([.medium])
+            }
+            .task(id: filterCountsKey) { await loadFilterCounts() }
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active && isEditingLibrary {
                     commitLibraryPositions(clearOrder: false)
@@ -157,13 +129,13 @@ struct LibraryView: View {
             .alert("Remove from Library?", isPresented: $showDeleteConfirmation, presenting: novelToDelete) { novel in
                 Button("Cancel", role: .cancel) {}
                 Button("Remove", role: .destructive) {
-                    libraryManager.removeFromLibrary(novel: novel, context: modelContext)
+                    libraryManager.removeFromLibrary(entry: novel, context: modelContext)
                 }
             } message: { novel in
-                Text("Are you sure you want to remove '\(novel.name)' from your library?")
+                Text("Are you sure you want to remove '\(novel.displayTitle)' from your library?")
             }
-            .navigationDestination(for: Novel.self) { novel in
-                NovelDetailView(novel: novel)
+            .navigationDestination(for: Entry.self) { novel in
+                NovelDetailView(entry: novel)
                     .bookZoom(from: novel.persistentModelID, in: bookTransitions)
             }
             .fileImporter(
@@ -202,10 +174,143 @@ struct LibraryView: View {
         }
     }
 
+    // MARK: - Content
+
+    /// Only the selected kind is built; the segmented control and the swipe both move it.
+    private var libraryPager: some View {
+        libraryPage(LibraryKindFilter(rawValue: kindFilterRaw) ?? .all)
+            .horizontalSwipe(
+                selection: $kindFilterRaw,
+                options: LibraryKindFilter.allCases.map(\.rawValue),
+                isEnabled: !isEditingLibrary
+            )
+    }
+
+    private var kindPicker: some View {
+        Picker("Content", selection: $kindFilterRaw) {
+            ForEach(LibraryKindFilter.allCases) { option in
+                Text(option.title).tag(option.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+
+    /// The scrollable content for one kind: category chips, then the grid.
+    private func libraryPage(_ kind: LibraryKindFilter) -> some View {
+        let items = filteredNovels(for: kind)
+
+        return ScrollView {
+            if !categories.isEmpty {
+                CategoryTabView(
+                    categories: categories,
+                    selectedCategory: $selectedCategory
+                )
+                .padding(.horizontal)
+            }
+
+            if items.isEmpty {
+                emptyPage(kind)
+            } else {
+                libraryContent(items)
+            }
+        }
+        .immediateScrollTouches()
+        .onDrop(of: [UTType.text], isTargeted: nil) { _ in
+            guard draggedItem != nil else { return false }
+            draggedItem = nil
+            return true
+        }
+        .refreshable {
+            await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
+        }
+    }
+
+    /// An empty page is normal when only one kind is in the library, so say
+    /// which one is empty instead of pretending the library has nothing.
+    private func emptyPage(_ kind: LibraryKindFilter) -> some View {
+        let isFiltering = !searchText.isEmpty || selectedCategory != nil || activeFilter.isActive
+        return EmptyStateView(
+            icon: isFiltering ? "magnifyingglass" : "books.vertical",
+            title: isFiltering ? "No Matches" : "No \(kind.title)",
+            subtitle: isFiltering
+                ? "Nothing here matches the current search or category."
+                : "Add \(kind.title.lowercased()) from Browse and it will show up here."
+        )
+        .padding(.top, 60)
+    }
+
+    /// Split out of `body`: two 15-line cell constructors inline pushed the
+    /// view builder past what the type checker will infer in reasonable time.
+    @ViewBuilder
+    private func libraryContent(_ items: [Entry]) -> some View {
+        if displayMode == .list {
+            LibraryListView(
+                transitionNamespace: bookTransitions,
+                novels: items,
+                isEditing: isEditingLibrary,
+                draggedItem: $draggedItem,
+                onReorder: handleReorder,
+                onDelete: handleDelete,
+                onStartEditing: { startEditing() },
+                onSelect: handleSelect
+            )
+        } else {
+            LibraryGridView(
+                transitionNamespace: bookTransitions,
+                novels: items,
+                displayMode: displayMode,
+                isEditing: isEditingLibrary,
+                draggedItem: $draggedItem,
+                onReorder: handleReorder,
+                onDelete: handleDelete,
+                onStartEditing: { startEditing() },
+                onSelect: handleSelect
+            )
+        }
+    }
+
+    private func handleReorder(_ dragged: Entry, _ target: Entry) {
+        reorderNovels(dragged: dragged, target: target)
+    }
+
+    private func handleDelete(_ novel: Entry) {
+        if confirmRemove {
+            novelToDelete = novel
+            showDeleteConfirmation = true
+        } else {
+            libraryManager.removeFromLibrary(entry: novel, context: modelContext)
+        }
+    }
+
+    private func handleSelect(_ novel: Entry) {
+        navigationPath.append(novel)
+    }
+
     // MARK: - Filtering & Sorting
 
-    private var filteredNovels: [Novel] {
+    /// Only offer the split when the library actually holds both kinds.
+    private var showsKindPicker: Bool {
+        var sawNovel = false
+        var sawManga = false
+        for entry in novels {
+            if entry.kind == .novel { sawNovel = true } else { sawManga = true }
+            if sawNovel && sawManga { return true }
+        }
+        return false
+    }
+
+    /// Entries for one page: kind, then category, then search, then sort.
+    private func filteredNovels(for kind: LibraryKindFilter) -> [Entry] {
         var result = novels
+
+        switch kind {
+        case .all: break
+        case .novels: result = result.filter { $0.kind == .novel }
+        case .manga: result = result.filter { $0.kind == .manga }
+        }
 
         if let category = selectedCategory {
             result = result.filter { $0.categories.contains(category) }
@@ -213,14 +318,72 @@ struct LibraryView: View {
 
         if !searchText.isEmpty {
             result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(searchText)
+                $0.displayTitle.localizedCaseInsensitiveContains(searchText)
             }
+        }
+
+        let filter = activeFilter
+        if filter.isActive {
+            result = result.filter { filter.matches(facts(for: $0, filter: filter)) }
         }
 
         return sortedNovels(result)
     }
 
-    private func sortedNovels(_ novels: [Novel]) -> [Novel] {
+    // MARK: Filters
+
+    private var filterStore: LibraryFilterStore { LibraryFilterStore(json: filtersJSON) }
+
+    private var activeFilter: LibraryFilter { filterStore.filter(for: selectedCategory?.name) }
+
+    private var activeFilterBinding: Binding<LibraryFilter> {
+        let name = selectedCategory?.name
+        return Binding(
+            get: { filterStore.filter(for: name) },
+            set: {
+                var store = filterStore
+                store.set($0, for: name)
+                filtersJSON = store.json
+            }
+        )
+    }
+
+    /// Re-run the count pass when the filter, the category or the library changes.
+    private var filterCountsKey: String {
+        "\(activeFilter.needsChapterCounts)|\(novels.count)|\(scenePhase == .active)"
+    }
+
+    private func loadFilterCounts() async {
+        guard activeFilter.needsChapterCounts else { return }
+        let container = modelContext.container
+        var loaded: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
+        for novel in novels {
+            if Task.isCancelled { return }
+            loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container)
+        }
+        filterCounts = loaded
+    }
+
+    /// An entry whose counts have not loaded yet is treated as passing, so a
+    /// filter never blanks the library while the count pass runs.
+    private func facts(for entry: Entry, filter: LibraryFilter) -> LibraryFilterFacts {
+        var facts = LibraryFilterFacts()
+        if filter.needsChapterCounts, let counts = filterCounts[entry.persistentModelID] {
+            facts.unread = counts.unread
+            facts.total = counts.total
+            facts.downloaded = counts.downloaded
+        } else if filter.needsChapterCounts {
+            // Unknown: satisfy whatever the filter asks so the entry stays visible.
+            facts.unread = filter.unread == .exclude ? 0 : 1
+            facts.total = filter.started == .exclude ? facts.unread : facts.unread + 1
+            facts.downloaded = filter.downloaded == .exclude ? 0 : 1
+        }
+        facts.isCompleted = entry.status == .completed
+        if filter.tracked != .off { facts.isTracked = !entry.tracks.isEmpty }
+        return facts
+    }
+
+    private func sortedNovels(_ novels: [Entry]) -> [Entry] {
         // Precompute per-novel chapter stats ONCE. The old code called
         // `chaptersUnread` / `totalChapters` inside the sort comparator,
         // re-faulting + re-scanning every novel's chapter list O(log n) times.
@@ -229,11 +392,14 @@ struct LibraryView: View {
         let needsCounts = (sortOrder == .unread || sortOrder == .totalChapters)
         if needsCounts {
             for novel in novels {
-                unreadByID[novel.persistentModelID] = novel.chaptersUnread
-                totalByID[novel.persistentModelID] = novel.totalChapters
+                // Prefer the cached `fetchCount`; fall back to the relationship
+                // walk only for entries the cache has not seen yet.
+                let cached = LibraryChapterCounts.shared.cached(novel.persistentModelID)
+                unreadByID[novel.persistentModelID] = cached?.unread ?? novel.unreadCount
+                totalByID[novel.persistentModelID] = cached?.total ?? novel.totalChapterCount
             }
         }
-        let sorted: [Novel]
+        let sorted: [Entry]
         switch sortOrder {
         case .custom:
             if isEditingLibrary {
@@ -241,13 +407,13 @@ struct LibraryView: View {
                 return novels.sorted { (ranks[$0.persistentModelID] ?? Int.max) < (ranks[$1.persistentModelID] ?? Int.max) }
             }
             let ordered = novels.sorted {
-                if $0.libraryPosition != $1.libraryPosition { return $0.libraryPosition < $1.libraryPosition }
-                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                if $0.libraryOrder != $1.libraryOrder { return $0.libraryOrder < $1.libraryOrder }
+                return $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending
             }
             return sortDirection.isAscending ? ordered : ordered.reversed()
         case .alphabetical:
             sorted = novels.sorted {
-                $0.name.localizedCompare($1.name) == .orderedAscending
+                $0.displayTitle.localizedCompare($1.displayTitle) == .orderedAscending
             }
         case .lastRead:
             sorted = novels.sorted {
@@ -255,17 +421,17 @@ struct LibraryView: View {
             }
         case .lastUpdated:
             sorted = novels.sorted {
-                ($0.lastUpdatedAt ?? .distantPast) > ($1.lastUpdatedAt ?? .distantPast)
+                ($0.lastUpdate ?? .distantPast) > ($1.lastUpdate ?? .distantPast)
             }
         case .totalChapters:
             sorted = novels.sorted {
-                (totalByID[$0.persistentModelID] ?? $0.totalChapters)
-                    > (totalByID[$1.persistentModelID] ?? $1.totalChapters)
+                (totalByID[$0.persistentModelID] ?? $0.totalChapterCount)
+                    > (totalByID[$1.persistentModelID] ?? $1.totalChapterCount)
             }
         case .unread:
             sorted = novels.sorted {
-                (unreadByID[$0.persistentModelID] ?? $0.chaptersUnread)
-                    > (unreadByID[$1.persistentModelID] ?? $1.chaptersUnread)
+                (unreadByID[$0.persistentModelID] ?? $0.unreadCount)
+                    > (unreadByID[$1.persistentModelID] ?? $1.unreadCount)
             }
         case .dateAdded:
             sorted = novels.sorted { $0.dateAdded > $1.dateAdded }
@@ -284,7 +450,7 @@ struct LibraryView: View {
         }
     }
 
-    private func reorderNovels(dragged: Novel, target: Novel) {
+    private func reorderNovels(dragged: Entry, target: Entry) {
         guard lastReorderTarget != target.persistentModelID,
               dragged.persistentModelID != target.persistentModelID else { return }
         lastReorderTarget = target.persistentModelID
@@ -297,8 +463,25 @@ struct LibraryView: View {
         let byID = Dictionary(uniqueKeysWithValues: novels.map { ($0.persistentModelID, $0) })
         let current = Set(editingOrder)
         let order = editingOrder + novels.filter { !current.contains($0.persistentModelID) }.map(\.persistentModelID)
-        for (index, id) in order.enumerated() { byID[id]?.libraryPosition = index }
+        for (index, id) in order.enumerated() { byID[id]?.libraryOrder = index }
         try? modelContext.save()
         if clearOrder { editingOrder = [] }
+    }
+}
+
+/// Library split between light novels and manga.
+enum LibraryKindFilter: String, CaseIterable, Identifiable {
+    case all
+    case novels
+    case manga
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .novels: "Novels"
+        case .manga: "Manga"
+        }
     }
 }
