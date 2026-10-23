@@ -1,7 +1,7 @@
 # v2 rewrite — status
 
-**Updated** 2026-10-23 · **Branch** `feat/v2-rewrite-manga` · **Version** 2.0.0 (build 3)
-· **Latest update** Performance pass: library counts, reader save storm, cover decoding
+**Updated** 2026-10-23 · **Branch** `main` · **Version** 2.0.0 (build 3)
+· **Latest update** Library R8–R10 (sorts, per-category display and update scope, badges), manual chapter fetching
 
 The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end, and puts
 every source behind one protocol so a JS plugin and a transpiled extension are the same
@@ -32,6 +32,8 @@ touches `default.store`, so the old data stays recoverable on disk.
 | Trackers | **Deferred** | User's call |
 | Migration (`.tachibk`, bridge) | **Deferred** | User's call; fresh installs start empty |
 | Backup / restore (`.lnbk`) | **Local v2 format implemented; device check pending** | Authenticated encrypted snapshots, recovery key, merge restore; protobuf/cloud interoperability remains deferred |
+| Library (R7–R10) | **Implemented; device check pending** | Filters, per-category sort / display / update scope, badges. No category editor yet (see Open issues) |
+| Chapter fetching | **Implemented; device check pending** | Opening an entry no longer refetches; last-fetched time and a Refresh button |
 | Performance | **Pass done; device trace pending** | Library counts cached off-main, reader writes coalesced, covers downsampled; see [PERFORMANCE.md](PERFORMANCE.md) |
 
 ## Roadmap — Mihon / Yokai parity
@@ -168,7 +170,7 @@ the range, and the volume is restored after closing the reader or backgrounding 
   value under `library.displays`; the toolbar Display menu now edits the selected category,
   falls back to the Settings default, and offers "Use default display" (it used to overwrite
   that Settings default). *Update scope* is the `CategoryFlags.excludedFromUpdates` bit of
-  `Category.flags` (already carried by `.lnbk`): long-press a chip (action dialog) → "Include in library
+  `Category.flags` (already carried by `.lnbk`): long-press a chip (a popover with a gap from the chip) → "Include in library
   updates"; excluded chips show a pause glyph. `LibraryUpdateScope` decides who updates:
   automatic, background and library-wide runs skip a title if **any** of its categories is
   excluded (exclusion wins, as in Mihon); `updateLibrary(category:)` updates exactly that
@@ -256,6 +258,12 @@ gets its chapters.
 | `846d553` | Offline chapters, background updates, encrypted library backups |
 | `2092e97` | Rewrote this progress tracker as a status ledger |
 | `3072d5d` | Reader/Browse UI fixes, shared manga chapter directory, audit, sample source removal |
+| `d42d6b0` | R8: per-category library sorts; Latest Chapter and Chapter Fetch Date orders |
+| `b59fe75` | R9: per-category display mode; exclude categories from updates; refresh one category |
+| `e656c82` | R10: library badges (new chapters, downloaded count, source language) |
+| `fd0ccac` | Chapters are no longer refetched on open; last fetched time and manual Refresh |
+| `e02deda` | Fix: category chip actions open from a long press gesture |
+| `b4ee552` | Fix: anchor the category actions to the pressed chip |
 
 ## Offline library update
 
@@ -346,6 +354,12 @@ gets its chapters.
 
 ## Next, in order
 
+0. **Check the library features on a device** (R7–R10 and manual fetching): each category keeps its
+   own sort and display mode; an excluded category is skipped by Updates and the background refresh;
+   a chip's long-press popover opens beside that chip and its category refresh updates only its
+   titles; badges do not change cell heights; opening a library entry makes no request and Refresh
+   works. Each feature's "device check" note above has the detail.
+
 1. **Check the UI changes interactively.** Confirm manga paging and
    webtoon scrolling still work alongside the edge swipe, and check Browse on a compact phone.
 2. **Exercise offline reading and queue recovery** on hardware for both novels and manga.
@@ -355,6 +369,13 @@ gets its chapters.
 Extension WebView fetching, repository UI, and Kotlin/JS shims are on hold at the user's
 request. Trackers and migration remain deferred. Cloud and `.tachibk` backup interoperability
 are separate from the implemented local `.lnbk` snapshot.
+
+## Library follow-ups
+
+- **No category editor.** Categories only arrive from a Mihon restore: nothing in the app creates,
+  renames, reorders, deletes or assigns them, so R9's per-category settings are only reachable after
+  an import. A category editor (plus assigning from the detail screen) is the missing piece.
+- **Planned next:** R11 duplicate detection, R12 migrate source, R13 incognito, R14 download UI.
 
 ## Verification
 

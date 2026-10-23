@@ -1,6 +1,7 @@
 // CategoryTabView.swift
 // Horizontal scrolling category filter pills with Liquid Glass styling.
 
+import SwiftData
 import SwiftUI
 
 struct CategoryTabView: View {
@@ -15,6 +16,10 @@ struct CategoryTabView: View {
     @State private var actionsFor: Category?
     /// A long press ends with a lift that would also count as a tap.
     @State private var suppressTap = false
+    /// Chip sizes, so the popover can anchor to a rect slightly larger than its chip.
+    @State private var chipSizes: [PersistentIdentifier: CGSize] = [:]
+    /// Gap between a chip and its actions popover.
+    private let popoverGap: CGFloat = 10
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -39,22 +44,18 @@ struct CategoryTabView: View {
                         selectedCategory = category
                     }
                     // On the chip itself: a popover anchors to the view that owns it.
-                    .confirmationDialog(
-                        category.name,
+                    // The anchor rect is the chip grown by `popoverGap`, which is
+                    // how a popover is pushed away from its source.
+                    .onGeometryChange(for: CGSize.self, of: \.size) { chipSizes[category.id] = $0 }
+                    .popover(
                         isPresented: Binding(
                             get: { actionsFor?.id == category.id },
                             set: { if !$0 { actionsFor = nil } }
                         ),
-                        titleVisibility: .visible
+                        attachmentAnchor: .rect(.rect(anchorRect(for: category))),
+                        arrowEdge: .top
                     ) {
-                        Button("Update this category") { onUpdate(category) }
-                            .disabled(isUpdating)
-                        if CategoryFlags.isExcluded(category.flags) {
-                            Button("Include in library updates") { onToggleUpdates(category) }
-                        } else {
-                            Button("Exclude from library updates") { onToggleUpdates(category) }
-                        }
-                        Button("Cancel", role: .cancel) {}
+                        actionsPopover(for: category)
                     }
                     .glassEffectID(category.id, in: namespace)
                 }
@@ -63,6 +64,54 @@ struct CategoryTabView: View {
             }
         }
         .padding(.vertical, 8)
+    }
+
+    private func anchorRect(for category: Category) -> CGRect {
+        let size = chipSizes[category.id] ?? .zero
+        return CGRect(x: -popoverGap, y: -popoverGap,
+                      width: size.width + popoverGap * 2, height: size.height + popoverGap * 2)
+    }
+
+    private func actionsPopover(for category: Category) -> some View {
+        let excluded = CategoryFlags.isExcluded(category.flags)
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(category.name)
+                .font(Typography.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            Divider()
+            popoverAction("Update this category", systemImage: "arrow.clockwise", disabled: isUpdating) {
+                onUpdate(category)
+            }
+            Divider()
+            popoverAction(
+                excluded ? "Include in library updates" : "Exclude from library updates",
+                systemImage: excluded ? "arrow.triangle.2.circlepath" : "pause.circle"
+            ) {
+                onToggleUpdates(category)
+            }
+        }
+        .frame(minWidth: 250)
+        .presentationCompactAdaptation(.popover)
+    }
+
+    private func popoverAction(
+        _ title: String, systemImage: String, disabled: Bool = false, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            actionsFor = nil
+            action()
+        } label: {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 
     @ViewBuilder
