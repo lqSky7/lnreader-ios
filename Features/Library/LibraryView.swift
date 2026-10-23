@@ -9,6 +9,7 @@ struct LibraryView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.isReaderPresented) private var isReaderPresented
     @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
 
@@ -32,9 +33,11 @@ struct LibraryView: View {
     /// Tri-state filters, one per category (`LibraryFilterStore`).
     @AppStorage("library.filters") private var filtersJSON = "{}"
     /// Chapter counts for the filters, loaded off the main thread. Filtering
-    /// reads this, not `Entry.chapters` (see `LibraryChapterCounts`).
+    /// reads this (sort and filter), not `Entry.chapters` (see `LibraryChapterCounts`).
     @State private var filterCounts: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
     @State private var showFilterSheet = false
+    /// Last computed page per kind, reused while the reader covers the library.
+    @State private var pageCache = PageItemsCache()
 
     @State private var isEditingLibrary = false
     @State private var draggedItem: Entry? = nil
@@ -200,7 +203,7 @@ struct LibraryView: View {
 
     /// The scrollable content for one kind: category chips, then the grid.
     private func libraryPage(_ kind: LibraryKindFilter) -> some View {
-        let items = filteredNovels(for: kind)
+        let items = pageItems(for: kind)
 
         return ScrollView {
             if !categories.isEmpty {
@@ -302,6 +305,17 @@ struct LibraryView: View {
         return false
     }
 
+    /// `filteredNovels`, except while the reader is open. The library is still
+    /// alive under the reader's full screen cover and its `@Query`s re-run on
+    /// every progress save; nothing it shows can be seen, so hold the last
+    /// result and recompute once the reader closes.
+    private func pageItems(for kind: LibraryKindFilter) -> [Entry] {
+        if isReaderPresented, let held = pageCache.items[kind] { return held }
+        let items = filteredNovels(for: kind)
+        pageCache.items[kind] = items
+        return items
+    }
+
     /// Entries for one page: kind, then category, then search, then sort.
     private func filteredNovels(for kind: LibraryKindFilter) -> [Entry] {
         var result = novels
@@ -350,11 +364,17 @@ struct LibraryView: View {
 
     /// Re-run the count pass when the filter, the category or the library changes.
     private var filterCountsKey: String {
-        "\(activeFilter.needsChapterCounts)|\(novels.count)|\(scenePhase == .active)"
+        "\(needsChapterCounts)|\(novels.count)|\(scenePhase == .active)"
+    }
+
+    /// Sorting by unread or total reads chapter counts too, so it needs the
+    /// background count pass just as a chapter-based filter does.
+    private var needsChapterCounts: Bool {
+        activeFilter.needsChapterCounts || sortOrder == .unread || sortOrder == .totalChapters
     }
 
     private func loadFilterCounts() async {
-        guard activeFilter.needsChapterCounts else { return }
+        guard needsChapterCounts else { return }
         let container = modelContext.container
         var loaded: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
         for novel in novels {
@@ -384,19 +404,16 @@ struct LibraryView: View {
     }
 
     private func sortedNovels(_ novels: [Entry]) -> [Entry] {
-        // Precompute per-novel chapter stats ONCE. The old code called
-        // `chaptersUnread` / `totalChapters` inside the sort comparator,
-        // re-faulting + re-scanning every novel's chapter list O(log n) times.
+        // Counts come from the background pass (`loadFilterCounts`). Never walk
+        // `novel.chapters` here: this runs in `body`, and faulting every chapter
+        // of every entry was ~19 of 31 s of main-thread time in a profile. An
+        // entry whose count has not loaded yet sorts as 0 until it arrives.
         var unreadByID: [PersistentIdentifier: Int] = [:]
         var totalByID: [PersistentIdentifier: Int] = [:]
-        let needsCounts = (sortOrder == .unread || sortOrder == .totalChapters)
-        if needsCounts {
-            for novel in novels {
-                // Prefer the cached `fetchCount`; fall back to the relationship
-                // walk only for entries the cache has not seen yet.
-                let cached = LibraryChapterCounts.shared.cached(novel.persistentModelID)
-                unreadByID[novel.persistentModelID] = cached?.unread ?? novel.unreadCount
-                totalByID[novel.persistentModelID] = cached?.total ?? novel.totalChapterCount
+        if sortOrder == .unread || sortOrder == .totalChapters {
+            for (id, counts) in filterCounts {
+                unreadByID[id] = counts.unread
+                totalByID[id] = counts.total
             }
         }
         let sorted: [Entry]
@@ -425,13 +442,11 @@ struct LibraryView: View {
             }
         case .totalChapters:
             sorted = novels.sorted {
-                (totalByID[$0.persistentModelID] ?? $0.totalChapterCount)
-                    > (totalByID[$1.persistentModelID] ?? $1.totalChapterCount)
+                (totalByID[$0.persistentModelID] ?? 0) > (totalByID[$1.persistentModelID] ?? 0)
             }
         case .unread:
             sorted = novels.sorted {
-                (unreadByID[$0.persistentModelID] ?? $0.unreadCount)
-                    > (unreadByID[$1.persistentModelID] ?? $1.unreadCount)
+                (unreadByID[$0.persistentModelID] ?? 0) > (unreadByID[$1.persistentModelID] ?? 0)
             }
         case .dateAdded:
             sorted = novels.sorted { $0.dateAdded > $1.dateAdded }
@@ -484,4 +499,9 @@ enum LibraryKindFilter: String, CaseIterable, Identifiable {
         case .manga: "Manga"
         }
     }
+}
+
+/// Not observed: writing it from `body` must not invalidate the view.
+private final class PageItemsCache {
+    var items: [LibraryKindFilter: [Entry]] = [:]
 }

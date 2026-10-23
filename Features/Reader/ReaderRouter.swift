@@ -53,3 +53,20 @@ final class ReaderRouter {
         request = nil
     }
 }
+
+// MARK: - Covered-by-reader environment
+
+private struct IsReaderPresentedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True while the reader is presented over the tabs. The tabs stay alive
+    /// underneath a full screen cover and their `@Query`s keep firing on every
+    /// progress save, so screens that do real work in `body` should hold their
+    /// last result while this is set.
+    var isReaderPresented: Bool {
+        get { self[IsReaderPresentedKey.self] }
+        set { self[IsReaderPresentedKey.self] = newValue }
+    }
+}

@@ -51,6 +51,7 @@ struct ContentView: View {
             }
         }
         .environment(readerRouter)
+        .environment(\.isReaderPresented, readerRouter.request != nil)
         // The reader is its own window: anything that opens a chapter goes
         // through the router, and this is the single place it is presented.
         .fullScreenCover(
