@@ -38,6 +38,24 @@ struct CategoryTabView: View {
                     ) {
                         selectedCategory = category
                     }
+                    // On the chip itself: a popover anchors to the view that owns it.
+                    .confirmationDialog(
+                        category.name,
+                        isPresented: Binding(
+                            get: { actionsFor?.id == category.id },
+                            set: { if !$0 { actionsFor = nil } }
+                        ),
+                        titleVisibility: .visible
+                    ) {
+                        Button("Update this category") { onUpdate(category) }
+                            .disabled(isUpdating)
+                        if CategoryFlags.isExcluded(category.flags) {
+                            Button("Include in library updates") { onToggleUpdates(category) }
+                        } else {
+                            Button("Exclude from library updates") { onToggleUpdates(category) }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    }
                     .glassEffectID(category.id, in: namespace)
                 }
               }
@@ -45,21 +63,6 @@ struct CategoryTabView: View {
             }
         }
         .padding(.vertical, 8)
-        .confirmationDialog(
-            actionsFor?.name ?? "",
-            isPresented: Binding(get: { actionsFor != nil }, set: { if !$0 { actionsFor = nil } }),
-            titleVisibility: .visible,
-            presenting: actionsFor
-        ) { category in
-            Button("Update this category") { onUpdate(category) }
-                .disabled(isUpdating)
-            if CategoryFlags.isExcluded(category.flags) {
-                Button("Include in library updates") { onToggleUpdates(category) }
-            } else {
-                Button("Exclude from library updates") { onToggleUpdates(category) }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
     }
 
     @ViewBuilder
