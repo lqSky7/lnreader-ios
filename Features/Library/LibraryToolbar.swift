@@ -4,8 +4,11 @@
 import SwiftUI
 
 struct LibraryToolbar: ToolbarContent {
-    @Binding var sortOrder: SortOrder
-    @Binding var sortDirection: SortDirection
+    @Binding var sort: LibrarySort
+    /// Whether this category has its own sort rather than the global default.
+    var hasSortOverride = false
+    var scopeName = "All"
+    var onResetSort: () -> Void = {}
     @Binding var displayMode: DisplayMode
     var activeFilterCount = 0
     var onShowFilters: () -> Void = {}
@@ -36,23 +39,23 @@ struct LibraryToolbar: ToolbarContent {
             }
 
             Menu {
-                ForEach(SortOrder.allCases) { order in
-                    Button {
-                        if sortOrder == order {
-                            sortDirection.toggle()
-                        } else {
-                            sortOrder = order
-                            sortDirection = .descending
-                        }
-                    } label: {
-                        HStack {
-                            Text(order.displayName)
-                            if sortOrder == order {
-                                Image(systemName: sortDirection.isAscending
-                                    ? "chevron.up" : "chevron.down")
+                Section("Sort \(scopeName)") {
+                    ForEach(SortOrder.allCases) { order in
+                        Button {
+                            sort.select(order)
+                        } label: {
+                            HStack {
+                                Text(order.displayName)
+                                if sort.order == order {
+                                    Image(systemName: sort.direction.isAscending
+                                        ? "chevron.up" : "chevron.down")
+                                }
                             }
                         }
                     }
+                }
+                if hasSortOverride {
+                    Button("Use default sort", systemImage: "arrow.uturn.backward", action: onResetSort)
                 }
             } label: {
                 Label("Sort", systemImage: "arrow.up.arrow.down")

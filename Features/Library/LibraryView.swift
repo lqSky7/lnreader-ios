@@ -25,8 +25,10 @@ struct LibraryView: View {
     @State private var editingOrder: [PersistentIdentifier] = []
     @State private var searchText = ""
     @State private var selectedCategory: Category?
-    @AppStorage("general.defaultSortOrder") private var sortOrder: SortOrder = .lastRead
-    @AppStorage("general.defaultSortDirection") private var sortDirection: SortDirection = .descending
+    @AppStorage("general.defaultSortOrder") private var defaultSortOrder: SortOrder = .lastRead
+    @AppStorage("general.defaultSortDirection") private var defaultSortDirection: SortDirection = .descending
+    /// Sort overrides, one per category (`LibrarySortStore`).
+    @AppStorage("library.sorts") private var sortsJSON = "{}"
     @AppStorage("general.defaultDisplayMode") private var displayMode: DisplayMode = .comfortable
     @AppStorage("general.confirmRemove") private var confirmRemove = true
     @AppStorage("library.kindFilter") private var kindFilterRaw = LibraryKindFilter.all.rawValue
@@ -93,8 +95,10 @@ struct LibraryView: View {
                     }
                 } else {
                     LibraryToolbar(
-                        sortOrder: $sortOrder,
-                        sortDirection: $sortDirection,
+                        sort: activeSortBinding,
+                        hasSortOverride: sortStore.hasOverride(for: selectedCategory?.name),
+                        scopeName: selectedCategory?.name ?? "All",
+                        onResetSort: resetActiveSort,
                         displayMode: $displayMode,
                         activeFilterCount: activeFilter.activeCount,
                         onShowFilters: { showFilterSheet = true },
@@ -364,13 +368,46 @@ struct LibraryView: View {
 
     /// Re-run the count pass when the filter, the category or the library changes.
     private var filterCountsKey: String {
-        "\(needsChapterCounts)|\(novels.count)|\(scenePhase == .active)"
+        "\(needsChapterCounts)|\(needsChapterDates)|\(novels.count)|\(scenePhase == .active)"
     }
 
-    /// Sorting by unread or total reads chapter counts too, so it needs the
-    /// background count pass just as a chapter-based filter does.
+    /// Sorting by unread, total or a chapter date reads chapter data too, so it
+    /// needs the background count pass just as a chapter-based filter does.
     private var needsChapterCounts: Bool {
-        activeFilter.needsChapterCounts || sortOrder == .unread || sortOrder == .totalChapters
+        activeFilter.needsChapterCounts || activeSort.needsChapterCounts
+    }
+
+    private var needsChapterDates: Bool { activeSort.needsChapterDates }
+
+    // MARK: Sorts
+
+    private var defaultSort: LibrarySort {
+        LibrarySort(order: defaultSortOrder, direction: defaultSortDirection)
+    }
+
+    private var sortStore: LibrarySortStore { LibrarySortStore(json: sortsJSON) }
+
+    /// The sort for the selected category, else the global default.
+    private var activeSort: LibrarySort {
+        sortStore.sort(for: selectedCategory?.name, default: defaultSort)
+    }
+
+    private var activeSortBinding: Binding<LibrarySort> {
+        let name = selectedCategory?.name
+        return Binding(
+            get: { sortStore.sort(for: name, default: defaultSort) },
+            set: {
+                var store = sortStore
+                store.set($0, for: name)
+                sortsJSON = store.json
+            }
+        )
+    }
+
+    private func resetActiveSort() {
+        var store = sortStore
+        store.reset(selectedCategory?.name)
+        sortsJSON = store.json
     }
 
     private func loadFilterCounts() async {
@@ -379,7 +416,7 @@ struct LibraryView: View {
         var loaded: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
         for novel in novels {
             if Task.isCancelled { return }
-            loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container)
+            loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container, includeDates: needsChapterDates)
         }
         filterCounts = loaded
     }
@@ -404,54 +441,30 @@ struct LibraryView: View {
     }
 
     private func sortedNovels(_ novels: [Entry]) -> [Entry] {
+        let sort = activeSort
+        if sort.order == .custom, isEditingLibrary {
+            let ranks = Dictionary(uniqueKeysWithValues: editingOrder.enumerated().map { ($1, $0) })
+            return novels.sorted { (ranks[$0.persistentModelID] ?? Int.max) < (ranks[$1.persistentModelID] ?? Int.max) }
+        }
         // Counts come from the background pass (`loadFilterCounts`). Never walk
         // `novel.chapters` here: this runs in `body`, and faulting every chapter
         // of every entry was ~19 of 31 s of main-thread time in a profile. An
         // entry whose count has not loaded yet sorts as 0 until it arrives.
-        var unreadByID: [PersistentIdentifier: Int] = [:]
-        var totalByID: [PersistentIdentifier: Int] = [:]
-        if sortOrder == .unread || sortOrder == .totalChapters {
-            for (id, counts) in filterCounts {
-                unreadByID[id] = counts.unread
-                totalByID[id] = counts.total
-            }
+        let counts = sort.needsChapterCounts ? filterCounts : [:]
+        return LibrarySorter.sorted(novels, by: sort) { entry in
+            let known = counts[entry.persistentModelID]
+            return LibrarySortFacts(
+                title: entry.displayTitle,
+                libraryOrder: entry.libraryOrder,
+                dateAdded: entry.dateAdded,
+                lastReadAt: entry.lastReadAt,
+                lastChecked: entry.lastUpdate,
+                total: known?.total ?? 0,
+                unread: known?.unread ?? 0,
+                latestUpload: known?.latestUpload,
+                latestFetch: known?.latestFetch
+            )
         }
-        let sorted: [Entry]
-        switch sortOrder {
-        case .custom:
-            if isEditingLibrary {
-                let ranks = Dictionary(uniqueKeysWithValues: editingOrder.enumerated().map { ($1, $0) })
-                return novels.sorted { (ranks[$0.persistentModelID] ?? Int.max) < (ranks[$1.persistentModelID] ?? Int.max) }
-            }
-            let ordered = novels.sorted {
-                if $0.libraryOrder != $1.libraryOrder { return $0.libraryOrder < $1.libraryOrder }
-                return $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending
-            }
-            return sortDirection.isAscending ? ordered : ordered.reversed()
-        case .alphabetical:
-            sorted = novels.sorted {
-                $0.displayTitle.localizedCompare($1.displayTitle) == .orderedAscending
-            }
-        case .lastRead:
-            sorted = novels.sorted {
-                ($0.lastReadAt ?? .distantPast) > ($1.lastReadAt ?? .distantPast)
-            }
-        case .lastUpdated:
-            sorted = novels.sorted {
-                ($0.lastUpdate ?? .distantPast) > ($1.lastUpdate ?? .distantPast)
-            }
-        case .totalChapters:
-            sorted = novels.sorted {
-                (totalByID[$0.persistentModelID] ?? 0) > (totalByID[$1.persistentModelID] ?? 0)
-            }
-        case .unread:
-            sorted = novels.sorted {
-                (unreadByID[$0.persistentModelID] ?? 0) > (unreadByID[$1.persistentModelID] ?? 0)
-            }
-        case .dateAdded:
-            sorted = novels.sorted { $0.dateAdded > $1.dateAdded }
-        }
-        return sortDirection.isAscending ? sorted.reversed() : sorted
     }
 
     private func startEditing() {
@@ -459,8 +472,7 @@ struct LibraryView: View {
         withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
             editingOrder = order
             lastReorderTarget = nil
-            sortOrder = .custom
-            sortDirection = .ascending
+            activeSortBinding.wrappedValue = LibrarySort(order: .custom, direction: .ascending)
             isEditingLibrary = true
         }
     }

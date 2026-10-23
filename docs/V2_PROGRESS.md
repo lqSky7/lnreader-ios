@@ -48,7 +48,7 @@ per-series settings store comes first because reader modes, filters and incognit
 | R5 | Auto scroll | **Implemented; device check pending** | R1 |
 | R6 | Hold to scroll, with swipe-to-change-speed | **Implemented; device check pending** | R5 |
 | R7 | Library filters | **Implemented; device check pending** | — |
-| R8 | Library sorts (per category) | Planned | R7 |
+| R8 | Library sorts (per category) | **Implemented; device check pending** | R7 |
 | R9 | Categories: per-category sort, display, update scope | Planned | R7, R8 |
 | R10 | Library badges | Planned | — |
 | R11 | Duplicate detection | Planned | — |
@@ -148,6 +148,19 @@ the range, and the volume is restored after closing the reader or backgrounding 
 - **R8 sorts.** Sort orders exist today (`SortOrder`); add per-category sort + direction,
   and "latest chapter", "last checked", "chapter fetch date". Sorting by unread must use the
   cached counts, never `Entry.unreadCount`.
+- **R8 as built.** `LibrarySort` / `LibrarySorter` / `LibrarySortStore`
+  (`Models/Enums/LibrarySort.swift`): one sort per category as one JSON value under
+  `library.sorts`; a category with no entry follows the global default from Settings. The
+  Sort menu is scoped to the selected category and offers "Use default sort" once it has
+  an override. Ascending now means smallest first everywhere (A to Z, oldest first); an
+  order starts in its natural direction, so a saved Alphabetical + Descending now reads
+  Z to A (it used to read A to Z). New orders: **Latest Chapter** (newest `dateUpload`)
+  and **Chapter Fetch Date** (newest `dateFetch`; it is the "unseen update" stamp, so it
+  empties when Updates are cleared). "Last Updated" is shown as **Last Checked**: it is
+  `Entry.lastUpdate`, set on every successful refresh. The two date orders add two
+  `fetchLimit 1` queries per entry to the cached count pass, only while one is selected.
+  Checked headless by `scripts/check-library-sorts.sh`; typechecks. Device check: each
+  category keeps its own sort, and unread/latest-chapter sorts fill in after the count pass.
 - **R9 categories.** Per-category display mode, sort, filter and update scope. The category
   chip row already exists; this adds the per-category state behind it.
 - **R10 badges.** Unread, downloaded, source/language, "new". Compute off-main and cache;
@@ -311,6 +324,7 @@ are separate from the implemented local `.lnbk` snapshot.
 | `scripts/check-v2-page-pipeline.sh` | Cache LRU, loader dedupe, prefetch order, progress |
 | `scripts/check-v2-extensions.sh` | Bundle through the real host against a localhost fixture |
 | `scripts/check-v2-scanlators.sh` | Dedup/hide rules, hidden-winner fallback |
+| `scripts/check-library-sorts.sh` | Every sort order and direction, nil dates, tie-breaks, per-category store |
 | `scripts/check-v2-reader-settings.sh` | Per-series reader settings: resolution, persistence, reset, make default |
 | `scripts/try-mangafire.sh` | Live MangaFire through the host (network required) |
 | `scripts/profile-hotpaths.sh` | Library counts, progress writes, chapter rows and ordering at library scale |

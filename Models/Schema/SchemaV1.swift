@@ -69,7 +69,8 @@ enum SchemaV1: VersionedSchema {
 
         var inLibrary: Bool = false
         var dateAdded: Date = Date.now
-        /// When the source last reported a new chapter.
+        /// When this entry was last refreshed from its source (set on every
+        /// successful update, whether or not new chapters arrived).
         var lastUpdate: Date?
         /// Manual drag-and-drop position inside the library.
         var libraryOrder: Int = 0

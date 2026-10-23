@@ -543,6 +543,11 @@ final class LibraryChapterCounts {
         var unread = 0
         /// Chapters whose download finished and is on disk.
         var downloaded = 0
+        /// Newest `dateUpload` and `dateFetch`. Only filled when the caller
+        /// asked for dates (`hasDates`), because each is one more query.
+        var latestUpload: Date?
+        var latestFetch: Date?
+        var hasDates = false
     }
 
     /// How long a count is trusted. Short enough that finishing a chapter shows
@@ -570,10 +575,13 @@ final class LibraryChapterCounts {
         cache.removeAll()
     }
 
-    func counts(for entry: Entry, container: ModelContainer) async -> Counts {
+    func counts(for entry: Entry, container: ModelContainer, includeDates: Bool = false) async -> Counts {
         let id = entry.persistentModelID
-        if let cached = cached(id) { return cached }
-        if let running = inFlight[id] { return await running.value }
+        if let cached = cached(id), cached.hasDates || !includeDates { return cached }
+        if let running = inFlight[id] {
+            let counts = await running.value
+            if counts.hasDates || !includeDates { return counts }
+        }
 
         let url = entry.url
         let sourceKey = entry.sourceKey
@@ -596,7 +604,27 @@ final class LibraryChapterCounts {
                 let total = try context.fetchCount(FetchDescriptor<Chapter>(predicate: inEntry))
                 let unread = try context.fetchCount(FetchDescriptor<Chapter>(predicate: unreadInEntry))
                 let downloaded = try context.fetchCount(FetchDescriptor<Chapter>(predicate: downloadedInEntry))
-                return Counts(total: total, unread: unread, downloaded: downloaded)
+                var counts = Counts(total: total, unread: unread, downloaded: downloaded)
+                if includeDates {
+                    var upload = FetchDescriptor<Chapter>(
+                        predicate: #Predicate<Chapter> {
+                            $0.entry?.url == url && $0.entry?.sourceKey == sourceKey && $0.dateUpload != nil
+                        },
+                        sortBy: [SortDescriptor(\Chapter.dateUpload, order: .reverse)]
+                    )
+                    upload.fetchLimit = 1
+                    var fetch = FetchDescriptor<Chapter>(
+                        predicate: #Predicate<Chapter> {
+                            $0.entry?.url == url && $0.entry?.sourceKey == sourceKey && $0.dateFetch != nil
+                        },
+                        sortBy: [SortDescriptor(\Chapter.dateFetch, order: .reverse)]
+                    )
+                    fetch.fetchLimit = 1
+                    counts.latestUpload = try context.fetch(upload).first?.dateUpload
+                    counts.latestFetch = try context.fetch(fetch).first?.dateFetch
+                    counts.hasDates = true
+                }
+                return counts
             } catch {
                 return Counts()
             }

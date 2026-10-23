@@ -11,9 +11,16 @@ enum SortOrder: String, Codable, CaseIterable, Identifiable {
     case totalChapters = "Total Chapters"
     case unread = "Unread"
     case dateAdded = "Date Added"
+    case latestChapter = "Latest Chapter"
+    case chapterFetched = "Chapter Fetch Date"
 
     var id: String { rawValue }
-    var displayName: String { rawValue }
+
+    /// `lastUpdated` keeps its stored raw value; it is the time of the last
+    /// refresh from the source, which is what "checked" means to a reader.
+    var displayName: String {
+        self == .lastUpdated ? "Last Checked" : rawValue
+    }
 
     var iconName: String {
         switch self {
@@ -24,6 +31,8 @@ enum SortOrder: String, Codable, CaseIterable, Identifiable {
         case .totalChapters: "list.number"
         case .unread: "eye.slash"
         case .dateAdded: "calendar"
+        case .latestChapter: "text.badge.checkmark"
+        case .chapterFetched: "arrow.down.circle"
         }
     }
 }
