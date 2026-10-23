@@ -347,7 +347,7 @@ final class ReaderTTSManager: ObservableObject {
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: manifest.title,
             MPMediaItemPropertyAlbumTitle: manifest.bookTitle,
-            MPMediaItemPropertyArtist: manifest.voiceName,
+            MPMediaItemPropertyArtist: TTSOfflineLibrary.shared.voices.first { $0.id == manifest.voiceId }?.name ?? manifest.voiceName,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
             MPNowPlayingInfoPropertyPlaybackRate: isPaused ? 0 : rate,

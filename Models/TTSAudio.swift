@@ -132,10 +132,10 @@ struct TTSVoice: Codable, Identifiable, Sendable {
     var isCustom: Bool { kind == "custom" }
 
     static let presets: [TTSVoice] = [
-        .init(id: "breeze-warm", name: "Warm narrator", speaker: "S0", nativeLanguage: "English", description: "Warm, clear American male storyteller"),
-        .init(id: "breeze-clear", name: "Clear narrator", speaker: "S0", nativeLanguage: "English", description: "Clear, composed American female storyteller"),
-        .init(id: "breeze-calm", name: "Calm narrator", speaker: "S0", nativeLanguage: "English", description: "Soft, thoughtful British female storyteller"),
-        .init(id: "breeze-storyteller", name: "Seasoned storyteller", speaker: "S0", nativeLanguage: "English", description: "Rich, grounded British male storyteller")
+        .init(id: "breeze-warm", name: "Miles", speaker: "S0", nativeLanguage: "English", description: "Warm, clear American male storyteller"),
+        .init(id: "breeze-clear", name: "Nora", speaker: "S0", nativeLanguage: "English", description: "Clear, composed American female storyteller"),
+        .init(id: "breeze-calm", name: "Iris", speaker: "S0", nativeLanguage: "English", description: "Soft, thoughtful British female storyteller"),
+        .init(id: "breeze-storyteller", name: "Rowan", speaker: "S0", nativeLanguage: "English", description: "Rich, grounded British male storyteller")
     ]
 }
 

@@ -748,7 +748,7 @@ struct ReaderView: View {
             isPlaying: !ttsManager.isPaused, isBuffering: ttsManager.isBuffering,
             elapsed: ttsManager.elapsed, duration: ttsManager.duration, rate: ttsManager.rate,
             voiceId: ttsManager.manifest?.voiceId ?? ttsVoiceId,
-            voiceName: ttsManager.manifest?.voiceName ?? "Breeze",
+            voiceName: audioLibrary.voices.first { $0.id == (ttsManager.manifest?.voiceId ?? ttsVoiceId) }?.name ?? ttsManager.manifest?.voiceName ?? "Breeze",
             isFollowing: ttsBridge.isFollowing, sleepTimerLabel: ttsManager.sleepTimerLabel, playbackStatus: ttsManager.playbackStatus,
             onSettings: { showSettings = true },
             onPlayPause: { ttsManager.togglePause() }, onSkipBack: { ttsManager.skip(-15) },
