@@ -1,5 +1,11 @@
 import Foundation
 
+struct TTSVoiceCatalogue: Decodable, Sendable {
+    struct DefaultVoice: Decodable, Sendable { let voiceId: String; let revision: String }
+    let voices: [TTSVoice]
+    let defaultVoice: DefaultVoice?
+}
+
 struct TTSAPIClient: Sendable {
     let baseURL: URL
     init(backendURL: String? = nil) {
@@ -39,10 +45,9 @@ struct TTSAPIClient: Sendable {
     }
 
     func voices() async throws -> [TTSVoice] {
-        struct Envelope: Decodable { let voices: [TTSVoice] }
-        let result: Envelope = try await request("/api/tts/voices")
-        return result.voices
+        try await voiceCatalogue().voices
     }
+    func voiceCatalogue() async throws -> TTSVoiceCatalogue { try await request("/api/tts/voices") }
     func createVoice(name: String, audio: Data, transcript: String) async throws -> TTSVoice {
         struct Body: Encodable { let name: String; let audioBase64: String; let transcript: String; let provider: String }
         struct Response: Decodable { let voice: TTSVoice }

@@ -155,7 +155,7 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
             }
         } catch { errorMessage = error.localizedDescription }
         save()
-        Task { await reconcileTransfers(); startRefreshLoop() }
+        Task { await reconcileTransfers(); await refreshVoices(); startRefreshLoop() }
     }
     func reconnectBackgroundSession() { _ = session }
     private func finishBackgroundEventsIfPossible() {
@@ -200,10 +200,22 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
     func refreshVoices() async {
         lastVoiceRefresh = Date()
         do {
-            let client = TTSAPIClient(); voices = try await client.voices()
+            let client = TTSAPIClient()
+            let catalogue = try await client.voiceCatalogue()
+            voices = catalogue.voices
+            if let preferred = catalogue.defaultVoice, voices.contains(where: { $0.id == preferred.voiceId }) {
+                let key = "tts.appliedServerDefault." + client.baseURL.absoluteString
+                if UserDefaults.standard.string(forKey: key) != preferred.revision {
+                    UserDefaults.standard.set(preferred.voiceId, forKey: "tts.voice")
+                    UserDefaults.standard.set(preferred.revision, forKey: key)
+                }
+            }
             try JSONEncoder().encode(voices).write(to: TTSStorage.root.appendingPathComponent("voices.json"), options: .atomic)
             for voice in voices {
-                if voice.isCustom && voice.status == "ready" { try await saveReferenceIfMissing(voice, client: client) }
+                if voice.isCustom && voice.status == "ready" {
+                    do { try await saveReferenceIfMissing(voice, client: client) }
+                    catch { errorMessage = error.localizedDescription }
+                }
                 if let preview = voice.preview, voice.isCustom || preview.status == "ready", !records.contains(where: { $0.id == preview.id && ($0.isAvailable || $0.state == "downloading") }) { track(preview, client: client, preview: true) }
             }
             errorMessage = nil
@@ -326,7 +338,10 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
                     if current.status == "ready" { try await beginDownload(current, client: client) }
                 }
             } catch {
-                if let index = records.firstIndex(where: { $0.id == record.id }) { records[index].error = error.localizedDescription }
+                if let index = records.firstIndex(where: { $0.id == record.id }) {
+                    if records[index].isPreview && records[index].state == "downloading" { records[index].state = "failed" }
+                    records[index].error = error.localizedDescription
+                }
             }
         }
         save()
@@ -340,6 +355,30 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
         records[index].manifest = manifest; records[index].state = "downloading"; records[index].bytesExpected = manifest.audioBytes
         let transferID = rendition.id + ":" + UUID().uuidString
         records[index].transferID = transferID
+        // Samples are small and should be ready to audition even on cellular.
+        // Chapter transfers retain the user's Wi-Fi-only background policy.
+        if records[index].isPreview {
+            save()
+            var request = URLRequest(url: try client.url(path))
+            request.allowsCellularAccess = true
+            request.timeoutInterval = 60
+            let (temporary, response) = try await URLSession.shared.download(for: request)
+            let staged = TTSStorage.root.appendingPathComponent("incoming-" + UUID().uuidString + ".m4a")
+            try FileManager.default.moveItem(at: temporary, to: staged)
+            defer { try? FileManager.default.removeItem(at: staged) }
+            guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
+                throw TTSError.request("Could not download this voice sample. Try again.")
+            }
+            try await TTSStorage.verify(staged: staged, manifest: manifest)
+            guard let current = records.firstIndex(where: { $0.id == rendition.id && $0.state == "downloading" && $0.transferID == transferID }) else { return }
+            try TTSStorage.commit(staged: staged, manifest: manifest)
+            records[current].state = "downloaded"
+            records[current].bytesReceived = manifest.audioBytes
+            records[current].error = nil
+            records[current].updatedAt = Date()
+            save()
+            return
+        }
         let resumePath = TTSStorage.root.appendingPathComponent(rendition.id + ".resume")
         let task: URLSessionDownloadTask
         if let resumeData = try? Data(contentsOf: resumePath) {
@@ -435,6 +474,13 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
     }
     private func reconcileTransfers() async {
         let tasks = await session.allTasks
+        // Migrate previews left waiting on the background session's Wi-Fi policy.
+        let previews = Set(records.filter { $0.isPreview && $0.state == "downloading" }.compactMap(\.transferID))
+        for index in records.indices where records[index].isPreview && records[index].state == "downloading" {
+            records[index].transferID = nil
+            records[index].state = "waiting"
+        }
+        tasks.filter { $0.taskDescription.map(previews.contains) == true }.forEach { $0.cancel() }
         let known = Set(records.compactMap(\.transferID))
         tasks.filter { task in task.taskDescription.map { !known.contains($0) } ?? true }.forEach { $0.cancel() }
         let active = Set(tasks.compactMap(\.taskDescription))
