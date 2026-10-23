@@ -559,11 +559,22 @@ final class LibraryChapterCounts {
         var unread = 0
         /// Chapters whose download finished and is on disk.
         var downloaded = 0
-        /// Newest `dateUpload` and `dateFetch`. Only filled when the caller
-        /// asked for dates (`hasDates`), because each is one more query.
+        /// Unread chapters the last refresh added and Updates has not been
+        /// cleared of. Filled only when `loaded` has `.newCount`.
+        var new = 0
+        /// Newest `dateUpload` and `dateFetch`. Filled only when `loaded`
+        /// has `.dates`.
         var latestUpload: Date?
         var latestFetch: Date?
-        var hasDates = false
+        /// Which optional fields were computed. Each is extra queries per
+        /// entry, so a caller asks only for what it shows or sorts by.
+        var loaded: Extras = []
+    }
+
+    struct Extras: OptionSet, Sendable {
+        let rawValue: Int
+        static let dates = Extras(rawValue: 1)
+        static let newCount = Extras(rawValue: 2)
     }
 
     /// How long a count is trusted. Short enough that finishing a chapter shows
@@ -575,6 +586,9 @@ final class LibraryChapterCounts {
     /// Bumped by `invalidate()` so a count that started before a change cannot
     /// write a stale answer back into the cache.
     private var generation = 0
+    /// Every extra any caller has asked for. Folded into each computation so
+    /// two views asking for different extras do not keep evicting each other.
+    private var wanted: Extras = []
 
     private init() {}
 
@@ -591,13 +605,15 @@ final class LibraryChapterCounts {
         cache.removeAll()
     }
 
-    func counts(for entry: Entry, container: ModelContainer, includeDates: Bool = false) async -> Counts {
+    func counts(for entry: Entry, container: ModelContainer, extras: Extras = []) async -> Counts {
         let id = entry.persistentModelID
-        if let cached = cached(id), cached.hasDates || !includeDates { return cached }
+        wanted.formUnion(extras)
+        if let cached = cached(id), cached.loaded.isSuperset(of: extras) { return cached }
         if let running = inFlight[id] {
             let counts = await running.value
-            if counts.hasDates || !includeDates { return counts }
+            if counts.loaded.isSuperset(of: extras) { return counts }
         }
+        let computing = wanted
 
         let url = entry.url
         let sourceKey = entry.sourceKey
@@ -621,7 +637,15 @@ final class LibraryChapterCounts {
                 let unread = try context.fetchCount(FetchDescriptor<Chapter>(predicate: unreadInEntry))
                 let downloaded = try context.fetchCount(FetchDescriptor<Chapter>(predicate: downloadedInEntry))
                 var counts = Counts(total: total, unread: unread, downloaded: downloaded)
-                if includeDates {
+                if computing.contains(.newCount) {
+                    let newInEntry = #Predicate<Chapter> {
+                        $0.entry?.url == url && $0.entry?.sourceKey == sourceKey
+                            && !$0.read && $0.dateFetch != nil
+                    }
+                    counts.new = try context.fetchCount(FetchDescriptor<Chapter>(predicate: newInEntry))
+                    counts.loaded.insert(.newCount)
+                }
+                if computing.contains(.dates) {
                     var upload = FetchDescriptor<Chapter>(
                         predicate: #Predicate<Chapter> {
                             $0.entry?.url == url && $0.entry?.sourceKey == sourceKey && $0.dateUpload != nil
@@ -638,7 +662,7 @@ final class LibraryChapterCounts {
                     fetch.fetchLimit = 1
                     counts.latestUpload = try context.fetch(upload).first?.dateUpload
                     counts.latestFetch = try context.fetch(fetch).first?.dateFetch
-                    counts.hasDates = true
+                    counts.loaded.insert(.dates)
                 }
                 return counts
             } catch {

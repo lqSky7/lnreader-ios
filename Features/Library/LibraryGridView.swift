@@ -129,8 +129,9 @@ struct InteractiveGridCell: View {
 
 struct NovelGridCell: View {
     var transitionNamespace: Namespace.ID? = nil
-    @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
+    private var badgePrefs = LibraryBadgePrefs()
     @Environment(\.modelContext) private var modelContext
+    @Environment(SourceManager.self) private var sourceManager
     let novel: Entry
     let displayMode: DisplayMode
     var isEditing: Bool = false
@@ -142,25 +143,24 @@ struct NovelGridCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .topTrailing) {
-                ZStack(alignment: .topLeading) {
-                    NovelCoverView(
-                        url: novel.displayThumbnailURL,
-                        aspectRatio: LayoutConstants.coverAspectRatio
-                    )
-                    .bookTransitionSource(novel.persistentModelID, in: transitionNamespace)
+            ZStack(alignment: .topLeading) {
+                NovelCoverView(
+                    url: novel.displayThumbnailURL,
+                    aspectRatio: LayoutConstants.coverAspectRatio
+                )
+                .bookTransitionSource(novel.persistentModelID, in: transitionNamespace)
 
-                    if isEditing {
-                        DeleteBadge(action: onDelete)
-                            .offset(x: -6, y: -6)
-                            .transition(.scale.combined(with: .opacity))
-                            .zIndex(10)
-                    }
+                if isEditing {
+                    DeleteBadge(action: onDelete)
+                        .offset(x: -6, y: -6)
+                        .transition(.scale.combined(with: .opacity))
+                        .zIndex(10)
                 }
-
-                if showUnreadBadges, !isEditing, let unread = counts?.unread, unread > 0 {
-                    BadgeView(count: unread)
-                        .padding(6)
+            }
+            // An overlay, not a sibling: it takes exactly the cover's size.
+            .overlay {
+                if !isEditing, let badges = badges, !badges.isEmpty {
+                    LibraryCoverBadges(badges: badges)
                 }
             }
 
@@ -184,11 +184,20 @@ struct NovelGridCell: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .task(id: novel.persistentModelID) {
+        .task(id: LibraryCountsTaskID(id: novel.persistentModelID, extras: badgePrefs.extras.rawValue)) {
             if let cached = LibraryChapterCounts.shared.cached(novel.persistentModelID) {
                 counts = cached
             }
-            counts = await LibraryChapterCounts.shared.counts(for: novel, container: modelContext.container)
+            counts = await LibraryChapterCounts.shared.counts(
+                for: novel, container: modelContext.container, extras: badgePrefs.extras)
         }
+    }
+
+    private var badges: LibraryBadges? {
+        guard let counts else { return nil }
+        return LibraryBadges.resolve(
+            unread: counts.unread, downloaded: counts.downloaded, new: counts.new,
+            lang: sourceManager.source(for: novel)?.lang, isLocal: novel.isLocal,
+            settings: badgePrefs.settings)
     }
 }

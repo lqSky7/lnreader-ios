@@ -10,6 +10,9 @@ struct GeneralSettingsView: View {
 
     @AppStorage("general.confirmRemove") private var confirmRemove = true
     @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
+    @AppStorage("general.showDownloadBadges") private var showDownloadBadges = false
+    @AppStorage("general.showLanguageBadges") private var showLanguageBadges = false
+    @AppStorage("general.showNewBadges") private var showNewBadges = false
 
     var body: some View {
         Form {
@@ -33,8 +36,18 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            Section {
+                Toggle("Unread count", isOn: $showUnreadBadges).tint(AppTheme.controlFill)
+                Toggle("New chapters", isOn: $showNewBadges).tint(AppTheme.controlFill)
+                Toggle("Downloaded count", isOn: $showDownloadBadges).tint(AppTheme.controlFill)
+                Toggle("Source language", isOn: $showLanguageBadges).tint(AppTheme.controlFill)
+            } header: {
+                Text("Library badges")
+            } footer: {
+                Text("New counts unread chapters found by a refresh, until you clear Updates.")
+            }
+
             Section("Library") {
-                Toggle("Show unread badges", isOn: $showUnreadBadges).tint(AppTheme.controlFill)
                 Toggle("Confirm before remove", isOn: $confirmRemove).tint(AppTheme.controlFill)
             }
         }

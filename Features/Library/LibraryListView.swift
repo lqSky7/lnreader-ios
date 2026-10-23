@@ -121,8 +121,9 @@ struct InteractiveListRow: View {
 
 struct LibraryListRow: View {
     var transitionNamespace: Namespace.ID? = nil
-    @AppStorage("general.showUnreadBadges") private var showUnreadBadges = true
+    private var badgePrefs = LibraryBadgePrefs()
     @Environment(\.modelContext) private var modelContext
+    @Environment(SourceManager.self) private var sourceManager
     let novel: Entry
     var isEditing: Bool = false
     var onDelete: () -> Void = {}
@@ -167,8 +168,11 @@ struct LibraryListRow: View {
 
                 HStack(spacing: 12) {
                     Label("\(counts?.total ?? 0)", systemImage: "list.number")
-                    if showUnreadBadges, let unread = counts?.unread, unread > 0 {
-                        Label("\(unread)", systemImage: "eye.slash")
+                    if let badges = badges {
+                        if badges.unread > 0 { Label("\(badges.unread)", systemImage: "eye.slash") }
+                        if badges.new > 0 { Label("\(badges.new)", systemImage: "sparkles") }
+                        if badges.downloaded > 0 { Label("\(badges.downloaded)", systemImage: "arrow.down.circle") }
+                        if let language = badges.language { Text(language) }
                     }
                 }
                 .font(Typography.small)
@@ -180,11 +184,20 @@ struct LibraryListRow: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .frame(minHeight: LayoutConstants.listRowHeight)
-        .task(id: novel.persistentModelID) {
+        .task(id: LibraryCountsTaskID(id: novel.persistentModelID, extras: badgePrefs.extras.rawValue)) {
             if let cached = LibraryChapterCounts.shared.cached(novel.persistentModelID) {
                 counts = cached
             }
-            counts = await LibraryChapterCounts.shared.counts(for: novel, container: modelContext.container)
+            counts = await LibraryChapterCounts.shared.counts(
+                for: novel, container: modelContext.container, extras: badgePrefs.extras)
         }
+    }
+
+    private var badges: LibraryBadges? {
+        guard let counts else { return nil }
+        return LibraryBadges.resolve(
+            unread: counts.unread, downloaded: counts.downloaded, new: counts.new,
+            lang: sourceManager.source(for: novel)?.lang, isLocal: novel.isLocal,
+            settings: badgePrefs.settings)
     }
 }

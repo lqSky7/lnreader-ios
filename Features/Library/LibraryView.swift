@@ -471,7 +471,7 @@ struct LibraryView: View {
         var loaded: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
         for novel in novels {
             if Task.isCancelled { return }
-            loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container, includeDates: needsChapterDates)
+            loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container, extras: needsChapterDates ? .dates : [])
         }
         filterCounts = loaded
     }

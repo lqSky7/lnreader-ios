@@ -50,7 +50,7 @@ per-series settings store comes first because reader modes, filters and incognit
 | R7 | Library filters | **Implemented; device check pending** | — |
 | R8 | Library sorts (per category) | **Implemented; device check pending** | R7 |
 | R9 | Categories: per-category sort, display, update scope | **Implemented; device check pending** | R7, R8 |
-| R10 | Library badges | Planned | — |
+| R10 | Library badges | **Implemented; device check pending** | — |
 | R11 | Duplicate detection | Planned | — |
 | R12 | Migrate manga / novel to another source | Planned | R11 |
 | R13 | Incognito mode | Planned | — |
@@ -181,6 +181,22 @@ the range, and the volume is restored after closing the reader or backgrounding 
   by Updates and the background refresh, and a category refresh updates only its titles.
 - **R10 badges.** Unread, downloaded, source/language, "new". Compute off-main and cache;
   badges are the main per-cell cost in the grid.
+
+- **R10 as built.** Four toggles under Settings → General → Library badges:
+  unread (the old toggle, same key, on by default), new chapters, downloaded count and
+  source language; the last three are off by default so the grid looks as it did.
+  `LibraryBadges.resolve` (`Models/Enums/LibraryBadges.swift`) decides what a cell shows
+  from the cached counts, and `LanguageLabel` turns a source's tag ("pt-BR") or name
+  ("English") into "EN" / "PT-BR" / "MULTI" / "LOCAL". "New" is unread chapters whose
+  `dateFetch` is still set, so it clears with Updates, and is never more than unread.
+  Counts stay off-main: `LibraryChapterCounts.counts(for:container:extras:)` takes `.newCount`
+  or `.dates`, each costing extra queries only when asked, and remembers every extra any
+  caller wanted so the sort pass and the cells do not evict each other (they stay on for
+  the session once requested). Grid cells draw `LibraryCoverBadges` as an overlay on the
+  cover (state top right, facts top left); list rows add symbols to the caption line.
+  Checked headless by `scripts/check-library-badges.sh`; typechecks. Device check: badges
+  do not move cell heights, toggling a badge updates cells without a relaunch, and the grid
+  scrolls as smoothly as before with all four on.
 
 ### Library maintenance (R11–R13)
 
@@ -342,6 +358,7 @@ are separate from the implemented local `.lnbk` snapshot.
 | `scripts/check-v2-scanlators.sh` | Dedup/hide rules, hidden-winner fallback |
 | `scripts/check-library-sorts.sh` | Every sort order and direction, nil dates, tie-breaks, per-category store |
 | `scripts/check-library-categories.sh` | Per-category display store, exclude-from-updates flag, update scope |
+| `scripts/check-library-badges.sh` | Badge settings, count clamping, new-vs-unread, language labels |
 | `scripts/check-v2-reader-settings.sh` | Per-series reader settings: resolution, persistence, reset, make default |
 | `scripts/try-mangafire.sh` | Live MangaFire through the host (network required) |
 | `scripts/profile-hotpaths.sh` | Library counts, progress writes, chapter rows and ordering at library scale |
