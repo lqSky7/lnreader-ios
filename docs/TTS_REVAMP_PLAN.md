@@ -1,3 +1,5 @@
+> Historical Qwen plan. New narration uses Breeze TTS 2; see the 24 October 2026 entry in V2_PROGRESS.md and the backend Breeze pipeline document. Existing Qwen downloads remain compatible.
+
 # Offline Qwen narration
 
 Implementation record: 19 October 2026. This supersedes the initial research plan. Ubuntu starts with fresh accounts and an empty library. There is no Render account migration.

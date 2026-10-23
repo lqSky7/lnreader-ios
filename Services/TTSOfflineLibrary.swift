@@ -124,7 +124,13 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
             if let data = try? Data(contentsOf: deletionURL) { pendingDeletions = try JSONDecoder().decode([TTSAudioDeletion].self, from: data) }
             if let data = try? Data(contentsOf: indexURL), let saved = try? JSONDecoder().decode([TTSDownloadRecord].self, from: data) { records = saved }
             records.removeAll { record in pendingDeletions.contains { $0.backendURL == record.backendURL && $0.bookId == record.rendition.bookId && $0.chapterId == record.rendition.chapterId && $0.voiceId == record.rendition.voiceId } }
-            if let data = try? Data(contentsOf: TTSStorage.root.appendingPathComponent("voices.json")), let saved = try? JSONDecoder().decode([TTSVoice].self, from: data) { voices = saved }
+            if let data = try? Data(contentsOf: TTSStorage.root.appendingPathComponent("voices.json")), let saved = try? JSONDecoder().decode([TTSVoice].self, from: data) {
+                let current = saved.filter { !$0.id.hasPrefix("qwen-") }
+                voices = current + TTSVoice.presets.filter { preset in !current.contains { $0.id == preset.id } }
+            }
+            if UserDefaults.standard.string(forKey: "tts.voice")?.hasPrefix("qwen-") == true {
+                UserDefaults.standard.set("breeze-warm", forKey: "tts.voice")
+            }
             // Recover a completed atomic package if iOS terminated us before the index commit.
             for directory in try FileManager.default.contentsOfDirectory(at: TTSStorage.root, includingPropertiesForKeys: nil) where TTSStorage.validID(directory.lastPathComponent) {
                 let id = directory.lastPathComponent
@@ -139,7 +145,7 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
                     records[index].state = "downloaded"; records[index].manifest = manifest; records[index].error = nil
                     records[index].bytesExpected = manifest.audioBytes; records[index].bytesReceived = manifest.audioBytes
                 } else {
-                    records.append(.init(id: id, rendition: rendition, state: "downloaded", bytesReceived: manifest.audioBytes, bytesExpected: manifest.audioBytes, isPreview: ["qwen-previews", "custom-voice-previews"].contains(manifest.bookId), backendURL: TTSAPIClient().baseURL.absoluteString, manifest: manifest))
+                    records.append(.init(id: id, rendition: rendition, state: "downloaded", bytesReceived: manifest.audioBytes, bytesExpected: manifest.audioBytes, isPreview: ["breeze-previews", "qwen-previews", "custom-voice-previews"].contains(manifest.bookId), backendURL: TTSAPIClient().baseURL.absoluteString, manifest: manifest))
                 }
             }
             for index in records.indices where records[index].isAvailable {
@@ -176,14 +182,18 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
         return try? JSONDecoder().decode(TTSChapterText.self, from: data)
     }
     var migratedDefaultVoice: String {
-        let value = UserDefaults.standard.string(forKey: "tts.voice") ?? "qwen-ryan"
-        return voices.contains { $0.id == value } || records.contains { $0.rendition.voiceId == value && $0.isAvailable } ? value : "qwen-ryan"
+        let value = UserDefaults.standard.string(forKey: "tts.voice") ?? "breeze-warm"
+        return !value.hasPrefix("qwen-") && voices.contains(where: { $0.id == value }) ? value : "breeze-warm"
     }
     private func selectionKey(_ bookId: String, _ chapterId: String) -> String {
         "tts.selection." + SHA256.hash(data: Data((bookId + "\u{0}" + chapterId).utf8)).map { String(format: "%02x", $0) }.joined()
     }
     func selectedVoice(bookId: String, chapterId: String) -> String {
-        UserDefaults.standard.string(forKey: selectionKey(bookId, chapterId)) ?? UserDefaults.standard.string(forKey: selectionKey(bookId, "__book_default__")) ?? migratedDefaultVoice
+        let selected = UserDefaults.standard.string(forKey: selectionKey(bookId, chapterId)) ?? UserDefaults.standard.string(forKey: selectionKey(bookId, "__book_default__")) ?? migratedDefaultVoice
+        if selected.hasPrefix("qwen-"), !records.contains(where: { $0.isAvailable && $0.rendition.bookId == bookId && $0.rendition.chapterId == chapterId && $0.rendition.voiceId == selected }) {
+            return migratedDefaultVoice
+        }
+        return selected
     }
     func selectVoice(_ id: String, bookId: String, chapterId: String) { UserDefaults.standard.set(id, forKey: selectionKey(bookId, chapterId)); objectWillChange.send() }
     func setBookVoice(_ id: String, bookId: String) { selectVoice(id, bookId: bookId, chapterId: "__book_default__") }
@@ -384,7 +394,7 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
     func delete(_ id: String, deferServer: Bool = false) async {
         guard TTSStorage.validID(id), let record = records.first(where: { $0.id == id }) else { return }
         let scope = TTSAudioDeletion(bookId: record.rendition.bookId, chapterId: record.rendition.chapterId, voiceId: record.rendition.voiceId, backendURL: record.backendURL)
-        if record.rendition.bookId != "qwen-previews", !pendingDeletions.contains(scope) {
+        if !["breeze-previews", "qwen-previews"].contains(record.rendition.bookId), !pendingDeletions.contains(scope) {
             pendingDeletions.append(scope)
             do { try JSONEncoder().encode(pendingDeletions).write(to: deletionURL, options: .atomic) }
             catch { pendingDeletions.removeAll { $0 == scope }; errorMessage = "Could not save the deletion. Please try again."; return }

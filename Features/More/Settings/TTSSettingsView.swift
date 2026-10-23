@@ -2,17 +2,17 @@ import SwiftUI
 
 struct TTSSettingsView: View {
     @AppStorage("tts.enabled") private var enabled = true
-    @AppStorage("tts.voice") private var defaultVoice = "qwen-ryan"
+    @AppStorage("tts.voice") private var defaultVoice = "breeze-warm"
     @ObservedObject private var library = TTSOfflineLibrary.shared
     @State private var selected: Set<String> = []
     @State private var showStorage = false
     var body: some View {
         Form {
-            Section { Toggle("Enable narration", isOn: $enabled); QwenComputePicker() }.tint(AppTheme.controlFill)
+            Section { Toggle("Enable narration", isOn: $enabled); NarrationComputePicker() }.tint(AppTheme.controlFill)
             Section {
-                QwenVoicePicker(selected: $selected)
+                NarrationVoicePicker(selected: $selected)
             } header: { Text("Default narrator") }
-              footer: { Text("Qwen narration is prepared with your selected provider. Download chapters and voices ahead of time to listen offline. Native language describes the voice's original accent.") }
+              footer: { Text("Breeze narration is prepared with your selected provider. These narrators are voice designs made for LNReader. Preview a voice, then download chapters to listen offline.") }
             Section {
                 if let engine = library.engineState, engine.needsAttention {
                     Label(engine.message, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.secondary)

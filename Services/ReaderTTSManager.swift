@@ -12,7 +12,7 @@ private typealias CoverImage = NSImage
 #endif
 
 /// Plays verified local chapters or verified cached parts of a preparing chapter.
-/// Model inference always stays on the selected remote Qwen worker.
+/// Model inference always stays on the selected remote Breeze worker.
 @MainActor
 final class ReaderTTSManager: ObservableObject {
     static let shared = ReaderTTSManager()
