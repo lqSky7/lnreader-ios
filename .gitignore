@@ -27,3 +27,6 @@ LNReader.xcodeproj/xcshareddata/xcschemes/
 
 # Local secrets (AniList client id/secret live here; never commit)
 .env
+
+# Per-developer signing (see Config/Local.xcconfig.example)
+Config/Local.xcconfig

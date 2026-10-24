@@ -1,0 +1,9 @@
+// Signing.xcconfig
+// Shared defaults. Your own team and bundle id belong in Config/Local.xcconfig
+// (git-ignored), so nobody's signing setup lands in a commit or a merge.
+
+DEVELOPMENT_TEAM =
+BUNDLE_ID_SUFFIX =
+PRODUCT_BUNDLE_IDENTIFIER = com.lnreader.app$(BUNDLE_ID_SUFFIX)
+
+#include? "Local.xcconfig"
