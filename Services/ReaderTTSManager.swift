@@ -12,7 +12,7 @@ private typealias CoverImage = NSImage
 #endif
 
 /// Plays verified local chapters or verified cached parts of a preparing chapter.
-/// Model inference always stays on the selected remote Qwen worker.
+/// Model inference always stays on the selected remote Breeze worker.
 @MainActor
 final class ReaderTTSManager: ObservableObject {
     static let shared = ReaderTTSManager()
@@ -348,7 +348,7 @@ final class ReaderTTSManager: ObservableObject {
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: manifest.title,
             MPMediaItemPropertyAlbumTitle: manifest.bookTitle,
-            MPMediaItemPropertyArtist: manifest.voiceName,
+            MPMediaItemPropertyArtist: TTSOfflineLibrary.shared.voices.first { $0.id == manifest.voiceId }?.name ?? manifest.voiceName,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
             MPNowPlayingInfoPropertyPlaybackRate: isPaused ? 0 : rate,

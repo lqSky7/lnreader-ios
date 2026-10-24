@@ -80,7 +80,7 @@ struct ReaderView: View {
     @AppStorage("reader.lineFocusLines") private var lineFocusLines = 1
     @AppStorage("reader.lineFocusDulling") private var lineFocusDulling = "mid"
     @AppStorage("reader.verticalPadding") private var verticalPadding: Double = 20
-    @AppStorage("tts.voice") private var ttsVoiceId: String = "qwen-ryan"
+    @AppStorage("tts.voice") private var ttsVoiceId: String = "breeze-warm"
     @AppStorage("tts.speed") private var ttsSpeed: Double = 1.0
 
     @ObservedObject private var focusManager = FocusModeManager.shared
@@ -754,7 +754,7 @@ struct ReaderView: View {
             isPlaying: !ttsManager.isPaused, isBuffering: ttsManager.isBuffering,
             elapsed: ttsManager.elapsed, duration: ttsManager.duration, rate: ttsManager.rate,
             voiceId: ttsManager.manifest?.voiceId ?? ttsVoiceId,
-            voiceName: ttsManager.manifest?.voiceName ?? "Qwen",
+            voiceName: audioLibrary.voices.first { $0.id == (ttsManager.manifest?.voiceId ?? ttsVoiceId) }?.name ?? ttsManager.manifest?.voiceName ?? "Breeze",
             isFollowing: ttsBridge.isFollowing, sleepTimerLabel: ttsManager.sleepTimerLabel, playbackStatus: ttsManager.playbackStatus,
             onSettings: { showSettings = true },
             onPlayPause: { ttsManager.togglePause() }, onSkipBack: { ttsManager.skip(-15) },

@@ -47,7 +47,7 @@ struct TTSManifest: Codable, Identifiable, TTSPlaybackManifest {
 
     func validate() throws {
         guard schema == 1, id.count == 64, id.allSatisfy(\.isHexDigit),
-              ["Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"].contains(modelID),
+              ["BreezeBlue/Breeze-TTS-2", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"].contains(modelID),
               duration.isFinite, duration > 0, audioBytes > 0,
               audioSHA256.count == 64, audioSHA256.allSatisfy(\.isHexDigit),
               !blocks.isEmpty, !words.isEmpty else { throw TTSError.invalidManifest }
@@ -75,13 +75,7 @@ extension TTSPlaybackManifest {
         }
         guard low > 0 else { return nil }
         let word = words[low - 1]
-        if time < word.end { return word }
-        // Bridge short recognition gaps using the next known timestamp. Long
-        // paragraph pauses and the end of the chapter still clear immediately.
-        guard low < words.count else { return nil }
-        let next = words[low]
-        guard next.paragraphIndex == word.paragraphIndex, next.start - word.end <= 0.8 else { return nil }
-        return time < (word.end + next.start) / 2 ? word : next
+        return time < word.end ? word : nil
     }
 
     func time(paragraph: Int, offset: Int) -> Double? {
@@ -138,15 +132,10 @@ struct TTSVoice: Codable, Identifiable, Sendable {
     var isCustom: Bool { kind == "custom" }
 
     static let presets: [TTSVoice] = [
-        .init(id: "qwen-ryan", name: "Ryan", speaker: "Ryan", nativeLanguage: "English", description: "Dynamic, rhythmic male narrator"),
-        .init(id: "qwen-aiden", name: "Aiden", speaker: "Aiden", nativeLanguage: "English", description: "Warm, clear American male narrator"),
-        .init(id: "qwen-vivian", name: "Vivian", speaker: "Vivian", nativeLanguage: "Chinese", description: "Bright female voice"),
-        .init(id: "qwen-serena", name: "Serena", speaker: "Serena", nativeLanguage: "Chinese", description: "Gentle, warm female voice"),
-        .init(id: "qwen-uncle-fu", name: "Uncle Fu", speaker: "Uncle_Fu", nativeLanguage: "Chinese", description: "Mellow, seasoned male voice"),
-        .init(id: "qwen-dylan", name: "Dylan", speaker: "Dylan", nativeLanguage: "Chinese", description: "Youthful male voice"),
-        .init(id: "qwen-eric", name: "Eric", speaker: "Eric", nativeLanguage: "Chinese", description: "Bright, slightly husky male voice"),
-        .init(id: "qwen-anna", name: "Anna", speaker: "Ono_Anna", nativeLanguage: "Japanese", description: "Light, expressive female voice"),
-        .init(id: "qwen-sohee", name: "Sohee", speaker: "Sohee", nativeLanguage: "Korean", description: "Warm, expressive female voice")
+        .init(id: "breeze-warm", name: "Miles", speaker: "S0", nativeLanguage: "English", description: "Warm, clear American male storyteller"),
+        .init(id: "breeze-clear", name: "Nora", speaker: "S0", nativeLanguage: "English", description: "Clear, composed American female storyteller"),
+        .init(id: "breeze-calm", name: "Iris", speaker: "S0", nativeLanguage: "English", description: "Soft, thoughtful British female storyteller"),
+        .init(id: "breeze-storyteller", name: "Rowan", speaker: "S0", nativeLanguage: "English", description: "Rich, grounded British male storyteller")
     ]
 }
 
@@ -265,7 +254,7 @@ struct TTSStreamingManifest: Codable, TTSPlaybackManifest {
         for word in words {
             guard blocks.indices.contains(word.paragraphIndex), word.sourceStart >= 0,
                   word.sourceEnd > word.sourceStart, word.sourceEnd <= blocks[word.paragraphIndex].utf16.count,
-                  word.start.isFinite, word.end.isFinite, word.start >= previous, word.end > word.start,
+                  word.start.isFinite, word.end.isFinite, word.start >= previous, word.end >= word.start,
                   word.end <= duration + 0.05 else { throw TTSError.invalidManifest }
             previous = word.start
         }

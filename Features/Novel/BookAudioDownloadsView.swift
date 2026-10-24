@@ -24,7 +24,7 @@ final class TTSVoicePreviewPlayer: NSObject, ObservableObject, AVAudioPlayerDele
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) { Task { @MainActor [weak self] in self?.stop() } }
 }
 
-struct QwenVoicePicker: View {
+struct NarrationVoicePicker: View {
     @ObservedObject private var library = TTSOfflineLibrary.shared
     @ObservedObject private var preview = TTSVoicePreviewPlayer.shared
     @Binding var selected: Set<String>
@@ -41,8 +41,8 @@ struct QwenVoicePicker: View {
                         VStack(alignment: .leading, spacing: 3) {
                             TTSVoiceChip(voiceId: voice.id, name: voice.name)
                             Text(voice.description).font(.caption).foregroundStyle(.secondary)
-                            Text(voice.isCustom ? "Your voice · English narration" : "Native voice: \(voice.nativeLanguage) · English narration").font(.caption2).foregroundStyle(.secondary)
-                            if voice.isCustom, let error = voice.preview?.error { Text(error).font(.caption2).foregroundStyle(.orange) }
+                            Text(voice.isCustom ? "Your voice · English narration" : "LNReader voice design · English narration").font(.caption2).foregroundStyle(.secondary)
+                            if let error = voice.preview?.error { Text(error).font(.caption2).foregroundStyle(.orange) }
                         }
                         Spacer()
                     }.frame(minHeight: 48)
@@ -50,6 +50,14 @@ struct QwenVoicePicker: View {
                 if let sample = library.records.first(where: { $0.isPreview && $0.isAvailable && $0.rendition.voiceId == voice.id }) {
                     Button { preview.play(sample) } label: { Image(systemName: preview.voiceId == voice.id ? "stop.fill" : "play.fill").frame(width: 44, height: 44) }
                         .accessibilityLabel("\(preview.voiceId == voice.id ? "Stop" : "Play") downloaded \(voice.name) preview")
+                } else if let sample = voice.preview, sample.status == "failed" {
+                    Button {
+                        Task {
+                            do { try await TTSAPIClient().action("retry", renditionId: sample.id); await library.refreshVoices() }
+                            catch { library.errorMessage = error.localizedDescription }
+                        }
+                    } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
+                    .accessibilityLabel("Retry \(voice.name) preview")
                 } else {
                     Image(systemName: "arrow.down.circle").foregroundStyle(.tertiary).frame(width: 44, height: 44).accessibilityLabel("Preview is being prepared")
                 }
@@ -82,7 +90,7 @@ struct QwenVoicePicker: View {
     }
 }
 
-struct QwenComputePicker: View {
+struct NarrationComputePicker: View {
     @AppStorage("tts.provider") private var provider = "kaggle"
     @State private var providers: [TTSComputeProvider] = []
     @State private var error: String?
@@ -274,7 +282,7 @@ struct BookAudioDownloadsView: View {
             }
             .sheet(isPresented: $showVoices) {
                 NavigationStack {
-                    List { Section { QwenComputePicker() }; Section("Narrator") { QwenVoicePicker(selected: $selectedVoices) } }
+                    List { Section { NarrationComputePicker() }; Section("Narrator") { NarrationVoicePicker(selected: $selectedVoices) } }
                         .navigationTitle("Choose voices").navigationBarTitleDisplayMode(.large)
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") {
                             if let voice = selectedVoices.sorted().first { library.setBookVoice(voice, bookId: bookId) }
@@ -497,7 +505,7 @@ struct BookAudioDownloadsView: View {
         case "downloaded": return "Available offline · " + ByteCountFormatter.string(fromByteCount: record.bytesExpected, countStyle: .file)
         case "waiting":
             if record.rendition.status == "ready" { return "Ready on server · waiting for transfer" }
-            let label = record.rendition.status == "loading" ? "Loading Qwen models" : record.rendition.status == "generating" ? "Generating speech" : record.rendition.status == "assembling" ? "Assembling audio" : record.rendition.status.capitalized
+            let label = record.rendition.status == "loading" ? "Loading Breeze models" : record.rendition.status == "generating" ? "Generating speech" : record.rendition.status == "assembling" ? "Assembling audio" : record.rendition.status.capitalized
             return "\(label) · \(record.rendition.completedChunks)/\(record.rendition.totalChunks) parts"
         case "downloading": return "Downloading to this phone"
         default: return record.state.capitalized
@@ -679,7 +687,7 @@ private struct CustomVoiceCreationView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section { QwenComputePicker() }
+                Section { NarrationComputePicker() }
                 Section {
                     TextField("Voice name", text: $name).textInputAutocapitalization(.words)
                 }
@@ -999,7 +1007,7 @@ struct TTSChapterAudioDetailView: View {
         case "downloaded": return "Available offline"
         case "waiting":
             if record.rendition.status == "ready" { return "Ready on server · waiting for transfer" }
-            let label = record.rendition.status == "loading" ? "Loading Qwen models" : record.rendition.status == "generating" ? "Generating speech" : record.rendition.status == "assembling" ? "Assembling audio" : record.rendition.status.capitalized
+            let label = record.rendition.status == "loading" ? "Loading Breeze models" : record.rendition.status == "generating" ? "Generating speech" : record.rendition.status == "assembling" ? "Assembling audio" : record.rendition.status.capitalized
             return "\(label) · \(record.rendition.completedChunks)/\(record.rendition.totalChunks) parts"
         case "downloading": return "Downloading to this phone"
         default: return record.state.capitalized

@@ -484,3 +484,20 @@ which is fragile once re-signed.
   by counting files on disk against the Sources phase.
 - **Never let that patch touch non-Swift references.** An earlier version removed
   `Assets.xcassets` and the app icon, and the build still succeeded.
+
+## 24 October 2026 — Breeze narration migration
+
+- New narration uses Breeze TTS 2 with the original 16-bit checkpoint; no added quantization.
+- Replaced the nine Qwen presets with four clearly labeled LNReader voice designs, matching the backend catalogue. Custom reference voices remain supported.
+- New default narrator is Warm narrator. Stale cached Qwen catalogue entries no longer appear as new preparation options; existing downloaded Qwen packages remain readable.
+- Added Breeze model validation and accepted measured zero-length word timing bins without inventing highlighting durations.
+- Narration settings and preparation status now name Breeze. Failed voice previews expose a retry action.
+- iOS Simulator build passed. Backend runtime/deployment evidence is maintained in `lnreader-backend/docs/breeze-tts-2.md`.
+
+### Voice samples and account default follow-up
+
+- Voice samples download automatically at startup using small foreground transfers, including on cellular. Chapter downloads retain their Wi-Fi-only background policy.
+- Repaired previews stranded in the old background session; moved downloaded AAC to a `.m4a` staging path before AVFoundation validates duration.
+- Confirmed the four standard narrator previews are saved offline on the connected iPhone, with matching package hashes and no local errors.
+- The voice catalogue can carry an account default narrator and revision. The app applies each revision once, preserving subsequent manual choices.
+- Signed iPhone Release build and installation passed. Chapter requests are reaching production; GPU generation progress is tracked separately from local downloads.

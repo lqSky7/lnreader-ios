@@ -28,7 +28,7 @@ struct ChapterDisplay { let path: String; let name: String; let position: Int }
                 precondition(manifest.time(paragraph: 0, offset: 16) == 1.2, "Number expansion must seek to its first spoken word")
                 precondition(manifest.word(at: 0.7)?.sourceStart == 9, "Use the media clock with UTF-16 offsets after emoji")
                 precondition(manifest.word(at: 1.7)?.sourceStart == 15)
-                precondition(manifest.word(at: 0.46)?.sourceStart == 9, "Short recognition gaps predict the next word from known timestamps")
+                precondition(manifest.word(at: 0.46) == nil, "Recognition gaps must not invent a word highlight")
                 precondition(manifest.word(at: 2.5) == nil, "The last word must not stick through chapter trailing silence")
                 precondition(manifest.word(at: -1) == nil && manifest.word(at: .nan) == nil)
                 var corrupt = data
