@@ -415,6 +415,11 @@ which is fragile once re-signed.
 - **Invariant: behave consistently.** The same kind of surface must act the same way across
   the app. Reader settings (novel and manga) are a half-height sheet with a single `.medium`
   detent; scrolling never grows it. Change one, change the other.
+- **Swipe right from the left edge goes back.** Pushed screens get the system gesture; the
+  full-screen readers (manga and novel) use `EdgeSwipeDismiss` (screen-edge recognizer, so it
+  never competes with scrolling or paging) and ignore it while a sheet is open. The manga
+  reader also keeps its leftward swipe from the right edge. New full-screen surfaces that hide
+  the back button must add it.
 - **Settings screens use `.settingsScreen(_:)`** (`Design/Theme.swift`): large sentence-case
   title plus the `AppTheme.controlFill` tint, applied once to the Form. Do not tint toggles
   one by one, and do not title-case labels ("Reader settings", "Sort order").

@@ -115,7 +115,7 @@ struct MangaReaderView: View {
         }
         .background { volumeKeys }
         .background(EdgeSwipeDismiss {
-            guard !isDismissing else { return }
+            guard !isDismissing, !showChapterSheet, !showReaderSettings else { return }
             isDismissing = true
             dismiss()
         })

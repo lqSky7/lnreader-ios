@@ -151,6 +151,10 @@ struct ReaderView: View {
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
             .statusBarHidden(true)
+            .background(EdgeSwipeDismiss(edges: [.left]) {
+                guard !showSettings, !showChapterList, !showLoginSheet, !showCommentsSheet, !showAudioDownloads else { return }
+                dismiss()
+            })
             .onChange(of: chrome) { _, state in ttsBridge.setControlsVisible(state.isControl) }
             .sheet(isPresented: $showSettings) { settingsSheet }
             .fullScreenCover(isPresented: $showChapterList) { chapterListSheet }
