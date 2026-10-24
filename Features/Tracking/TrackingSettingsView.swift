@@ -35,8 +35,7 @@ struct TrackingSettingsView: View {
                 Text("When you finish a chapter of a tracked title, AniList is updated with your highest chapter read. Updates made offline are sent when you are back online.")
             }
         }
-        .navigationTitle("Tracking")
-        .navigationBarTitleDisplayMode(.inline)
+        .settingsScreen("Tracking")
         .alert("Couldn't log in", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(error ?? "") }
