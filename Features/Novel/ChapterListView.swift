@@ -72,8 +72,12 @@ struct ChapterListView: View {
                     }
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease")
-                        .foregroundStyle(selectedFilter == .all ? Color.primary : Color.accentColor)
                         .frame(width: 40, height: 40)
+                        .overlay(alignment: .topTrailing) {
+                            if selectedFilter != .all {
+                                Circle().fill(AppTheme.primaryFill).frame(width: 9, height: 9).offset(x: -6, y: 6)
+                            }
+                        }
                 }.buttonStyle(.glass).accessibilityLabel("Sort and filter chapters")
 
                 if let scanlatorSettings {
@@ -367,7 +371,7 @@ struct ChapterDirectoryView: View {
                         Picker("Filter", selection: Binding(get: { selectedFilter }, set: { selectedFilter = $0; page = 0 })) {
                             ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
                         }
-                    } label: { Image(systemName: "line.3.horizontal.decrease").foregroundStyle(selectedFilter == .all ? Color.primary : Color.accentColor) }.accessibilityLabel("Filter chapters")
+                    } label: { Image(systemName: "line.3.horizontal.decrease").overlay(alignment: .topTrailing) { if selectedFilter != .all { Circle().fill(AppTheme.primaryFill).frame(width: 8, height: 8).offset(x: 3, y: -3) } } }.accessibilityLabel("Filter chapters")
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { if let onClose { onClose() } else { dismiss() } } }
             }

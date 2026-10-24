@@ -13,11 +13,21 @@ struct LibraryToolbar: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             Button(action: onShowOptions) {
-                // The filled symbol's glyph is a cut-out, which the toolbar
-                // renders as a plain white disc; tint the outline instead.
-                Label("Filter, sort and display", systemImage: "line.3.horizontal.decrease.circle")
-                    .foregroundStyle(isCustomised ? Color.accentColor : Color.primary)
+                // The accent is plain white in dark mode, so tinting the icon
+                // cannot show "on". A dot does, in any colour scheme.
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .overlay(alignment: .topTrailing) {
+                        if isCustomised {
+                            Circle()
+                                .fill(AppTheme.primaryFill)
+                                .frame(width: 9, height: 9)
+                                .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
+                                .offset(x: 2, y: -2)
+                        }
+                    }
             }
+            .accessibilityLabel("Filter, sort and display")
+            .accessibilityValue(isCustomised ? "Filters on" : "")
 
             Menu {
                 Button(action: onImport) {
