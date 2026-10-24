@@ -53,4 +53,10 @@ enum AppMotion {
     static func gentle(reduceMotion: Bool) -> Animation? {
         reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.03)
     }
+
+    /// Switching between peer lists (library categories, browse catalogues).
+    /// One duration so the two screens feel the same.
+    static func tabSwitch(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.4)
+    }
 }

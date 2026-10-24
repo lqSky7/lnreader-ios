@@ -3,8 +3,7 @@
 //
 // Novels come from the JS plugin registry, manga from installed extension
 // bundles, so the two lists have different sections and different empty states.
-// A segmented control switches between them in place, which is the native iOS
-// pattern for two peer lists.
+// A native segmented control in a glass top bar switches between them in place.
 
 import SwiftUI
 
@@ -33,6 +32,7 @@ enum BrowseKind: String, CaseIterable, Identifiable {
 struct BrowseView: View {
     @Environment(PluginManager.self) private var pluginManager
     @Environment(SourceManager.self) private var sourceManager
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @AppStorage("browse.kind") private var kindRaw = BrowseKind.novels.rawValue
@@ -48,6 +48,15 @@ struct BrowseView: View {
         NavigationStack {
             content
                 .navigationTitle("Browse")
+                .navigationBarTitleDisplayMode(.large)
+                .searchable(
+                    text: $searchText,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: searchPrompt
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .toolbar { toolbarContent }
                 .navigationDestination(for: PluginListItem.self) { plugin in
                     SourceDetailView(
                         sourceKey: SourceKey.make(kind: .novel, id: plugin.id),
@@ -63,80 +72,56 @@ struct BrowseView: View {
         }
     }
 
-    // MARK: - Browse controls
+    // MARK: - Toolbar
 
-    private var browseControls: some View {
-        VStack(spacing: 10) {
-            kindSwitcher
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(searchPrompt, text: $searchText)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Clear search")
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if kind == .novels {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    GlobalSearchView()
+                } label: {
+                    Image(systemName: "text.magnifyingglass")
                 }
+                .accessibilityLabel("Search all sources")
             }
-            .padding(.horizontal, 12)
-            .frame(height: 44)
-            .background(Color(uiColor: .systemGray6), in: RoundedRectangle(cornerRadius: 14))
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var kindSwitcher: some View {
-        GeometryReader { geometry in
-            let segmentWidth = (geometry.size.width - 12) / 2
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.white)
-                    .frame(width: segmentWidth, height: 36)
-                    .offset(x: kind == .novels ? 4 : segmentWidth + 8)
-                    .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.78), value: kindRaw)
-
-                HStack(spacing: 4) {
-                    ForEach(BrowseKind.allCases) { option in
-                        let isSelected = kind == option
-                        Button {
-                            guard kind != option else { return }
-                            kindRaw = option.rawValue
-                        } label: {
-                            Text(option.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(isSelected ? Color.black : Color.primary)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-                    }
-                }
-                .padding(.horizontal, 4)
+            if !pluginManager.availableLanguages.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) { languageMenu }
             }
         }
-        .frame(height: 44)
-        .background(Color(uiColor: .systemGray6), in: RoundedRectangle(cornerRadius: 14))
-        .sensoryFeedback(.selection, trigger: kindRaw)
     }
 
-    private var globalSearchButton: some View {
-        NavigationLink {
-            GlobalSearchView()
+    /// Language filter. A menu rather than a chip row: it is a rarely changed
+    /// setting, and the chips pushed the sources down the screen.
+    private var languageMenu: some View {
+        Menu {
+            Picker("Language", selection: $selectedLanguage) {
+                Text("All Languages").tag(String?.none)
+                ForEach(pluginManager.availableLanguages, id: \.self) { lang in
+                    Text(lang).tag(String?.some(lang))
+                }
+            }
         } label: {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 19, weight: .semibold))
-                .frame(width: 54, height: 54)
-                .glassEffect(.regular.interactive(), in: .circle)
+            Image(systemName: selectedLanguage == nil
+                ? "line.3.horizontal.decrease"
+                : "line.3.horizontal.decrease.circle.fill")
         }
-        .accessibilityLabel("Global Search")
-        .padding(.trailing, 20)
-        .padding(.bottom, 10)
+        .accessibilityLabel("Language")
+        .accessibilityValue(selectedLanguage ?? "All")
+    }
+
+    // MARK: - Kind switcher
+
+    /// Native segmented control: on iOS 26 it renders as glass and morphs the
+    /// selection for free. It floats in the top bar so the list scrolls under it.
+    private var kindSwitcher: some View {
+        Picker("Catalogue", selection: $kindRaw) {
+            ForEach(BrowseKind.allCases) { option in
+                Text(option.title).tag(option.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+        .sensoryFeedback(.selection, trigger: kindRaw)
     }
 
     private var searchPrompt: String {
@@ -145,70 +130,59 @@ struct BrowseView: View {
 
     // MARK: - Content
 
+    /// One list for both catalogues. The switcher is its first row, so it scrolls
+    /// away with the content instead of pinning over the navigation bar's search
+    /// field, and switching kinds cross-fades rows in place: no second scroll view, no
+    /// whole-page transition to lag behind the gesture.
     private var content: some View {
-        // The switcher and search field are chrome, not content: they sit above
-        // the pager so a swipe moves only the source list. Paging the whole
-        // screen made every swipe drag a duplicate of the controls with it.
-        Group {
-            if kind == .novels { novelsPage } else { mangaPage }
-        }
-        .horizontalSwipe(selection: $kindRaw, options: BrowseKind.allCases.map(\.rawValue))
-        // `safeAreaInset`, not a VStack: the list has to know the header is
-        // there, otherwise it adds its own navigation-bar inset and leaves a
-        // gap between the search field and the first row.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            browseControls
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 10)
-                .background(Color(uiColor: .systemBackground))
-        }
-        // An overlay, not a safe-area inset: an inset on the pager reserved a
-        // strip that nothing painted, which is the black bar under the list.
-        .overlay(alignment: .bottomTrailing) {
-            if kind == .novels { globalSearchButton }
-        }
-    }
-
-    private var novelsPage: some View {
         List {
-            novelSourcesContent
-        }
-        // Room to scroll the last row clear of the floating search button.
-        .contentMargins(.bottom, 96, for: .scrollContent)
-        .refreshable { await loadPlugins(forceRefresh: true) }
-    }
-
-    private var mangaPage: some View {
-        List {
-            mangaSourcesContent
+            Section {
+                kindSwitcher
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+            if kind == .novels { novelSourcesContent } else { mangaSourcesContent }
         }
         .refreshable { await loadPlugins(forceRefresh: true) }
+        // Rows cross-fade in place. Animating the rows, not the list, keeps the
+        // scroll view (and the nav bar tracking it) alive, so it stays cheap.
+        .animation(AppMotion.tabSwitch(reduceMotion: reduceMotion), value: kindRaw)
+        .simultaneousGesture(kindSwipe)
+    }
+
+    /// Steps between catalogues on a clearly horizontal swipe. Only reacts when
+    /// the drag ends, so vertical scrolling is never touched.
+    private var kindSwipe: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onEnded { value in
+                let dx = value.translation.width
+                guard abs(dx) > 80, abs(dx) > abs(value.translation.height) * 2 else { return }
+                let target: BrowseKind = dx < 0 ? .manga : .novels
+                if target != kind { kindRaw = target.rawValue }
+            }
     }
 
     @ViewBuilder
     private var novelSourcesContent: some View {
         if !installedPlugins.isEmpty {
-            Section("Installed Sources") {
+            Section("Installed · \(installedPlugins.count)") {
                 ForEach(installedPlugins) { plugin in
                     NavigationLink(value: plugin) {
-                        SourceCard(plugin: plugin, isInstalled: true) {
+                        SourceCard(plugin: plugin, isInstalled: true) {}
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
                             pluginManager.uninstallPlugin(id: plugin.id)
+                        } label: {
+                            Label("Uninstall", systemImage: "trash")
                         }
                     }
                 }
             }
         }
 
-        if !pluginManager.availableLanguages.isEmpty {
-            Section("Language") {
-                languageFilterRow
-            }
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-        }
-
-        Section("Available Sources") {
+        Section(selectedLanguage.map { "Available · \($0)" } ?? "Available") {
             ForEach(availablePlugins) { plugin in
                 SourceCard(plugin: plugin, isInstalled: false) {
                     Task {
@@ -217,20 +191,30 @@ struct BrowseView: View {
                 }
             }
         }
+
+        if installedPlugins.isEmpty && availablePlugins.isEmpty && !searchText.isEmpty {
+            ContentUnavailableView.search(text: searchText)
+                .listRowBackground(Color.clear)
+        }
     }
 
     @ViewBuilder
     private var mangaSourcesContent: some View {
         if mangaSources.isEmpty {
             Section {
-                ContentUnavailableView(
-                    "No manga sources",
-                    systemImage: "books.vertical",
-                    description: Text("Install an extension bundle to read manga.")
-                )
+                if searchText.isEmpty {
+                    ContentUnavailableView(
+                        "No manga sources",
+                        systemImage: "books.vertical",
+                        description: Text("Install an extension bundle to read manga.")
+                    )
+                } else {
+                    ContentUnavailableView.search(text: searchText)
+                }
             }
+            .listRowBackground(Color.clear)
         } else {
-            Section("Installed Extensions") {
+            Section("Installed · \(mangaSources.count)") {
                 ForEach(mangaSources, id: \.key) { source in
                     NavigationLink {
                         SourceDetailView(sourceKey: source.key, title: source.name)
@@ -244,25 +228,26 @@ struct BrowseView: View {
 
     private func mangaRow(_ source: any CatalogSource) -> some View {
         HStack(spacing: 12) {
-            SourceIconView(source: source, size: 36)
+            SourceIconView(source: source, size: 44)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.name)
+                    .font(.body.weight(.medium))
                     .lineLimit(1)
-                HStack(spacing: 6) {
-                    if !source.lang.isEmpty {
-                        Text(source.lang.uppercased())
-                    }
-                    if !source.supportsLatest {
-                        Text("·")
-                        Text("Popular only")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(mangaSubtitle(source))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private func mangaSubtitle(_ source: any CatalogSource) -> String {
+        var parts: [String] = []
+        if !source.lang.isEmpty { parts.append(source.lang.uppercased()) }
+        if !source.supportsLatest { parts.append("Popular only") }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Filtering
@@ -296,45 +281,6 @@ struct BrowseView: View {
             initializedLanguage = true
         }
         await pluginManager.restoreInstalledPlugins()
-    }
-
-    // MARK: - Language Filter
-
-    private var languageFilterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                languageChip("All", isSelected: selectedLanguage == nil) {
-                    selectedLanguage = nil
-                }
-                ForEach(pluginManager.availableLanguages, id: \.self) { lang in
-                    languageChip(lang, isSelected: selectedLanguage == lang) {
-                        selectedLanguage = lang
-                    }
-                }
-            }
-            .padding(.top, 2)
-            .padding(.bottom, 2)
-        }
-        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: -8, trailing: 0))
-    }
-
-    @ViewBuilder
-    private func languageChip(
-        _ title: String,
-        isSelected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .frame(minHeight: 44)
-                .foregroundStyle(isSelected ? Color.black : Color.primary)
-        }
-        .buttonStyle(.plain)
-        .background(isSelected ? Color.white : Color(uiColor: .systemGray6), in: Capsule())
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 

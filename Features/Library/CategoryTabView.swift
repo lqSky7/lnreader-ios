@@ -127,7 +127,7 @@ struct CategoryTabView: View {
                 suppressTap = false
                 return
             }
-            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { action() }
+            withAnimation(AppMotion.tabSwitch(reduceMotion: reduceMotion)) { action() }
         } label: {
             HStack(spacing: 4) {
                 Text(title)
