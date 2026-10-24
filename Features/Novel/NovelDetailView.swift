@@ -130,8 +130,9 @@ struct NovelDetailView: View {
                     ChapterListView(
                         entry: localEntry,
                         allChapters: allChapters,
+                        visibleChapters: orderedChapters,
                         chapters: pagedChapters,
-                        totalCount: allChapters.count,
+                        totalCount: orderedChapters.count,
                         filteredCount: filteredChapters.count,
                         showsAllChapters: showsAllChapters,
                         scanlatorSettings: scanlatorSettings,

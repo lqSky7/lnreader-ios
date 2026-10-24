@@ -8,6 +8,9 @@ struct ChapterListView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let entry: Entry?
     var allChapters: [ChapterDisplay] = []
+    /// `allChapters` after scanlator rules. The directory shows this; the
+    /// scanlator sheet still needs `allChapters` to list every scanlator.
+    var visibleChapters: [ChapterDisplay]? = nil
     let chapters: [ChapterDisplay]
     let totalCount: Int
     let filteredCount: Int
@@ -33,7 +36,7 @@ struct ChapterListView: View {
 
     /// The whole list in the chosen order, built when the directory opens.
     private var directoryChapters: [ChapterDisplay] {
-        let all = allChapters.isEmpty ? chapters : allChapters
+        let all = visibleChapters ?? (allChapters.isEmpty ? chapters : allChapters)
         return all.sorted { ascending ? $0.sortNumber < $1.sortNumber : $0.sortNumber > $1.sortNumber }
     }
 
