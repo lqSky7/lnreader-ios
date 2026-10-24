@@ -8,19 +8,34 @@
 import SwiftUI
 import UIKit
 
-struct WebtoonStrip: UIViewControllerRepresentable {
+/// One chapter's pages in the strip. Chapters are stitched end to end, each
+/// followed by a divider card naming the next one.
+struct WebtoonSegment {
+    /// The chapter's URL.
+    let id: String
     let pages: [SourcePage]
+    /// Title of the chapter that follows; `nil` when there is none, which also drops the divider.
+    let nextTitle: String?
+}
+
+/// What a row of the strip shows.
+private enum WebtoonItem {
+    case page(segment: Int, index: Int, page: SourcePage)
+    /// The divider after a segment. `loading` while the next chapter is still being fetched.
+    case divider(segment: Int, title: String, loading: Bool)
+}
+
+struct WebtoonStrip: UIViewControllerRepresentable {
+    let segments: [WebtoonSegment]
     let sourceKey: String
     let loader: PageLoader
-    /// Page to open on. Only read when the strip is built.
+    /// Page of the first segment to open on. Only read when the strip is built.
     let startIndex: Int
-    /// Title of the next chapter; `nil` when there is none, which also drops the end card.
-    let nextChapterTitle: String?
     let controller: WebtoonScrollController
-    /// The page at the top of the screen changed.
-    let onPageChange: (Int) -> Void
-    /// The end card became fully visible or stopped being.
-    let onEndCard: (Bool) -> Void
+    /// The page at the top of the screen changed: its chapter and index in it.
+    let onPageChange: (String, Int) -> Void
+    /// The divider after this chapter became fully visible; `nil` when none is.
+    let onEndCard: (String?) -> Void
     /// A tap, in the strip's own (screen) coordinates.
     let onTap: (CGPoint) -> Void
 
@@ -40,7 +55,7 @@ struct WebtoonStrip: UIViewControllerRepresentable {
         vc.onPageChange = onPageChange
         vc.onEndCard = onEndCard
         vc.onTap = onTap
-        vc.update(pages: pages, nextChapterTitle: nextChapterTitle)
+        vc.update(segments: segments)
     }
 }
 
@@ -53,24 +68,25 @@ final class WebtoonViewController: UIViewController,
     /// from the first bytes of the image (`PageImageCache.aspectRatios`) and
     /// replace it without moving what is on screen.
     private static let fallbackRatio: CGFloat = 0.7
+    private static let dividerHeight: CGFloat = 220
 
     var sourceKey = ""
     var loader: PageLoader?
-    var onPageChange: ((Int) -> Void)?
-    var onEndCard: ((Bool) -> Void)?
+    var onPageChange: ((String, Int) -> Void)?
+    var onEndCard: ((String?) -> Void)?
     var onTap: ((CGPoint) -> Void)?
 
     private let startIndex: Int
     private let controller: WebtoonScrollController
-    private var pages: [SourcePage] = []
-    private var nextChapterTitle: String?
-    private var indexByURL: [String: Int] = [:]
+    private var segments: [WebtoonSegment] = []
+    private var items: [WebtoonItem] = []
+    private var indexByURL: [String: [Int]] = [:]
 
     private let layout = UICollectionViewFlowLayout()
     private var collectionView: UICollectionView!
     private var didRestore = false
     private var lastReported: Int
-    private var endCardVisible = false
+    private var endCardSegment: String?
     private var lastWidth: CGFloat = 0
     private var pendingRatios: Set<Int> = []
     private var flushScheduled = false
@@ -118,7 +134,15 @@ final class WebtoonViewController: UIViewController,
         collectionView.addGestureRecognizer(tap)
 
         controller.attach(collectionView)
-        controller.jumpToPage = { [weak self] index in self?.jump(to: index) }
+        controller.jumpToPage = { [weak self] chapter, index in
+            guard let self, let item = self.items.firstIndex(where: {
+                if case let .page(segment, pageIndex, _) = $0 {
+                    return self.segments[segment].id == chapter && pageIndex == index
+                }
+                return false
+            }) else { return }
+            self.jump(to: item)
+        }
 
         observer = NotificationCenter.default.addObserver(
             forName: PageImageCache.ratioLearned, object: nil, queue: .main
@@ -130,44 +154,62 @@ final class WebtoonViewController: UIViewController,
 
     // MARK: Data
 
-    func update(pages newPages: [SourcePage], nextChapterTitle title: String?) {
-        let samePages = newPages.count == pages.count
-            && zip(newPages, pages).allSatisfy { $0.url == $1.url }
-        guard !samePages || title != nextChapterTitle else { return }
-        pages = newPages
-        nextChapterTitle = title
-        indexByURL = Dictionary(newPages.enumerated().map { ($1.url, $0) }, uniquingKeysWith: { first, _ in first })
+    func update(segments newSegments: [WebtoonSegment]) {
+        let same = newSegments.count == segments.count && zip(newSegments, segments).allSatisfy { new, old in
+            new.id == old.id && new.nextTitle == old.nextTitle && new.pages.count == old.pages.count
+                && zip(new.pages, old.pages).allSatisfy { $0.url == $1.url }
+        }
+        guard !same else { return }
+        segments = newSegments
+        var built: [WebtoonItem] = []
+        var lookup: [String: [Int]] = [:]
+        for (segment, entry) in newSegments.enumerated() {
+            for (index, page) in entry.pages.enumerated() {
+                lookup[page.url, default: []].append(built.count)
+                built.append(.page(segment: segment, index: index, page: page))
+            }
+            if let title = entry.nextTitle {
+                built.append(.divider(segment: segment, title: title, loading: segment == newSegments.count - 1))
+            }
+        }
+        items = built
+        indexByURL = lookup
         if isViewLoaded { collectionView.reloadData() }
     }
 
-    private var itemCount: Int { pages.count + (nextChapterTitle == nil ? 0 : 1) }
+    private var itemCount: Int { items.count }
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { itemCount }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        if indexPath.item >= pages.count {
+        switch items[indexPath.item] {
+        case let .divider(_, title, loading):
             let cell = collectionView.dequeueReusableCell(
                 withReuseIdentifier: WebtoonEndCell.reuseID, for: indexPath) as! WebtoonEndCell
-            cell.show(title: nextChapterTitle ?? "")
+            cell.show(title: title, loading: loading)
+            return cell
+        case let .page(_, _, page):
+            let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: WebtoonPageCell.reuseID, for: indexPath) as! WebtoonPageCell
+            if let loader {
+                cell.show(
+                    page: page,
+                    sourceKey: sourceKey,
+                    loader: loader,
+                    targetWidth: collectionView.bounds.width * traitCollection.displayScale,
+                    scale: traitCollection.displayScale
+                )
+            }
             return cell
         }
-        let cell = collectionView.dequeueReusableCell(
-            withReuseIdentifier: WebtoonPageCell.reuseID, for: indexPath) as! WebtoonPageCell
-        if let loader {
-            cell.show(
-                page: pages[indexPath.item],
-                sourceKey: sourceKey,
-                loader: loader,
-                targetWidth: collectionView.bounds.width * traitCollection.displayScale,
-                scale: traitCollection.displayScale
-            )
-        }
-        return cell
     }
 
     func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
         guard let loader else { return }
-        let wanted = indexPaths.map(\.item).filter { pages.indices.contains($0) }.map { pages[$0] }
+        let wanted: [SourcePage] = indexPaths.compactMap {
+            if case let .page(_, _, page) = items[$0.item] { return page }
+            return nil
+        }
         PagePrerender.prime(
             wanted,
             sourceKey: sourceKey,
@@ -180,8 +222,8 @@ final class WebtoonViewController: UIViewController,
     // MARK: Sizing
 
     private func height(forItem item: Int, width: CGFloat) -> CGFloat {
-        if item >= pages.count { return max(collectionView.bounds.height * 0.5, 240) }
-        let ratio = PageImageCache.aspectRatios[pages[item].url] ?? Self.fallbackRatio
+        guard case let .page(_, _, page) = items[item] else { return Self.dividerHeight }
+        let ratio = PageImageCache.aspectRatios[page.url] ?? Self.fallbackRatio
         let scale = max(traitCollection.displayScale, 1)
         // Whole device pixels, so neighbouring pages never leave a seam.
         return (width / max(ratio, 0.01) * scale).rounded() / scale
@@ -200,8 +242,8 @@ final class WebtoonViewController: UIViewController,
     /// slot is above the screen, shift the offset by the same amount so what the
     /// reader is looking at does not move.
     private func ratioLearned(forURL url: String) {
-        guard let index = indexByURL[url] else { return }
-        pendingRatios.insert(index)
+        guard let indices = indexByURL[url] else { return }
+        pendingRatios.formUnion(indices)
         guard !flushScheduled else { return }
         flushScheduled = true
         DispatchQueue.main.async { [weak self] in self?.flushRatios() }
@@ -270,23 +312,29 @@ final class WebtoonViewController: UIViewController,
         let bottom = top + scrollView.bounds.height
 
         var current: Int?
-        var endVisible = false
+        var endSegment: String?
         for path in collectionView.indexPathsForVisibleItems.sorted() {
             guard let frame = layout.layoutAttributesForItem(at: path)?.frame, frame.height > 0 else { continue }
             let visible = min(frame.maxY, bottom) - max(frame.minY, top)
-            if path.item >= pages.count {
-                endVisible = visible >= frame.height * 0.95
-            } else if current == nil, visible >= frame.height * 0.05 {
-                current = path.item
+            switch items[path.item] {
+            case let .divider(segment, _, _):
+                if visible >= frame.height * 0.95 { endSegment = segments[segment].id }
+            case .page:
+                if current == nil, visible >= frame.height * 0.05 { current = path.item }
             }
         }
-        if let current, current != lastReported {
-            lastReported = current
-            onPageChange?(current)
+        // At the very bottom the top row can be a page or two short of the last
+        // one; the reader has still reached it.
+        if top >= maxOffsetY - 1, let last = items.indices.last, case .page = items[last] {
+            current = last
         }
-        if endVisible != endCardVisible {
-            endCardVisible = endVisible
-            onEndCard?(endVisible)
+        if let current, current != lastReported, case let .page(segment, index, _) = items[current] {
+            lastReported = current
+            onPageChange?(segments[segment].id, index)
+        }
+        if endSegment != endCardSegment {
+            endCardSegment = endSegment
+            onEndCard?(endSegment)
         }
     }
 

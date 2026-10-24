@@ -30,8 +30,8 @@ final class WebtoonScrollController {
     @ObservationIgnored var onReachedEnd: (() -> Void)?
     /// Called while the strip is moving for any reason: drag, hold, auto or a screenful.
     @ObservationIgnored var onScrollActivity: (() -> Void)?
-    /// Set by the strip: scrolls the page at this index to the top.
-    @ObservationIgnored var jumpToPage: ((Int) -> Void)?
+    /// Set by the strip: scrolls the page at this index of that chapter to the top.
+    @ObservationIgnored var jumpToPage: ((String, Int) -> Void)?
 
     // MARK: State (read by the reader's overlay)
 

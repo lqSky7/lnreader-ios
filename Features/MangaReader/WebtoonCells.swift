@@ -104,15 +104,43 @@ final class WebtoonPageCell: UICollectionViewCell {
     }
 }
 
-/// The "next chapter" card after the last page.
+/// The divider between two stitched chapters.
 final class WebtoonEndCell: UICollectionViewCell {
     static let reuseID = "end"
 
-    func show(title: String) {
+    func show(title: String, loading: Bool) {
         backgroundColor = .black
         contentConfiguration = UIHostingConfiguration {
-            ChapterTransitionCard(direction: .next, title: title)
+            ChapterDivider(title: title, loading: loading)
         }
         .margins(.all, 0)
+    }
+}
+
+/// A black box with the next chapter's title, between the last page of one
+/// chapter and the first of the next.
+private struct ChapterDivider: View {
+    let title: String
+    let loading: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("Next chapter")
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(.white.opacity(0.5))
+            Text(title)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+            if loading {
+                ProgressView().tint(.white).padding(.top, 6)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .accessibilityElement(children: .combine)
     }
 }

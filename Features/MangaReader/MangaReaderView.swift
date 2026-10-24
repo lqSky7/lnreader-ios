@@ -32,6 +32,13 @@ struct MangaReaderView: View {
 
     @State private var loader = PageLoader()
     @State private var pages: [SourcePage] = []
+    /// The webtoon strip stitches chapters: the open one, then each one scrolled
+    /// into. `pages` and `chapterURL` follow whichever chapter is on screen.
+    @State private var segments: [ReaderSegment] = []
+    /// Identity of the strip; a new one rebuilds it. The chapter changing as the
+    /// reader scrolls on must not.
+    @State private var stripID = UUID()
+    @State private var appendTask: Task<Void, Never>?
     @State private var storedChapters: [Chapter] = []
     @State private var sourceChapters: [SourceChapter] = []
     @State private var isLoadingChapters = false
@@ -55,8 +62,6 @@ struct MangaReaderView: View {
     @State private var showChapterSheet = false
     /// Set when stepping back a chapter so it opens on its last page.
     @State private var landOnLastPage = false
-    /// Pending hand-off into the next chapter from the webtoon's end card.
-    @State private var webtoonAdvance: Task<Void, Never>?
     /// The webtoon's page changes while the strip is moving. Publishing each one
     /// re-renders the reader and mutates the chapter (and every `@Query` behind
     /// it), a hitch per page; they are applied once scrolling settles instead.
@@ -171,8 +176,13 @@ struct MangaReaderView: View {
         }
         .onChange(of: scanlatorSettings.value) { rebuildNavigable() }
         .onChange(of: mode) { _, _ in
-            // Re-run the layout without refetching the page list.
+            // Re-run the layout without refetching the page list. The strip
+            // starts again from the chapter that is open.
             chrome = .control
+            appendTask?.cancel()
+            appendTask = nil
+            segments = pages.isEmpty ? [] : [ReaderSegment(id: chapterURL, name: chapterName, pages: pages)]
+            stripID = UUID()
         }
     }
 
@@ -199,7 +209,7 @@ struct MangaReaderView: View {
             // so every existing page index keeps its meaning. Landing on one
             // opens the neighbouring chapter (`handlePageChange`).
             if hasChapter(offset: -1) {
-                ChapterTransitionCard(direction: .previous, title: neighbourName(-1))
+                ChapterTransitionCard(direction: .previous, title: neighbourName(-1) ?? "")
                     .tag(-1)
             }
             ForEach(pages.indices, id: \.self) { index in
@@ -207,7 +217,7 @@ struct MangaReaderView: View {
                     .tag(index)
             }
             if hasChapter(offset: 1) {
-                ChapterTransitionCard(direction: .next, title: neighbourName(1))
+                ChapterTransitionCard(direction: .next, title: neighbourName(1) ?? "")
                     .tag(pages.count)
             }
         }
@@ -223,38 +233,31 @@ struct MangaReaderView: View {
     /// jumps go through `scroller.jumpToPage`.
     private var webtoon: some View {
         WebtoonStrip(
-            pages: pages,
+            segments: stripSegments,
             sourceKey: sourceKey,
             loader: loader,
             startIndex: currentIndex,
-            nextChapterTitle: hasChapter(offset: 1) ? neighbourName(1) : nil,
             controller: scroller,
-            onPageChange: { index in pageScrolled(to: index) },
-            // The end card must be fully on screen and stay there a moment, so a
-            // fling past the last page does not skip a chapter by accident.
-            onEndCard: { visible in
-                if visible {
-                    // The end card is on screen only once the last page has been
-                    // read past: the chapter is finished, whether or not the last
-                    // page itself ever held the top of the strip.
+            onPageChange: { chapter, index in pageScrolled(in: chapter, to: index) },
+            // The divider is fully on screen only once the last page has been read
+            // past: the chapter is finished, whether or not that page ever held
+            // the top of the strip.
+            onEndCard: { chapter in
+                guard let chapter else { return }
+                if chapter == chapterURL {
                     pendingPage = nil
                     scheduleProgress(pages.count - 1)
-                    guard webtoonAdvance == nil else { return }
-                    webtoonAdvance = Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(700))
-                        guard !Task.isCancelled else { return }
-                        webtoonAdvance = nil
-                        await moveChapter(by: 1)
-                    }
-                } else {
-                    webtoonAdvance?.cancel()
-                    webtoonAdvance = nil
                 }
+                appendNextChapter()
             },
             onTap: { point in handleTap(at: point) }
         )
-        .id(chapterURL)
+        .id(stripID)
         .ignoresSafeArea()
+    }
+
+    private var stripSegments: [WebtoonSegment] {
+        segments.map { WebtoonSegment(id: $0.id, pages: $0.pages, nextTitle: neighbourName(1, of: $0.id)) }
     }
 
     private func errorView(_ message: String) -> some View {
@@ -430,13 +433,18 @@ struct MangaReaderView: View {
         // natural place to land them.
         libraryManager.flushProgress(context: modelContext)
         scroller.stopAuto()
+        appendTask?.cancel()
+        appendTask = nil
         isLoading = true
         pages = []
+        segments = []
+        stripID = UUID()
         errorMessage = nil
         loadStoredChapters()
 
         if let entryURL, let downloaded = OfflineChapters.manga(sourceKey: sourceKey, entryURL: entryURL, chapterURL: requestedURL) {
             pages = downloaded
+            segments = [ReaderSegment(id: requestedURL, name: chapterName, pages: downloaded)]
             currentIndex = resumeIndex(pageCount: downloaded.count)
             isLoading = false
             if let storedChapter, let entry = storedChapter.entry {
@@ -456,6 +464,7 @@ struct MangaReaderView: View {
             let fetched = try await source.pages(chapter)
             guard !Task.isCancelled, chapterURL == requestedURL else { return }
             pages = fetched
+            segments = [ReaderSegment(id: requestedURL, name: chapterName, pages: fetched)]
             currentIndex = resumeIndex(pageCount: fetched.count)
             isLoading = false
 
@@ -527,8 +536,11 @@ struct MangaReaderView: View {
 
     /// The strip reports every page that passes the top. Prefetching follows the
     /// scroll immediately; the state and progress updates wait for it to settle.
-    private func pageScrolled(to index: Int) {
-        guard pages.indices.contains(index) else { return }
+    private func pageScrolled(in chapter: String, to index: Int) {
+        if chapter != chapterURL { promote(to: chapter) }
+        guard chapter == chapterURL, pages.indices.contains(index) else { return }
+        // Fetch the next chapter ahead of the reader, so the divider is not a wait.
+        if chapter == segments.last?.id, index >= pages.count - 3 { appendNextChapter() }
         Task { await loader.prefetch(pages, current: index, sourceKey: sourceKey) }
         guard index != currentIndex else {
             pendingPage = nil
@@ -541,6 +553,55 @@ struct MangaReaderView: View {
             guard !Task.isCancelled else { return }
             applyPendingPage()
         }
+    }
+
+    /// The strip scrolled into another stitched chapter: it becomes the open one.
+    private func promote(to chapter: String) {
+        guard let target = segments.firstIndex(where: { $0.id == chapter }),
+              let from = segments.firstIndex(where: { $0.id == chapterURL }) else { return }
+        // Progress belongs to the chapter being left. Moving on means it was
+        // read to its end; moving back up leaves it where the reader last was.
+        if target > from {
+            settledPage?.cancel()
+            settledPage = nil
+            pendingPage = nil
+            unsavedPage = pages.count - 1
+            flushProgress()
+        } else {
+            settleAndFlushProgress()
+        }
+        chapterURL = chapter
+        chapterName = segments[target].name
+        pages = segments[target].pages
+        currentIndex = target > from ? 0 : pages.count - 1
+        if let storedChapter, let entry = storedChapter.entry {
+            libraryManager.recordHistory(entry: entry, chapter: storedChapter, context: modelContext)
+        }
+    }
+
+    /// Fetch the chapter after the last stitched one and add it to the strip.
+    private func appendNextChapter() {
+        guard mode == .webtoon, appendTask == nil, !isLoading, let last = segments.last,
+              let position = navigableChapters.firstIndex(where: { $0.url == last.id }),
+              navigableChapters.indices.contains(position + 1) else { return }
+        let next = navigableChapters[position + 1]
+        let strip = stripID
+        appendTask = Task { @MainActor in
+            defer { appendTask = nil }
+            guard let fetched = try? await fetchPages(of: next), !fetched.isEmpty,
+                  !Task.isCancelled, strip == stripID,
+                  !segments.contains(where: { $0.id == next.url }) else { return }
+            segments.append(ReaderSegment(id: next.url, name: next.name, pages: fetched))
+            await loader.prefetch(fetched, current: 0, sourceKey: sourceKey)
+        }
+    }
+
+    private func fetchPages(of chapter: SourceChapter) async throws -> [SourcePage] {
+        if let entryURL, let downloaded = OfflineChapters.manga(sourceKey: sourceKey, entryURL: entryURL, chapterURL: chapter.url) {
+            return downloaded
+        }
+        guard let source = sourceManager.mangaSource(forKey: sourceKey) else { return [] }
+        return try await source.pages(SourceChapter(url: chapter.url, name: chapter.name))
     }
 
     private func recordProgress(_ index: Int) {
@@ -707,9 +768,10 @@ struct MangaReaderView: View {
         return navigableChapters.indices.contains(target)
     }
 
-    private func neighbourName(_ offset: Int) -> String {
-        guard let current = navigableChapters.firstIndex(where: { $0.url == chapterURL }),
-              navigableChapters.indices.contains(current + offset) else { return "" }
+    private func neighbourName(_ offset: Int, of url: String? = nil) -> String? {
+        let url = url ?? chapterURL
+        guard let current = navigableChapters.firstIndex(where: { $0.url == url }),
+              navigableChapters.indices.contains(current + offset) else { return nil }
         return navigableChapters[current + offset].name
     }
 
@@ -718,7 +780,7 @@ struct MangaReaderView: View {
     private func seekPage(_ index: Int) {
         guard pages.indices.contains(index) else { return }
         currentIndex = index
-        if mode == .webtoon { scroller.jumpToPage?(index) }
+        if mode == .webtoon { scroller.jumpToPage?(chapterURL, index) }
     }
 
     /// The series' tap-zone layout decides between previous, next and the
@@ -910,4 +972,11 @@ private struct MangaPageSlider: View {
             }
         }
     }
+}
+
+/// A chapter stitched into the webtoon strip.
+private struct ReaderSegment {
+    let id: String
+    let name: String
+    let pages: [SourcePage]
 }
