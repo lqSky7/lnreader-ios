@@ -16,8 +16,14 @@ struct LibraryGridView: View {
     var onStartEditing: () -> Void
     var onSelect: (Entry) -> Void
 
+    /// Items per row; 0 picks as many as fit (`LibraryGridColumns`).
+    @AppStorage(LibraryGridColumns.key) private var columnCount = LibraryGridColumns.automatic
+
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: LayoutConstants.gridItemMinSize), spacing: 12)]
+        if columnCount >= LibraryGridColumns.range.lowerBound {
+            return Array(repeating: GridItem(.flexible(), spacing: 12), count: columnCount)
+        }
+        return [GridItem(.adaptive(minimum: LayoutConstants.gridItemMinSize), spacing: 12)]
     }
 
     var body: some View {
@@ -56,6 +62,13 @@ struct LibraryGridView: View {
         }
         .padding(.horizontal)
     }
+}
+
+/// The "items per row" preference, shared by the grid and the options sheet.
+enum LibraryGridColumns {
+    static let key = "library.gridColumns"
+    static let automatic = 0
+    static let range = 2...8
 }
 
 // MARK: - Editable Grid Cell (edit mode wrapper)

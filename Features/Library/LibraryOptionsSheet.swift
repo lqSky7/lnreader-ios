@@ -20,6 +20,7 @@ struct LibraryOptionsSheet: View {
     var hasDisplayOverride = false
     var onResetSort: () -> Void = {}
     var onResetDisplay: () -> Void = {}
+    @AppStorage(LibraryGridColumns.key) private var columnCount = LibraryGridColumns.automatic
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -184,6 +185,16 @@ struct LibraryOptionsSheet: View {
                         }
                     }
                     .accessibilityAddTraits(displayMode == mode ? .isSelected : [])
+                }
+            }
+            if displayMode != .list {
+                Section {
+                    Picker("Items per row", selection: $columnCount) {
+                        Text("Auto").tag(LibraryGridColumns.automatic)
+                        ForEach(LibraryGridColumns.range, id: \.self) { Text("\($0)").tag($0) }
+                    }
+                } footer: {
+                    Text("Applies to every category. Auto fits as many covers as the screen allows.")
                 }
             }
             if hasDisplayOverride {
