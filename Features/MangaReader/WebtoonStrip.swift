@@ -160,6 +160,14 @@ final class WebtoonViewController: UIViewController,
                 && zip(new.pages, old.pages).allSatisfy { $0.url == $1.url }
         }
         guard !same else { return }
+        // A chapter added at the end leaves every existing row where it was, so
+        // only the new rows are inserted; reloading all of them mid-scroll hitches.
+        let appended = newSegments.count > segments.count && !segments.isEmpty
+            && zip(newSegments, segments).allSatisfy { new, old in
+                new.id == old.id && new.nextTitle == old.nextTitle && new.pages.count == old.pages.count
+                    && zip(new.pages, old.pages).allSatisfy { $0.url == $1.url }
+            }
+        let oldCount = items.count
         segments = newSegments
         var built: [WebtoonItem] = []
         var lookup: [String: [Int]] = [:]
@@ -174,7 +182,19 @@ final class WebtoonViewController: UIViewController,
         }
         items = built
         indexByURL = lookup
-        if isViewLoaded { collectionView.reloadData() }
+        guard isViewLoaded else { return }
+        guard appended, built.count > oldCount else { return collectionView.reloadData() }
+        // The divider that was last stops showing its spinner.
+        let refreshed = items[..<oldCount].indices.last.flatMap { index -> IndexPath? in
+            if case .divider = items[index] { return IndexPath(item: index, section: 0) }
+            return nil
+        }
+        UIView.performWithoutAnimation {
+            collectionView.performBatchUpdates {
+                collectionView.insertItems(at: (oldCount..<built.count).map { IndexPath(item: $0, section: 0) })
+                if let refreshed { collectionView.reloadItems(at: [refreshed]) }
+            }
+        }
     }
 
     private var itemCount: Int { items.count }

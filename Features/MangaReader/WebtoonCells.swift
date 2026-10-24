@@ -104,43 +104,51 @@ final class WebtoonPageCell: UICollectionViewCell {
     }
 }
 
-/// The divider between two stitched chapters.
+/// The divider between two stitched chapters: a black box with the next
+/// chapter's title, fixed at the middle of the box.
 final class WebtoonEndCell: UICollectionViewCell {
     static let reuseID = "end"
 
-    func show(title: String, loading: Bool) {
-        backgroundColor = .black
-        contentConfiguration = UIHostingConfiguration {
-            ChapterDivider(title: title, loading: loading)
-        }
-        .margins(.all, 0)
+    private let stack = UIStackView()
+    private let caption = UILabel()
+    private let titleLabel = UILabel()
+    private let spinner = UIActivityIndicatorView(style: .medium)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        contentView.backgroundColor = .black
+
+        caption.text = "NEXT CHAPTER"
+        caption.font = .systemFont(ofSize: 12, weight: .semibold)
+        caption.textColor = UIColor.white.withAlphaComponent(0.5)
+        titleLabel.font = .preferredFont(forTextStyle: .headline)
+        titleLabel.textColor = .white
+        titleLabel.textAlignment = .center
+        titleLabel.numberOfLines = 3
+        spinner.color = .white
+        spinner.hidesWhenStopped = true
+
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 8
+        [caption, titleLabel, spinner].forEach(stack.addArrangedSubview)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            stack.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 32),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -32),
+        ])
     }
-}
 
-/// A black box with the next chapter's title, between the last page of one
-/// chapter and the first of the next.
-private struct ChapterDivider: View {
-    let title: String
-    let loading: Bool
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("Next chapter")
-                .font(.caption.weight(.semibold))
-                .textCase(.uppercase)
-                .foregroundStyle(.white.opacity(0.5))
-            Text(title)
-                .font(.headline)
-                .multilineTextAlignment(.center)
-                .lineLimit(3)
-            if loading {
-                ProgressView().tint(.white).padding(.top, 6)
-            }
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .accessibilityElement(children: .combine)
+    func show(title: String, loading: Bool) {
+        titleLabel.text = title
+        loading ? spinner.startAnimating() : spinner.stopAnimating()
+        isAccessibilityElement = true
+        accessibilityLabel = "Next chapter: \(title)"
     }
 }
