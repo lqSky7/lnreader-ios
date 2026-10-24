@@ -21,40 +21,15 @@ for argument in "$@"; do
 done
 
 DERIVED=.build/device
-DEVICES_JSON=$(mktemp)
-trap 'rm -f "$DEVICES_JSON"' EXIT
-
-xcrun devicectl list devices --json-output "$DEVICES_JSON" >/dev/null 2>&1 || true
-# First paired physical device, over USB or Wi-Fi: "<identifier>\t<name>".
-DEVICE=$(python3 -I - "$DEVICES_JSON" <<'PY'
-import json, sys
-try:
-    devices = json.load(open(sys.argv[1]))["result"]["devices"]
-except (OSError, ValueError, KeyError):
-    sys.exit(0)
-# A paired device over Wi-Fi reports tunnelState "disconnected" until a command
-# opens the tunnel, so accept any paired device and prefer one already connected.
-best = None
-for d in devices:
-    hardware = d.get("hardwareProperties", {})
-    connection = d.get("connectionProperties", {})
-    if hardware.get("reality") != "physical" or connection.get("pairingState") != "paired":
-        continue
-    connected = connection.get("tunnelState") == "connected"
-    if best is None or (connected and not best[0]):
-        best = (connected, f'{d["identifier"]}\t{d.get("deviceProperties", {}).get("name", "device")}')
-if best:
-    print(best[1])
-PY
-)
+DEVICE=$(./scripts/lib/pick-device.sh)
 
 if [ -z "$DEVICE" ]; then
   echo "install-release: no paired physical device." >&2
   echo "Pair it (USB once, then Connect via network in Xcode > Devices), then check:  xcrun devicectl list devices" >&2
   exit 1
 fi
-DEVICE_ID=${DEVICE%%	*}
-DEVICE_NAME=${DEVICE#*	}
+DEVICE_ID=$(printf '%s' "$DEVICE" | cut -f1)
+DEVICE_NAME=$(printf '%s' "$DEVICE" | cut -f3)
 
 echo "install-release: building Release for $DEVICE_NAME"
 xcodebuild \

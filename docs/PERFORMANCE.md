@@ -11,12 +11,12 @@ how to measure the next regression.
 
 ```sh
 ./scripts/profile-hotpaths.sh          # headless, no device, ~45 s
-./scripts/profile-device.sh 30         # Instruments, needs a connected iPhone
+./scripts/profile-device.sh 30         # builds Release, installs, records hitches + Time Profiler
 ```
 
 `profile-hotpaths.sh` builds a 120-book × 250-chapter store on disk and times the
 data work behind the UI. `profile-device.sh` records a Time Profiler trace of a
-real device so the parts the benchmark cannot see — body evaluation, layout,
+real device (Animation Hitches plus Time Profiler) so the parts the benchmark cannot see — body evaluation, layout,
 WebKit, image decode — are covered too.
 
 ## Numbers

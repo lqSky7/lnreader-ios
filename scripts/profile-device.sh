@@ -1,55 +1,81 @@
 #!/bin/sh
-# Records an Instruments trace of LNReader on a connected iPhone.
+# profile-device.sh — build a Release LNReader, install it on the first paired
+# iPhone/iPad (USB or Wi-Fi), launch it under Instruments, record, and open the
+# trace.
 #
-# The headless benchmark (`profile-hotpaths.sh`) covers data work; this covers
-# everything it cannot see — SwiftUI body evaluation, layout, WebKit, image
-# decode. Run it, reproduce the bad screen for the duration, then open the
-# .trace in Instruments.
+#   ./scripts/profile-device.sh                 # build + install + record 30 s
+#   ./scripts/profile-device.sh 60              # record 60 s
+#   ./scripts/profile-device.sh --no-install    # reuse what is already installed
 #
-#   ./scripts/profile-device.sh                 # 30 s, Time Profiler
-#   ./scripts/profile-device.sh 60              # 60 s
-#   ./scripts/profile-device.sh 30 com.lnreader.app
+# Records "Animation Hitches" (dropped and late frames, which is what scroll
+# jank is) together with Time Profiler (what the main thread was doing during
+# them). Release, not Debug: a Debug build's scroll numbers are not the app's.
 #
-# Requires the app already installed and running on the device. `xctrace
-# --attach` needs a debuggable build, so install a Debug build for this.
+# The app launches when recording starts; reproduce the problem straight away
+# (open a chapter, scroll). Keep the phone unlocked. Run this from a normal
+# terminal; inside an agent sandbox xcodebuild cannot resolve packages.
+#
+# The headless benchmark (`profile-hotpaths.sh`) covers data work only.
 set -eu
 cd "$(dirname "$0")/.."
 
-DURATION=${1:-30}
-BUNDLE_ID=${2:-$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" Info.plist 2>/dev/null || echo "com.lnreader.app")}
-OUT="perf-$(date +%Y%m%d-%H%M%S).trace"
+DURATION=30
+INSTALL=1
+for argument in "$@"; do
+  case "$argument" in
+    --no-install) INSTALL=0 ;;
+    ''|*[!0-9]*) echo "profile-device: unknown option '$argument'" >&2; exit 2 ;;
+    *) DURATION=$argument ;;
+  esac
+done
 
-if ! xcrun xctrace list devices 2>/dev/null | grep -q "iPhone"; then
-  echo "profile-device: no iPhone visible to xctrace." >&2
-  echo "" >&2
-  echo "Connect and trust the device, then check that it appears here:" >&2
-  echo "  xcrun xctrace list devices" >&2
-  echo "" >&2
-  echo "Without a device, run the headless benchmark instead:" >&2
-  echo "  ./scripts/profile-hotpaths.sh" >&2
+DEVICE=$(./scripts/lib/pick-device.sh)
+if [ -z "$DEVICE" ]; then
+  echo "profile-device: no paired physical device." >&2
+  echo "Pair it (USB once, then Connect via network in Xcode > Devices), then check:  xcrun devicectl list devices" >&2
   exit 1
 fi
+DEVICE_ID=$(printf '%s' "$DEVICE" | cut -f1)
+UDID=$(printf '%s' "$DEVICE" | cut -f2)
+DEVICE_NAME=$(printf '%s' "$DEVICE" | cut -f3)
+[ -n "$UDID" ] || { echo "profile-device: $DEVICE_NAME reported no UDID" >&2; exit 1; }
 
-echo "profile-device: recording ${DURATION}s of $BUNDLE_ID -> $OUT"
-echo "profile-device: reproduce the slow screen now."
+if [ "$INSTALL" -eq 1 ]; then
+  ./scripts/install-release.sh --no-launch
+fi
 
-# Time Profiler for CPU, Points of Interest for the signposts the app emits,
-# Allocations for the image caches.
+APP=.build/device/Build/Products/Release-iphoneos/LNReader.app
+[ -d "$APP" ] || { echo "profile-device: no build at $APP; run without --no-install" >&2; exit 1; }
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+
+# A paired device over Wi-Fi is listed as offline to xctrace until a command
+# opens the tunnel; installing does, and so does this.
+xcrun devicectl device info details --device "$DEVICE_ID" >/dev/null 2>&1 || true
+
+mkdir -p perf
+OUT="perf/scroll-$(date +%Y%m%d-%H%M%S).trace"
+
+echo "profile-device: recording ${DURATION}s of $BUNDLE_ID on $DEVICE_NAME -> $OUT"
+
+# --launch must be last: everything after `--` is the process to start.
 xcrun xctrace record \
-  --template 'Time Profiler' \
-  --device "$(xcrun xctrace list devices | awk '/iPhone/ {print $0; exit}' | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')" \
-  --attach "$BUNDLE_ID" \
+  --template 'Animation Hitches' \
+  --instrument 'Time Profiler' \
+  --device "$UDID" \
   --time-limit "${DURATION}s" \
-  --output "$OUT"
+  --no-prompt \
+  --output "$OUT" \
+  --launch -- "$BUNDLE_ID"
 
 echo ""
 echo "profile-device: wrote $OUT"
-echo "  open $OUT                       # Instruments"
+open "$OUT"
 echo ""
-echo "What to look at, in order:"
-echo "  1. Heaviest Stack Trace — is the main thread inside a SwiftUI body, a"
-echo "     SwiftData fetch, or WebKit?"
-echo "  2. Call Tree -> check 'Hide System Libraries' and 'Invert Call Tree' to"
-echo "     see which of *our* symbols dominate."
-echo "  3. Time Profiler -> 'Separate by Thread' — main thread work that is not"
-echo "     layout is the thing to move off it."
+echo "In Instruments:"
+echo "  1. Hitches track: how many, how long, and whether they line up with page"
+echo "     boundaries (the reported once-per-page jitter)."
+echo "  2. Select a hitch, then the Time Profiler track at the same moment."
+echo "     Call Tree -> 'Hide System Libraries' + 'Invert Call Tree' shows which of"
+echo "     our symbols the main thread was in."
+echo "  3. 'Commit' vs 'Render' hitches: commit is main-thread work (ours to fix);"
+echo "     render is the GPU or Core Animation (image size, offscreen passes)."
