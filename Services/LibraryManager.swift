@@ -312,8 +312,23 @@ final class LibraryManager {
     /// `category` limits the run to that category's titles and ignores its
     /// "exclude from updates" flag; without it, titles in excluded categories
     /// are skipped (`LibraryUpdateScope`).
+    ///
+    /// The work runs in its own task. A caller can be cancelled mid-run: the
+    /// pull-to-refresh task is cancelled by SwiftUI as soon as the first
+    /// results change the library and the view re-renders, which used to fail
+    /// every fetch after the first few with `CancellationError`. Cancelling the
+    /// caller now only stops waiting; `cancelUpdate()` is what stops the run.
     func updateLibrary(context: ModelContext, sourceManager: SourceManager, automatic: Bool = false,
                        category: String? = nil) async {
+        guard !isUpdating else { return }
+        await Task { @MainActor in
+            await self.performUpdate(context: context, sourceManager: sourceManager,
+                                     automatic: automatic, category: category)
+        }.value
+    }
+
+    private func performUpdate(context: ModelContext, sourceManager: SourceManager, automatic: Bool,
+                               category: String?) async {
         guard !isUpdating else { return }
 
         if UserDefaults.standard.object(forKey: "general.updateOnWifiOnly") as? Bool ?? true {

@@ -78,7 +78,13 @@ import UserNotifications
             let started = Date()
             if !downloadsOnly {
                 let manager = LibraryManager()
-                await manager.updateLibrary(context: context, sourceManager: sources, automatic: true)
+                // `updateLibrary` runs in its own task, so an expiring background
+                // task has to ask it to stop rather than rely on cancellation.
+                await withTaskCancellationHandler {
+                    await manager.updateLibrary(context: context, sourceManager: sources, automatic: true)
+                } onCancel: {
+                    Task { @MainActor in manager.cancelUpdate() }
+                }
                 guard !Task.isCancelled else { task.setTaskCompleted(success: false); return }
                 let chapters = (try? context.fetch(FetchDescriptor<Chapter>())) ?? []
                 let added = chapters.filter { ($0.dateFetch ?? .distantPast) >= started && $0.entry?.inLibrary == true }
