@@ -234,6 +234,11 @@ struct MangaReaderView: View {
             // fling past the last page does not skip a chapter by accident.
             onEndCard: { visible in
                 if visible {
+                    // The end card is on screen only once the last page has been
+                    // read past: the chapter is finished, whether or not the last
+                    // page itself ever held the top of the strip.
+                    pendingPage = nil
+                    scheduleProgress(pages.count - 1)
                     guard webtoonAdvance == nil else { return }
                     webtoonAdvance = Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(700))
