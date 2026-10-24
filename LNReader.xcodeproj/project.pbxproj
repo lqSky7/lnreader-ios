@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2EB6A532C3AB32DCDD0BB853 /* TrackingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F3F148E4D1241508B6D797 /* TrackingSettingsView.swift */; };
+		2E020C5BEBCE07642AC4622E /* TrackerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5E66120A74B26A910783BDE /* TrackerSheet.swift */; };
+		EE7BEE126088EBA743CE8E30 /* TrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA609549517104028BBED534 /* TrackingManager.swift */; };
+		64C899A63D3CBD6CDBB39BAB /* AniListClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC1FF6B73F774BA6649459BC /* AniListClient.swift */; };
 		04C6FC56B9070F98F8B4B3A6 /* ScanlatorRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19BE8C9EDED69C07CE5F18A /* ScanlatorRules.swift */; };
 		04D74105186AEBE9879341B0 /* SourceKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC517C802BAFA82D76F87B6E /* SourceKey.swift */; };
 		0518E7BC7FF5DA15E6F1CB52 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2B650856C28BA6DD64543A24 /* AppIcon.icon */; };
@@ -161,6 +165,10 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		42F3F148E4D1241508B6D797 /* TrackingSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracking/TrackingSettingsView.swift; sourceTree = "<group>"; };
+		B5E66120A74B26A910783BDE /* TrackerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracking/TrackerSheet.swift; sourceTree = "<group>"; };
+		CA609549517104028BBED534 /* TrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracking/TrackingManager.swift; sourceTree = "<group>"; };
+		EC1FF6B73F774BA6649459BC /* AniListClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracking/AniListClient.swift; sourceTree = "<group>"; };
 		003CA6699D27A4A3DCAFD2EF /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
 		037C592FB524AD4F9A9F370F /* NovelFireLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireLoginView.swift; sourceTree = "<group>"; };
 		08FFA9F783FE74CFB5D0A992 /* ChapterRecognition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterRecognition.swift; sourceTree = "<group>"; };
@@ -522,6 +530,8 @@
 		7191043716F4CF4E3B9A7046 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				CA609549517104028BBED534 /* TrackingManager.swift */,
+				EC1FF6B73F774BA6649459BC /* AniListClient.swift */,
 				2134FC9B8F314414383E3D90 /* TTSAudioAppDelegate.swift */,
 				D20C2FE9D0133D8131081F47 /* TTSChapterSource.swift */,
 				D629A9BAEAE61A89C750A012 /* TTSOfflineLibrary.swift */,
@@ -604,6 +614,8 @@
 		C2797BC198A90979B72E44B3 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				42F3F148E4D1241508B6D797 /* TrackingSettingsView.swift */,
+				B5E66120A74B26A910783BDE /* TrackerSheet.swift */,
 				D655B8E5BD588E349872B758 /* Auth */,
 				2AECB580643B38EAA1424ACD /* Browse */,
 				732BF66B7E8574FA3A9785A5 /* History */,
@@ -829,6 +841,10 @@
 				27353B17C2D4DDE3B62EEF65 /* LibraryManager.swift in Sources */,
 				DD654FDD6537EA03240DCD85 /* LibraryBadgeViews.swift in Sources */,
 				46299A36961922556C6A51CD /* LibraryOptionsSheet.swift in Sources */,
+				2EB6A532C3AB32DCDD0BB853 /* TrackingSettingsView.swift in Sources */,
+				2E020C5BEBCE07642AC4622E /* TrackerSheet.swift in Sources */,
+				EE7BEE126088EBA743CE8E30 /* TrackingManager.swift in Sources */,
+				64C899A63D3CBD6CDBB39BAB /* AniListClient.swift in Sources */,
 				AB15B1E92617A630F5F814B8 /* LibraryToolbar.swift in Sources */,
 				2AB970CC355C921E6044A091 /* LibraryView.swift in Sources */,
 				936C1CA9EF06DEF42FD6D430 /* LoadingView.swift in Sources */,

@@ -8,7 +8,11 @@ import SwiftUI
 struct LNReaderApp: App {
     init() {
         LibraryMaintenance.container = Self.modelContainer
+        let tracking = TrackingManager()
+        tracking.configure(container: Self.modelContainer)
+        _trackingManager = State(initialValue: tracking)
     }
+    @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     @UIApplicationDelegateAdaptor(TTSAudioAppDelegate.self) private var audioDelegate
     #endif
@@ -16,6 +20,7 @@ struct LNReaderApp: App {
     @State private var libraryManager = LibraryManager()
     @State private var syncManager = SyncManager()
     @State private var sourceManager = SourceManager()
+    @State private var trackingManager: TrackingManager
 
     /// The v2 store.
     ///
@@ -38,6 +43,11 @@ struct LNReaderApp: App {
                 .environment(libraryManager)
                 .environment(syncManager)
                 .environment(sourceManager)
+                .environment(trackingManager)
+                .task { libraryManager.tracking = trackingManager }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { Task { await trackingManager.flushPending() } }
+                }
                 .preferredColorScheme(.dark)
         }
         .modelContainer(Self.modelContainer)

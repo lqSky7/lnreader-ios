@@ -39,6 +39,7 @@ struct NovelDetailView: View {
 
     // Search + navigation state
     @State private var chapterSearch = ""
+    @State private var showTracker = false
     /// Chapter order for the detail list and the full directory (`ChapterListView` owns the menu).
     @AppStorage("chapters.ascending") private var chaptersAscending = false
     @State private var navigateToChapter: ChapterDisplay? = nil
@@ -158,6 +159,14 @@ struct NovelDetailView: View {
         .onDisappear { chapterSelection.end() }
         .toolbar(removing: .title)
         .toolbar {
+            if let localEntry, localEntry.inLibrary {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showTracker = true } label: {
+                        Image(systemName: localEntry.tracks.isEmpty ? "chart.bar" : "chart.bar.fill").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Tracking")
+                }
+            }
             // Audio is generated from chapter text, which manga don't have.
             if !isManga {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -165,6 +174,9 @@ struct NovelDetailView: View {
                         .accessibilityLabel("Manage chapter audio downloads")
                 }
             }
+        }
+        .sheet(isPresented: $showTracker) {
+            if let localEntry { TrackerSheet(entry: localEntry) }
         }
         .sheet(isPresented: $showAudioDownloads) {
             BookAudioDownloadsView(

@@ -24,3 +24,6 @@ LNReader.xcodeproj/xcshareddata/xcschemes/
 
 # Instruments traces
 *.trace
+
+# Local secrets (AniList client id/secret live here; never commit)
+.env

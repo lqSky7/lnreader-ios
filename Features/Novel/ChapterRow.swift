@@ -168,6 +168,7 @@ final class ChapterSelection {
 /// Bottom bar for a chapter selection: read state, download, and the rest.
 struct ChapterSelectionBar: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(TrackingManager.self) private var tracking
     let selection: ChapterSelection
     let entry: Entry?
     /// The list the selection was made in, in display order.
@@ -244,6 +245,7 @@ struct ChapterSelectionBar: View {
 
     private func finish() {
         try? modelContext.save()
+        if let entry { tracking.readStateChanged(entry: entry) }
         LibraryChapterCounts.shared.invalidate()
         selection.end()
     }

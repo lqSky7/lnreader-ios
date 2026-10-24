@@ -16,6 +16,9 @@ import SwiftData
 @MainActor
 final class LibraryManager {
 
+    /// Told when a chapter flips to read, so tracked titles stay in step.
+    @ObservationIgnored weak var tracking: TrackingManager?
+
     /// Whether a library-wide update is in progress.
     private(set) var isUpdating = false
 
@@ -194,7 +197,10 @@ final class LibraryManager {
         }
 
         // A chapter flipping to read is the one change the library cares about.
-        if chapter.read != wasRead { LibraryChapterCounts.shared.invalidate() }
+        if chapter.read != wasRead {
+            LibraryChapterCounts.shared.invalidate()
+            if chapter.read, let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
+        }
 
         touchTimestamps(chapter)
         scheduleProgressSave(context)
@@ -283,7 +289,10 @@ final class LibraryManager {
             chapter.read = true
         }
 
-        if chapter.read != wasRead { LibraryChapterCounts.shared.invalidate() }
+        if chapter.read != wasRead {
+            LibraryChapterCounts.shared.invalidate()
+            if chapter.read, let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
+        }
 
         touchTimestamps(chapter)
         scheduleProgressSave(context, deferred: true)

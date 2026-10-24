@@ -29,7 +29,7 @@ touches `default.store`, so the old data stays recoverable on disk.
 | Kotlin/JS transpiler | **On hold by user** | Toolchain also absent |
 | Downloads | **Implemented; device check pending** | Novel text and manga pages, durable queue, offline reader paths, pause/retry/remove, Wi-Fi and storage guards |
 | Update scheduling | **Implemented; device check pending** | App refresh, continued/processing download tasks, per-title policy, optional notifications and new-chapter downloads |
-| Trackers | **Deferred** | User's call |
+| Trackers | **AniList implemented; device check pending** | Implicit-flow login (Keychain token, redirect `lnreader://anilist-auth`), search/bind/edit sheet on the detail screen, auto-update on chapter finish (3 s debounce, highest chapter read), offline queue flushed on foreground and network change. Other trackers not started |
 | Migration (`.tachibk`, bridge) | **Deferred** | User's call; fresh installs start empty |
 | Backup / restore (`.lnbk`) | **Local v2 format implemented; device check pending** | Authenticated encrypted snapshots, recovery key, merge restore; protobuf/cloud interoperability remains deferred |
 | Library (R7–R10) | **Implemented; device check pending** | Filters, per-category sort / display / update scope, badges. No category editor yet (see Open issues) |
@@ -378,7 +378,7 @@ gets its chapters.
 4. **Export and restore `.lnbk` through Files**, including a fresh-device recovery key and local imported book.
 
 Extension WebView fetching, repository UI, and Kotlin/JS shims are on hold at the user's
-request. Trackers and migration remain deferred. Cloud and `.tachibk` backup interoperability
+request. Migration remains deferred; AniList tracking is in (see the Trackers row). Cloud and `.tachibk` backup interoperability
 are separate from the implemented local `.lnbk` snapshot.
 
 ## Library follow-ups

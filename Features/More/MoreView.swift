@@ -41,6 +41,11 @@ struct MoreView: View {
                                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                         }
                         Divider().padding(.vertical, 12)
+                        NavigationLink { TrackingSettingsView() } label: {
+                            Label("Tracking", systemImage: "chart.bar")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                        }
+                        Divider().padding(.vertical, 12)
                         NavigationLink { LibraryBackupView() } label: {
                             Label("Backup & restore", systemImage: "externaldrive")
                                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
