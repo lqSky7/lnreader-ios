@@ -1,9 +1,13 @@
 // WebtoonScrollController.swift - Drives the webtoon strip's scroll view.
 //
-// SwiftUI's `ScrollView` has no per-frame offset API, so auto scroll and
-// hold-to-scroll talk to the `UIScrollView` underneath it: a `CADisplayLink`
-// moves `contentOffset`, and SwiftUI's own scroll tracking (`scrollPosition`,
-// the current page) follows because it observes that offset.
+// The strip itself is a `UICollectionView` (`WebtoonStrip`, below), not a
+// SwiftUI `LazyVStack`: a lazy stack guesses the height of rows it has not built
+// and corrects the content size as it builds them, which makes scrolling up
+// reluctant and jittery. Here every row has an explicit height.
+//
+// Auto scroll and hold-to-scroll talk to that `UIScrollView` directly: a
+// `CADisplayLink` moves `contentOffset`, and the strip reports the current page
+// from the offset.
 //
 // The decisions — how fast, when to stop — live in `ScrollStep` and
 // `HoldScrollConfig` (MangaReaderControls.swift). This file only moves pixels.
@@ -24,6 +28,8 @@ final class WebtoonScrollController {
     }
     /// Called when auto scroll runs out of content.
     @ObservationIgnored var onReachedEnd: (() -> Void)?
+    /// Set by the strip: scrolls the page at this index to the top.
+    @ObservationIgnored var jumpToPage: ((Int) -> Void)?
 
     // MARK: State (read by the reader's overlay)
 
@@ -226,116 +232,6 @@ final class WebtoonScrollController {
         }
 
         func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
-        ) -> Bool { true }
-    }
-}
-
-/// Placed as a `.background` of the webtoon's content, it walks up to the
-/// `UIScrollView` SwiftUI built and hands it to the controller. Inside the
-/// content, not behind the `ScrollView`: only content views have the scroll
-/// view among their ancestors.
-struct WebtoonScrollBridge: UIViewRepresentable {
-    let controller: WebtoonScrollController
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.isUserInteractionEnabled = false
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        // The hierarchy is not assembled yet on the first pass.
-        DispatchQueue.main.async { [weak uiView] in
-            var ancestor = uiView?.superview
-            while let view = ancestor {
-                if let scrollView = view as? UIScrollView {
-                    controller.attach(scrollView)
-                    return
-                }
-                ancestor = view.superview
-            }
-        }
-    }
-}
-
-/// Calls `onSwipe` when the user swipes in from a screen edge: right from the
-/// left edge (the standard iOS back gesture), or left from the right edge.
-///
-/// A screen-edge pan recognizer rather than a SwiftUI `DragGesture` on the
-/// reader: a drag gesture over the whole strip joins the scroll view's gesture
-/// arbitration for every touch, to serve a swipe that only starts in a 36 pt
-/// margin. The edge recognizer only ever begins at the edge, so the strip's own
-/// scrolling is never in its way.
-struct EdgeSwipeDismiss: UIViewRepresentable {
-    var edges: [UIRectEdge] = [.left, .right]
-    let onSwipe: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeUIView(context: Context) -> HostView {
-        let view = HostView()
-        view.isUserInteractionEnabled = false
-        context.coordinator.edges = edges
-        view.onWindow = { [weak coordinator = context.coordinator] window in
-            coordinator?.install(on: window)
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: HostView, context: Context) {
-        context.coordinator.onSwipe = onSwipe
-    }
-
-    static func dismantleUIView(_ uiView: HostView, coordinator: Coordinator) {
-        coordinator.uninstall()
-    }
-
-    final class HostView: UIView {
-        var onWindow: ((UIWindow?) -> Void)?
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            onWindow?(window)
-        }
-    }
-
-    @MainActor
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var onSwipe: (() -> Void)?
-        var edges: [UIRectEdge] = [.left, .right]
-        private var recognizers: [UIScreenEdgePanGestureRecognizer] = []
-        private weak var window: UIWindow?
-
-        func install(on window: UIWindow?) {
-            uninstall()
-            guard let window else { return }
-            for edge in edges {
-                let recognizer = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(panned(_:)))
-                recognizer.edges = edge
-                recognizer.delegate = self
-                window.addGestureRecognizer(recognizer)
-                recognizers.append(recognizer)
-            }
-            self.window = window
-        }
-
-        func uninstall() {
-            for recognizer in recognizers { window?.removeGestureRecognizer(recognizer) }
-            recognizers = []
-            window = nil
-        }
-
-        @objc private func panned(_ gesture: UIScreenEdgePanGestureRecognizer) {
-            guard gesture.state == .ended else { return }
-            let translation = gesture.translation(in: gesture.view)
-            // Inward from the edge, mostly horizontal, and far enough to be deliberate.
-            let inward = gesture.edges == .left ? translation.x : -translation.x
-            guard inward > 100, abs(translation.x) > abs(translation.y) * 1.5 else { return }
-            onSwipe?()
-        }
-
-        nonisolated func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
         ) -> Bool { true }

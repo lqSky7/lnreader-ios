@@ -162,6 +162,13 @@
 		F950BF2E752CF657B8C0E55B /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3F1BA3EBA23C4DD838C9A2 /* HTTPClient.swift */; };
 		FA024401BCB08F7E6C64FBFE /* HistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9C09B8F93F66D136B578B /* HistoryRow.swift */; };
 		FD91FA952D879AFFD81F3ED3 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788EA87FDCBD419221019BB2 /* Constants.swift */; };
+		450CB3DD74DBA678AEE76895 /* WebtoonStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59C2348B0AD69E92A13FEE75 /* WebtoonStrip.swift */; };
+		2E8F5AD31674408C90A85423 /* WebtoonCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9384C8929A653604123297C8 /* WebtoonCells.swift */; };
+		2AFE5ED6ACB0AF6AE3A9F3BC /* EdgeSwipeDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEF274A8894E93ADF933C84 /* EdgeSwipeDismiss.swift */; };
+		B63D0170DFE591B08C2597D2 /* PageImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48FE9B28A2B0D49EC576EBA8 /* PageImageCache.swift */; };
+		5236B1CCF04DD2771D959DA4 /* PagePrerender.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6ECFEE81B304C24822CB8FA /* PagePrerender.swift */; };
+		9CF012421DB38DE5A2B3FDF9 /* PageDecode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFE594875EB5DFB38A5601CF /* PageDecode.swift */; };
+		101FC16524252E8504339C18 /* ChapterTransitionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F49621AC64A71C72F9450BE /* ChapterTransitionCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -319,6 +326,13 @@
 		FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSSettingsView.swift; sourceTree = "<group>"; };
 		FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassOverlay.swift; sourceTree = "<group>"; };
 		FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsView.swift; sourceTree = "<group>"; };
+		59C2348B0AD69E92A13FEE75 /* WebtoonStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebtoonStrip.swift; sourceTree = "<group>"; };
+		9384C8929A653604123297C8 /* WebtoonCells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebtoonCells.swift; sourceTree = "<group>"; };
+		7EEF274A8894E93ADF933C84 /* EdgeSwipeDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeSwipeDismiss.swift; sourceTree = "<group>"; };
+		48FE9B28A2B0D49EC576EBA8 /* PageImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageImageCache.swift; sourceTree = "<group>"; };
+		E6ECFEE81B304C24822CB8FA /* PagePrerender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PagePrerender.swift; sourceTree = "<group>"; };
+		DFE594875EB5DFB38A5601CF /* PageDecode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageDecode.swift; sourceTree = "<group>"; };
+		3F49621AC64A71C72F9450BE /* ChapterTransitionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterTransitionCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -644,6 +658,13 @@
 				6370955C5BC3A2447F107BA1 /* MangaReaderControls.swift */,
 				5AF92F808187C51A5EFE24B6 /* MangaReaderSettings.swift */,
 				D1F6219C00A36C989425F4DD /* PagePrefetchPlan.swift */,
+				3F49621AC64A71C72F9450BE /* ChapterTransitionCard.swift */,
+				DFE594875EB5DFB38A5601CF /* PageDecode.swift */,
+				E6ECFEE81B304C24822CB8FA /* PagePrerender.swift */,
+				48FE9B28A2B0D49EC576EBA8 /* PageImageCache.swift */,
+				7EEF274A8894E93ADF933C84 /* EdgeSwipeDismiss.swift */,
+				9384C8929A653604123297C8 /* WebtoonCells.swift */,
+				59C2348B0AD69E92A13FEE75 /* WebtoonStrip.swift */,
 			);
 			path = MangaReader;
 			sourceTree = "<group>";
@@ -904,6 +925,13 @@
 				418CF02C133A84A95E87AFCA /* MangaReaderControls.swift in Sources */,
 				783C6021A7654C62A3259F0B /* MangaReaderSettings.swift in Sources */,
 				EDF44ACAF399D5B540D6B1BF /* PagePrefetchPlan.swift in Sources */,
+				101FC16524252E8504339C18 /* ChapterTransitionCard.swift in Sources */,
+				9CF012421DB38DE5A2B3FDF9 /* PageDecode.swift in Sources */,
+				5236B1CCF04DD2771D959DA4 /* PagePrerender.swift in Sources */,
+				B63D0170DFE591B08C2597D2 /* PageImageCache.swift in Sources */,
+				2AFE5ED6ACB0AF6AE3A9F3BC /* EdgeSwipeDismiss.swift in Sources */,
+				2E8F5AD31674408C90A85423 /* WebtoonCells.swift in Sources */,
+				450CB3DD74DBA678AEE76895 /* WebtoonStrip.swift in Sources */,
 				BB062E90FBD86B888400C533 /* ChapterReader.swift in Sources */,
 				EF87EBF5591600D44C522066 /* ContentKind.swift in Sources */,
 				B3E608B9FF8D1922A3BAD627 /* DownloadState.swift in Sources */,

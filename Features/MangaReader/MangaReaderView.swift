@@ -43,8 +43,6 @@ struct MangaReaderView: View {
     /// evaluation, and rebuilding it means mapping every chapter plus a
     /// scanlator pass — over the whole list, for every tap and page turn.
     @State private var navigable: [SourceChapter] = []
-    @State private var webtoonProxy: ScrollViewProxy?
-    @State private var isRestoringPosition = false
     @State private var readerSize: CGSize = .zero
     @State private var scroller = WebtoonScrollController()
     @State private var showReaderSettings = false
@@ -59,6 +57,17 @@ struct MangaReaderView: View {
     @State private var landOnLastPage = false
     /// Pending hand-off into the next chapter from the webtoon's end card.
     @State private var webtoonAdvance: Task<Void, Never>?
+    /// The webtoon's page changes while the strip is moving. Publishing each one
+    /// re-renders the reader and mutates the chapter (and every `@Query` behind
+    /// it), a hitch per page; they are applied once scrolling settles instead.
+    @State private var settledPage: Task<Void, Never>?
+    @State private var pendingPage: Int?
+    /// Webtoon progress waits for the strip to rest. Recording it mutates the
+    /// chapter, and that re-runs the library's `@Query` (a fetch and a sort of
+    /// every entry) on the main thread, under the reader: a hitch per write.
+    @State private var progressTask: Task<Void, Never>?
+    @State private var unsavedPage: Int?
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isDismissing = false
     @State private var scanlatorSettings: ScanlatorSettings
 
@@ -108,7 +117,8 @@ struct MangaReaderView: View {
                 // the webtoon would not scroll and the pager would not swipe.
                 .simultaneousGesture(
                     SpatialTapGesture()
-                        .onEnded { value in handleTap(at: value.location) }
+                        // The webtoon strip handles its own taps.
+                        .onEnded { value in if mode != .webtoon { handleTap(at: value.location) } }
                 )
 
             if chrome.isControl {
@@ -145,11 +155,18 @@ struct MangaReaderView: View {
             if newMode != .webtoon { scroller.stopAuto() }
         }
         .onDisappear {
+            settleAndFlushProgress()
             scroller.detach()
             setScreenAwake(false)
             libraryManager.flushProgress(context: modelContext)
         }
         .onChange(of: currentIndex) { _, index in handlePageChange(index) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                settleAndFlushProgress()
+                libraryManager.flushProgress(context: modelContext)
+            }
+        }
         .onChange(of: scanlatorSettings.value) { rebuildNavigable() }
         .onChange(of: mode) { _, _ in
             // Re-run the layout without refetching the page list.
@@ -198,40 +215,23 @@ struct MangaReaderView: View {
         .ignoresSafeArea()
     }
 
-    /// The strip. Which page is on screen is *read* from the scroll view
-    /// (`onScrollTargetVisibilityChange`) and jumps are one-shot
-    /// (`ScrollViewReader`). There is deliberately no `scrollPosition(id:)`
-    /// binding: that treats the binding as the position of record, so when auto
-    /// scroll, hold-to-scroll or the volume keys move the offset underneath it,
-    /// the next re-render pushes the stale id back and the strip snaps to the
-    /// top of the page it was leaving.
+    /// The strip is a `UICollectionView` (`WebtoonStrip`): rows have explicit
+    /// heights, so scrolling up never meets a row whose size SwiftUI had only
+    /// guessed. Which page is on screen is read from the scroll offset, and
+    /// jumps go through `scroller.jumpToPage`.
     private var webtoon: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 0) {
-                    ForEach(pages.indices, id: \.self) { index in
-                        MangaPageView(page: pages[index], sourceKey: sourceKey, loader: loader)
-                            .id(index)
-                    }
-                    if hasChapter(offset: 1) {
-                        ChapterTransitionCard(direction: .next, title: neighbourName(1))
-                            .frame(height: max(readerSize.height * 0.5, 240))
-                            .id(pages.count)
-                    }
-                }
-                .scrollTargetLayout()
-                .background(WebtoonScrollBridge(controller: scroller))
-            }
-            // Low threshold: a page taller than the screen can never be half visible.
-            .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.05) { visible in
-                guard !isRestoringPosition, let top = visible.min(),
-                      pages.indices.contains(top), top != currentIndex else { return }
-                currentIndex = top
-            }
+        WebtoonStrip(
+            pages: pages,
+            sourceKey: sourceKey,
+            loader: loader,
+            startIndex: currentIndex,
+            nextChapterTitle: hasChapter(offset: 1) ? neighbourName(1) : nil,
+            controller: scroller,
+            onPageChange: { index in pageScrolled(to: index) },
             // The end card must be fully on screen and stay there a moment, so a
             // fling past the last page does not skip a chapter by accident.
-            .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.95) { visible in
-                if visible.contains(pages.count) {
+            onEndCard: { visible in
+                if visible {
                     guard webtoonAdvance == nil else { return }
                     webtoonAdvance = Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(700))
@@ -243,27 +243,11 @@ struct MangaReaderView: View {
                     webtoonAdvance?.cancel()
                     webtoonAdvance = nil
                 }
-            }
-            .onAppear {
-                webtoonProxy = proxy
-                restoreWebtoonPosition(proxy)
-            }
-        }
+            },
+            onTap: { point in handleTap(at: point) }
+        )
         .id(chapterURL)
         .ignoresSafeArea()
-    }
-
-    /// Scroll to the resume page without the first visibility report (page 0)
-    /// overwriting it.
-    private func restoreWebtoonPosition(_ proxy: ScrollViewProxy) {
-        let target = currentIndex
-        guard target > 0 else { return }
-        isRestoringPosition = true
-        Task { @MainActor in
-            proxy.scrollTo(target, anchor: .top)
-            try? await Task.sleep(for: .milliseconds(350))
-            isRestoringPosition = false
-        }
     }
 
     private func errorView(_ message: String) -> some View {
@@ -534,6 +518,70 @@ struct MangaReaderView: View {
 
     // MARK: - Progress
 
+    /// The strip reports every page that passes the top. Prefetching follows the
+    /// scroll immediately; the state and progress updates wait for it to settle.
+    private func pageScrolled(to index: Int) {
+        guard pages.indices.contains(index) else { return }
+        Task { await loader.prefetch(pages, current: index, sourceKey: sourceKey) }
+        guard index != currentIndex else {
+            pendingPage = nil
+            return
+        }
+        pendingPage = index
+        settledPage?.cancel()
+        settledPage = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            applyPendingPage()
+        }
+    }
+
+    private func recordProgress(_ index: Int) {
+        guard let storedChapter, pages.indices.contains(index) else { return }
+        libraryManager.recordMangaProgress(
+            chapter: storedChapter,
+            pageIndex: index,
+            pageCount: pages.count,
+            context: modelContext
+        )
+    }
+
+    private func scheduleProgress(_ index: Int) {
+        unsavedPage = index
+        progressTask?.cancel()
+        progressTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            flushProgress()
+        }
+    }
+
+    private func flushProgress() {
+        progressTask?.cancel()
+        progressTask = nil
+        guard let index = unsavedPage else { return }
+        unsavedPage = nil
+        recordProgress(index)
+    }
+
+    /// Write whatever progress is waiting, including a page that had not yet
+    /// settled. For leaving the reader, changing chapter and backgrounding.
+    private func settleAndFlushProgress() {
+        if let index = pendingPage {
+            applyPendingPage()
+            unsavedPage = index
+        }
+        flushProgress()
+    }
+
+    private func applyPendingPage() {
+        settledPage?.cancel()
+        settledPage = nil
+        guard let index = pendingPage else { return }
+        pendingPage = nil
+        if index != currentIndex { currentIndex = index }
+    }
+
     private func handlePageChange(_ index: Int) {
         if !isLoading, mode != .webtoon {
             if index == pages.count, hasChapter(offset: 1) {
@@ -548,15 +596,15 @@ struct MangaReaderView: View {
         }
         guard !isLoading, pages.indices.contains(index) else { return }
 
-        if let storedChapter {
-            libraryManager.recordMangaProgress(
-                chapter: storedChapter,
-                pageIndex: index,
-                pageCount: pages.count,
-                context: modelContext
-            )
+        if mode == .webtoon {
+            scheduleProgress(index)
+        } else {
+            recordProgress(index)
         }
-        Task { await loader.prefetch(pages, current: index, sourceKey: sourceKey) }
+        // The webtoon prefetches as it scrolls (`pageScrolled`).
+        if mode != .webtoon {
+            Task { await loader.prefetch(pages, current: index, sourceKey: sourceKey) }
+        }
     }
 
     // MARK: - Scrolling and volume keys
@@ -652,7 +700,7 @@ struct MangaReaderView: View {
     private func seekPage(_ index: Int) {
         guard pages.indices.contains(index) else { return }
         currentIndex = index
-        if mode == .webtoon { webtoonProxy?.scrollTo(index, anchor: .top) }
+        if mode == .webtoon { scroller.jumpToPage?(index) }
     }
 
     /// The series' tap-zone layout decides between previous, next and the
@@ -780,39 +828,13 @@ struct MangaReaderView: View {
         let target = current + offset
         guard navigableChapters.indices.contains(target) else { return }
 
+        // Progress belongs to the chapter being left, so write it first.
+        settleAndFlushProgress()
         let next = navigableChapters[target]
         chapterURL = next.url
         chapterName = next.name
         currentIndex = 0
         await loadChapter()
-    }
-}
-
-/// The card between two chapters: what just ended and what comes next.
-private struct ChapterTransitionCard: View {
-    enum Direction { case previous, next }
-    let direction: Direction
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: direction == .next ? "chevron.down.circle" : "chevron.up.circle")
-                .font(.system(size: 34, weight: .light))
-            Text(direction == .next ? "Next chapter" : "Previous chapter")
-                .font(.footnote.weight(.semibold))
-                .textCase(.uppercase)
-                .foregroundStyle(.white.opacity(0.6))
-            Text(title)
-                .font(.headline)
-                .multilineTextAlignment(.center)
-                .lineLimit(3)
-            ProgressView().tint(.white).padding(.top, 6)
-        }
-        .foregroundStyle(.white)
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .accessibilityElement(children: .combine)
     }
 }
 
