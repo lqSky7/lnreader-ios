@@ -28,6 +28,8 @@ final class WebtoonScrollController {
     }
     /// Called when auto scroll runs out of content.
     @ObservationIgnored var onReachedEnd: (() -> Void)?
+    /// Called while the strip is moving for any reason: drag, hold, auto or a screenful.
+    @ObservationIgnored var onScrollActivity: (() -> Void)?
     /// Set by the strip: scrolls the page at this index to the top.
     @ObservationIgnored var jumpToPage: ((Int) -> Void)?
 
@@ -111,6 +113,7 @@ final class WebtoonScrollController {
         let delta = view.bounds.height * fraction * (forward ? 1 : -1)
         let target = min(max(view.contentOffset.y + delta, minY), maxY)
         view.setContentOffset(CGPoint(x: view.contentOffset.x, y: target), animated: true)
+        onScrollActivity?()
     }
 
     // MARK: - Hold to scroll
@@ -191,6 +194,7 @@ final class WebtoonScrollController {
             maxOffset: Double(maxY)
         )
         view.contentOffset.y = CGFloat(step.offset)
+        onScrollActivity?()
 
         if step.reachedEnd, holdSpeed == nil, isAutoScrolling {
             stopAuto()

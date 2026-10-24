@@ -265,6 +265,7 @@ final class WebtoonViewController: UIViewController,
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         lastScrollTime = CACurrentMediaTime()
         guard didRestore else { return }
+        if scrollView.isDragging || scrollView.isDecelerating { controller.onScrollActivity?() }
         let top = scrollView.contentOffset.y
         let bottom = top + scrollView.bounds.height
 

@@ -67,6 +67,8 @@ struct MangaReaderView: View {
     /// every entry) on the main thread, under the reader: a hitch per write.
     @State private var progressTask: Task<Void, Never>?
     @State private var unsavedPage: Int?
+    /// Scrolling with the controls up hides them after a moment.
+    @State private var chromeHideTask: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
     @State private var isDismissing = false
     @State private var scanlatorSettings: ScanlatorSettings
@@ -613,9 +615,20 @@ struct MangaReaderView: View {
         scroller.autoSpeed = inputSettings.autoScrollSpeed
         scroller.hold = inputSettings.hold
         scroller.isHoldEnabled = inputSettings.holdScrollEnabled
+        scroller.onScrollActivity = { scheduleChromeHide() }
         scroller.onReachedEnd = {
             // Out of pages: bring the controls back so the next chapter is one tap away.
             setChrome(.control)
+        }
+    }
+
+    private func scheduleChromeHide() {
+        guard chrome.isControl, chromeHideTask == nil else { return }
+        chromeHideTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            chromeHideTask = nil
+            setChrome(.focus)
         }
     }
 
@@ -734,6 +747,8 @@ struct MangaReaderView: View {
     }
 
     private func setChrome(_ state: ReaderChromeState) {
+        chromeHideTask?.cancel()
+        chromeHideTask = nil
         guard chrome != state else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { chrome = state }
         #if canImport(UIKit)
