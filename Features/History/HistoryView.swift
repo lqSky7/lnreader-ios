@@ -12,9 +12,10 @@ struct HistoryView: View {
     private var history: [History]
 
     @State private var searchText = ""
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if filteredHistory.isEmpty {
                     EmptyStateView(
@@ -28,19 +29,21 @@ struct HistoryView: View {
                             Section(date) {
                                 ForEach(entries) { item in
                                     if let chapter = item.chapter {
-                                        Button {
-                                            readerRouter.open(
-                                                sourceKey: chapter.entry?.sourceKey ?? "",
-                                                entryURL: chapter.entry?.url,
-                                                kind: chapter.entry?.kind ?? .novel,
-                                                chapterURL: chapter.url,
-                                                chapterName: chapter.name
-                                            )
-                                        } label: {
-                                            HistoryRow(history: item)
-                                                .contentShape(Rectangle())
-                                        }
-                                        .buttonStyle(.plain)
+                                        HistoryRow(
+                                            history: item,
+                                            onOpenEntry: {
+                                                if let entry = chapter.entry { path.append(entry) }
+                                            },
+                                            onOpenChapter: {
+                                                readerRouter.open(
+                                                    sourceKey: chapter.entry?.sourceKey ?? "",
+                                                    entryURL: chapter.entry?.url,
+                                                    kind: chapter.entry?.kind ?? .novel,
+                                                    chapterURL: chapter.url,
+                                                    chapterName: chapter.name
+                                                )
+                                            }
+                                        )
                                     }
                                 }
                                 .onDelete { offsets in
@@ -51,6 +54,9 @@ struct HistoryView: View {
                     }
                     .listStyle(.plain)
                 }
+            }
+            .navigationDestination(for: Entry.self) { entry in
+                NovelDetailView(entry: entry)
             }
             .navigationTitle("History")
             .searchable(text: $searchText, prompt: "Search history")
