@@ -167,6 +167,13 @@ the range, and the volume is restored after closing the reader or backgrounding 
   category keeps its own sort, and unread/latest-chapter sorts wait for the count pass.
   `LibraryView.hasLoadedCounts` holds the page back until the first pass lands: sorting with
   every count at 0 and then re-sorting visibly reshuffled the library on launch.
+  **Sort menu rework.** One "View options" menu (Sort, Display, Import) beside the Filter
+  button replaces four toolbar buttons. Sort is an inline picker for the order (a plain
+  checkmark, no leading chevron to indent the rows), then a Direction picker worded per order
+  ("Fewest first / Most first", "A to Z", "Oldest first / Newest first"), then an
+  **Empty ones last** toggle (`LibrarySort.emptyLast`, stored per category, decoded as off for
+  older saves). Selecting a count-based order turns it on, so ascending Unread no longer opens
+  with every finished title. Empty means 0 unread, 0 chapters, or no date for that order.
 - **R9 categories.** Per-category display mode, sort, filter and update scope. The category
   chip row already exists; this adds the per-category state behind it.
 - **R9 as built.** Sort (R8) and filter (R7) were already per category; R9 adds the other two.

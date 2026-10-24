@@ -7,10 +7,15 @@ import Foundation
 struct LibrarySort: Codable, Equatable, Sendable {
     var order: SortOrder
     var direction: SortDirection
+    /// Entries with nothing to rank (0 unread, no upload date, never read) go
+    /// to the end whichever way the sort runs. Without it, "fewest unread
+    /// first" lists every finished title before the first one worth opening.
+    var emptyLast: Bool
 
-    init(order: SortOrder, direction: SortDirection? = nil) {
+    init(order: SortOrder, direction: SortDirection? = nil, emptyLast: Bool = false) {
         self.order = order
         self.direction = direction ?? order.defaultDirection
+        self.emptyLast = emptyLast
     }
 
     // Decoded field by field so a sort saved before an order existed still loads.
@@ -18,6 +23,7 @@ struct LibrarySort: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         order = try c.decodeIfPresent(SortOrder.self, forKey: .order) ?? .lastRead
         direction = try c.decodeIfPresent(SortDirection.self, forKey: .direction) ?? order.defaultDirection
+        emptyLast = try c.decodeIfPresent(Bool.self, forKey: .emptyLast) ?? false
     }
 
     /// The menu's rule: the current order flips direction, another order
@@ -26,7 +32,9 @@ struct LibrarySort: Codable, Equatable, Sendable {
         if order == newOrder {
             direction.toggle()
         } else {
-            self = LibrarySort(order: newOrder)
+            // Count-based orders start with empty entries last: that is the
+            // useful reading of them in either direction.
+            self = LibrarySort(order: newOrder, emptyLast: newOrder.needsChapterCounts)
         }
     }
 
@@ -54,6 +62,25 @@ extension SortOrder {
     }
 
     var needsChapterDates: Bool { self == .latestChapter || self == .chapterFetched }
+
+    /// Whether "empty" means something for this order. Names, manual order and
+    /// date added always have a value.
+    var supportsEmptyLast: Bool {
+        switch self {
+        case .custom, .alphabetical, .dateAdded: false
+        default: true
+        }
+    }
+
+    /// The two directions in words the order's own terms, instead of a bare arrow.
+    var directionLabels: (ascending: String, descending: String) {
+        switch self {
+        case .alphabetical: ("A to Z", "Z to A")
+        case .totalChapters, .unread: ("Fewest first", "Most first")
+        case .custom: ("First to last", "Last to first")
+        default: ("Oldest first", "Newest first")
+        }
+    }
 }
 
 /// Everything a sort needs to know about one entry. Built from `Entry`
@@ -71,6 +98,19 @@ struct LibrarySortFacts: Equatable, Sendable {
     var latestUpload: Date?
     /// Newest `dateFetch` among chapters whose update has not been dismissed.
     var latestFetch: Date?
+
+    /// Whether this entry has nothing to rank by under `order`.
+    func isEmpty(for order: SortOrder) -> Bool {
+        switch order {
+        case .totalChapters: total == 0
+        case .unread: unread == 0
+        case .lastRead: lastReadAt == nil
+        case .lastUpdated: lastChecked == nil
+        case .latestChapter: latestUpload == nil
+        case .chapterFetched: latestFetch == nil
+        case .custom, .alphabetical, .dateAdded: false
+        }
+    }
 }
 
 enum LibrarySorter {
@@ -82,6 +122,10 @@ enum LibrarySorter {
 
         let ordered = keyed.sorted { lhs, rhs in
             let l = lhs.facts, r = rhs.facts
+            if sort.emptyLast, sort.order.supportsEmptyLast {
+                let lEmpty = l.isEmpty(for: sort.order), rEmpty = r.isEmpty(for: sort.order)
+                if lEmpty != rEmpty { return rEmpty }
+            }
             let result = compare(l, r, order: sort.order)
             if result != .orderedSame { return ascending ? result == .orderedAscending : result == .orderedDescending }
             return titleOrder(l.title, r.title) == .orderedAscending

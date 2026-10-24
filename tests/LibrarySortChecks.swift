@@ -39,6 +39,18 @@ struct LibrarySortChecks {
         check(titles(twins, LibrarySort(order: .unread)) == ["Ace", "Zed"], "ties break by title")
         check(titles(twins, LibrarySort(order: .unread, direction: .ascending)) == ["Ace", "Zed"], "ties break by title in either direction")
 
+        // Empty last: bravo has 0 unread and must trail in both directions.
+        check(titles(all, LibrarySort(order: .unread, direction: .ascending)) == ["bravo", "Alpha", "Chapter 10"], "ascending unread without emptyLast puts 0 first")
+        check(titles(all, LibrarySort(order: .unread, direction: .ascending, emptyLast: true)) == ["Alpha", "Chapter 10", "bravo"], "ascending unread, empty last")
+        check(titles(all, LibrarySort(order: .unread, direction: .descending, emptyLast: true)) == ["Chapter 10", "Alpha", "bravo"], "descending unread, empty last")
+        check(titles(all, LibrarySort(order: .latestChapter, direction: .ascending, emptyLast: true)).prefix(2).contains("Alpha"), "missing upload dates trail")
+        check(LibrarySort(order: .alphabetical, emptyLast: true).order.supportsEmptyLast == false, "alphabetical has no empty")
+        var picked = LibrarySort(order: .alphabetical)
+        picked.select(.unread)
+        check(picked.emptyLast, "selecting a count order turns empty-last on")
+        let legacy = try! JSONDecoder().decode(LibrarySort.self, from: Data(#"{"order":"Unread","direction":"Ascending"}"#.utf8))
+        check(!legacy.emptyLast, "saved sorts decode with emptyLast off")
+
         var sort = LibrarySort(order: .lastRead)
         check(sort.direction == .descending, "last read starts newest first")
         sort.select(.lastRead)
