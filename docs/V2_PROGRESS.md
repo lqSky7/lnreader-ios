@@ -270,8 +270,7 @@ which is fragile once re-signed.
   menu. Rows have no context menu — it shared the long press. Only library entries select; a
   browse result has no stored chapters to change.
 - **Settings screens use `.settingsScreen(_:)`** (`Design/Theme.swift`): large sentence-case
-  title plus the `AppTheme.controlFill` tint, applied once to the Form. Do not tint toggles
-  one by one, and do not title-case labels ("Reader settings", "Sort order").
+  title. Do not title-case labels ("Reader settings", "Sort order").
 - **`Entry.lastReadAt` is a cached column.** The library sorts by "recently read" and a
   predicate cannot walk chapters → history.
 - **`Chapter.isDownloaded` is computed**, not stored, so it cannot drift from the queue.
@@ -288,8 +287,12 @@ which is fragile once re-signed.
   underneath it, the next re-render pushed the stale id back and the strip snapped to the top
   of the page it was leaving. The current page is read with `onScrollTargetVisibilityChange`
   and jumps are one-shot (`ScrollViewReader`).
-- **Tint switches with `AppTheme.controlFill`, not the accent.** The accent is white in dark
-  mode, which made every `Toggle` solid white.
+- **Grey means secondary, never tappable.** The `AccentColor` asset is primary (black/white),
+  so buttons, links and toolbar items read as primary text; only metadata is `.secondary`. An
+  earlier 62% grey accent made every button look like a footnote. Switches get the
+  `AppTheme.controlFill` track from `AppToggleStyle`, applied once at the root; never a root
+  `.tint`, which beats button roles and turned destructive swipe actions white. Colours go
+  through `AppTheme` tokens (`hairline`, `surface`, `warning`), not `Color.gray.opacity(…)`.
 - **Settings sheets are partial-height** (`.medium`/`.large` detents), not full-screen modals.
 - **`JSExtensionHost` is synchronous by design.** The JS thread blocks during `http.get`, so
   bundles are straight-line code and a transpiler can emit plain calls. `webview.capture`

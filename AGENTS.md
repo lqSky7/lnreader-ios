@@ -81,8 +81,13 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 - **Swipe right from the left edge goes back.** Full-screen surfaces that hide the back button
   must add `EdgeSwipeDismiss` and ignore it while a sheet is open.
 - **Chapter lists select by holding.** No context menu on chapter rows; it shares the long press.
-- Settings screens use `.settingsScreen(_:)`: sentence-case titles, tint applied once to the Form.
-- Tint controls with `AppTheme.controlFill`, never the accent (the accent is white in dark mode).
+- Settings screens use `.settingsScreen(_:)` for their sentence-case title.
+- **Grey means secondary, never tappable.** The `AccentColor` asset is primary, so buttons and
+  links read as primary text; only metadata is `.secondary`. Switches get the `controlFill`
+  track from `AppToggleStyle` at the root; never add a root `.tint` (it beats button roles, so
+  destructive swipes turn white) or tint toggles one by one. Use `AppTheme` tokens
+  (`hairline`, `surface`, `warning`), `.primaryActionStyle()` for a filled call to action, and
+  `foregroundStyle`, never `foregroundColor` or `Color.gray.opacity(…)`.
 - Text uses `Typography` tokens, which scale with Dynamic Type. Animations go through
   `AppMotion`, which returns nil under Reduce Motion.
 - Reader tap zones are simultaneous gestures, never an overlay above the scroll view.

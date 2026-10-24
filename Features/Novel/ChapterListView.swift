@@ -406,7 +406,7 @@ struct ChapterDirectoryView: View {
                 }
             }
             }
-        }.tint(AppTheme.accent)
+        }
     }
     private func goToCurrent() {
         search = ""; selectedFilter = .all

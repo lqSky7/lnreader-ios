@@ -12,19 +12,23 @@ enum AppTheme {
 
     /// Primary interactive color: black in light mode, white in dark mode.
     ///
-    /// The interface is deliberately monochrome. Red is *not* the accent — it
-    /// is reserved for destructive actions and error states so that it still
-    /// means something when it does appear.
+    /// The interface is deliberately monochrome, like the system's own glass
+    /// apps: text is primary or secondary, and anything you can tap is
+    /// primary too. Grey means "less important", never "tappable". Red is
+    /// *not* the accent — it is reserved for destructive actions and error
+    /// states so that it still means something when it does appear.
+    ///
+    /// This is also the `AccentColor` asset, which is where controls get
+    /// their tint. Do not put a `.tint` at the root: an explicit tint beats a
+    /// button's role, so destructive swipe actions would lose their red.
     static let accent = Color.primary
-
-    /// Softer interactive tone for secondary controls and metadata actions.
-    static let secondaryAccent = Color.secondary
 
     /// High-contrast fill for a primary control (play button, selected dot).
     static let primaryFill = Color.primary
 
-    /// Track fill for switches. Pure primary would render an enabled switch
-    /// white-on-white in dark mode, so dark mode uses a legible mid gray.
+    /// Track fill for an enabled switch. A primary track would be
+    /// white-on-white in dark mode, so switches get this mid gray instead,
+    /// applied once at the root by `AppToggleStyle`.
     static let controlFill = Color(light: Color(white: 0.12), dark: Color(white: 0.62))
 
     /// Content drawn on top of `primaryFill`.
@@ -55,8 +59,8 @@ enum AppTheme {
     /// Subtle card background (systemGray6).
     static let cardBackground = surface
 
-    /// Secondary / subtitle text.
-    static let subtitleText = Color.secondary
+    /// Hairline outline for cards and avatars.
+    static let hairline = Color(uiColor: .separator)
 
     // MARK: Semantic
 
@@ -65,6 +69,24 @@ enum AppTheme {
     /// Red is intentionally rare: use it only where the user must recognize a
     /// destructive or failed outcome, never for decoration or ordinary accents.
     static let destructive = Color.red
+
+    /// Recoverable problems: a paused job, a failed preview, a bulk delete
+    /// that sits beside the red single delete.
+    static let warning = Color.orange
+}
+
+// MARK: - Switches
+
+/// The app's switch: the stock switch with the `controlFill` track. Applied
+/// once at the root with `.toggleStyle(AppToggleStyle())`, which reaches every
+/// toggle without a root `.tint`, so buttons keep the primary accent and their
+/// roles. Toggles inside menus still draw as checkmarks.
+struct AppToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Toggle(configuration)
+            .toggleStyle(.switch)
+            .tint(AppTheme.controlFill)
+    }
 }
 
 // MARK: - Adaptive Color Helper
@@ -261,11 +283,18 @@ struct AuroraBackdrop: View {
 }
 
 extension View {
-    /// Chrome shared by every settings screen: a large sentence-case title and
-    /// the app's control tint, so switches look the same wherever they are.
+    /// The one filled call to action on a screen (Log in, Retry, Sync): a
+    /// prominent glass capsule in the primary fill with contrasting text.
+    func primaryActionStyle() -> some View {
+        self
+            .buttonStyle(.glassProminent)
+            .tint(AppTheme.primaryFill)
+            .foregroundStyle(AppTheme.onPrimaryFill)
+    }
+
+    /// Chrome shared by every settings screen: a large sentence-case title.
     func settingsScreen(_ title: String) -> some View {
         self
-            .tint(AppTheme.controlFill)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.large)
     }

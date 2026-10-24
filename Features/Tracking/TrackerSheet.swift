@@ -52,7 +52,7 @@ struct TrackerSheet: View {
         } description: {
             Text("Log in to AniList to track your progress.")
         } actions: {
-            Button("Log in") { run { try await tracking.login() } }.buttonStyle(.borderedProminent)
+            Button("Log in") { run { try await tracking.login() } }.primaryActionStyle()
         }
     }
 

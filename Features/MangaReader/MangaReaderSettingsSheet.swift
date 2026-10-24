@@ -20,9 +20,6 @@ struct MangaReaderSettingsSheet: View {
                 autoScrollSection
                 holdSection
             }
-            // The app's accent is white in dark mode, which turned every switch
-            // solid white; the rest of the app tints controls with this instead.
-            .tint(AppTheme.controlFill)
             .navigationTitle("Reader settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -136,7 +136,7 @@ struct LibraryListRow: View {
                 Button(action: onDelete) {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
-                        .foregroundColor(.red)
+                        .foregroundStyle(.red)
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                 }

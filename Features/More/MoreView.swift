@@ -49,7 +49,7 @@ struct MoreView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(20)
-                    .background(Color(uiColor: .systemGray6), in: RoundedRectangle(cornerRadius: 20))
+                    .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 20))
                     .padding(.horizontal)
                     
                     // Bento grid layout for settings (systemGray6 background, monochrome icons)
@@ -88,13 +88,13 @@ struct MoreView: View {
                         .scaledToFill()
                         .frame(width: 64, height: 64)
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                        .overlay(Circle().stroke(AppTheme.hairline, lineWidth: 1))
                 } else {
                     ZStack {
-                        Color(UIColor.systemGray6)
+                        AppTheme.surface
                         Image(systemName: "person.fill")
                             .font(.system(size: 28))
-                            .foregroundStyle(.gray.opacity(0.6))
+                            .foregroundStyle(.secondary)
                     }
                     .frame(width: 64, height: 64)
                     .clipShape(Circle())
@@ -132,7 +132,6 @@ struct MoreView: View {
             }
             
             Divider()
-                .background(Color.gray.opacity(0.1))
             
             // Sync status and actions row
             HStack {
@@ -152,7 +151,7 @@ struct MoreView: View {
                     } else {
                         Label("Cloud synced", systemImage: "icloud.fill")
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 
@@ -162,9 +161,7 @@ struct MoreView: View {
                     Button("Login") {
                         showingAuth = true
                     }
-                    .buttonStyle(.borderedProminent)
-                    .foregroundStyle(AppTheme.onPrimaryFill)
-                    .tint(AppTheme.primaryFill)
+                    .primaryActionStyle()
                     .controlSize(.small)
                 } else {
                     HStack(spacing: 12) {
@@ -183,9 +180,7 @@ struct MoreView: View {
                             } label: {
                                 Image(systemName: "arrow.triangle.2.circlepath")
                             }
-                            .buttonStyle(.borderedProminent)
-                            .foregroundStyle(AppTheme.onPrimaryFill)
-                            .tint(AppTheme.primaryFill)
+                            .primaryActionStyle()
                             .controlSize(.small)
                         }
                         
@@ -204,11 +199,11 @@ struct MoreView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color(UIColor.systemGray6))
+                .fill(AppTheme.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                .stroke(AppTheme.hairline, lineWidth: 1)
         )
         .padding(.horizontal)
     }
@@ -244,7 +239,7 @@ struct MoreView: View {
                 })
                 
                 Rectangle()
-                    .fill(Color(UIColor.separator))
+                    .fill(AppTheme.hairline)
                     .frame(width: 0.5)
                 
                 NavigationLink {
@@ -274,7 +269,7 @@ struct MoreView: View {
             .frame(height: 140)
             
             Rectangle()
-                .fill(Color(UIColor.separator))
+                .fill(AppTheme.hairline)
                 .frame(height: 0.5)
             
             // Row 2: TTS | Advanced
@@ -304,7 +299,7 @@ struct MoreView: View {
                 })
                 
                 Rectangle()
-                    .fill(Color(UIColor.separator))
+                    .fill(AppTheme.hairline)
                     .frame(width: 0.5)
                 
                 NavigationLink {
@@ -334,7 +329,7 @@ struct MoreView: View {
             .frame(height: 140)
             
             Rectangle()
-                .fill(Color(UIColor.separator))
+                .fill(AppTheme.hairline)
                 .frame(height: 0.5)
             
             // Row 3: Statistics (Full width)
@@ -346,7 +341,7 @@ struct MoreView: View {
                         .font(.system(size: 24))
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
-                        .background(Color(UIColor.systemGray6), in: .circle)
+                        .background(AppTheme.surface, in: .circle)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Statistics")
@@ -374,7 +369,7 @@ struct MoreView: View {
             })
             
             Rectangle()
-                .fill(Color(UIColor.separator))
+                .fill(AppTheme.hairline)
                 .frame(height: 0.5)
             
             // Row 4: About (Full width)
@@ -386,7 +381,7 @@ struct MoreView: View {
                         .font(.system(size: 24))
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
-                        .background(Color(UIColor.systemGray6), in: .circle)
+                        .background(AppTheme.surface, in: .circle)
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text("About")
@@ -415,11 +410,11 @@ struct MoreView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color(UIColor.systemGray6))
+                .fill(AppTheme.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                .stroke(AppTheme.hairline, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 4)

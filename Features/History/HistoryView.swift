@@ -103,7 +103,7 @@ struct HistoryView: View {
                 } label: {
                     Label("Delete All", systemImage: "trash.fill")
                 }
-                .tint(.orange)
+                .tint(AppTheme.warning)
             }
         }
 
