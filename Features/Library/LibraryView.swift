@@ -39,6 +39,10 @@ struct LibraryView: View {
     /// Chapter counts for the filters, loaded off the main thread. Filtering
     /// reads this (sort and filter), not `Entry.chapters` (see `LibraryChapterCounts`).
     @State private var filterCounts: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
+    /// True once the first count pass has finished. Until then a count-based
+    /// sort has nothing to sort by, and showing it anyway reshuffles the grid
+    /// the moment the counts arrive.
+    @State private var hasLoadedCounts = false
     @State private var showFilterSheet = false
     /// Last computed page per kind, reused while the reader covers the library.
     @State private var pageCache = PageItemsCache()
@@ -329,6 +333,7 @@ struct LibraryView: View {
     /// result and recompute once the reader closes.
     private func pageItems(for kind: LibraryKindFilter) -> [Entry] {
         if isReaderPresented, let held = pageCache.items[kind] { return held }
+        if activeSort.needsChapterCounts, !hasLoadedCounts { return pageCache.items[kind] ?? [] }
         let items = filteredNovels(for: kind)
         pageCache.items[kind] = items
         return items
@@ -474,6 +479,7 @@ struct LibraryView: View {
             loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container, extras: needsChapterDates ? .dates : [])
         }
         filterCounts = loaded
+        hasLoadedCounts = true
     }
 
     /// An entry whose counts have not loaded yet is treated as passing, so a

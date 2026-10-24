@@ -164,7 +164,9 @@ the range, and the volume is restored after closing the reader or backgrounding 
   `Entry.lastUpdate`, set on every successful refresh. The two date orders add two
   `fetchLimit 1` queries per entry to the cached count pass, only while one is selected.
   Checked headless by `scripts/check-library-sorts.sh`; typechecks. Device check: each
-  category keeps its own sort, and unread/latest-chapter sorts fill in after the count pass.
+  category keeps its own sort, and unread/latest-chapter sorts wait for the count pass.
+  `LibraryView.hasLoadedCounts` holds the page back until the first pass lands: sorting with
+  every count at 0 and then re-sorting visibly reshuffled the library on launch.
 - **R9 categories.** Per-category display mode, sort, filter and update scope. The category
   chip row already exists; this adds the per-category state behind it.
 - **R9 as built.** Sort (R8) and filter (R7) were already per category; R9 adds the other two.
