@@ -1,0 +1,315 @@
+#!/bin/sh
+# check.sh — every headless behaviour check, one entry point.
+#
+#   ./scripts/check.sh                    list the checks
+#   ./scripts/check.sh all                every check that needs no arguments
+#   ./scripts/check.sh filters            one check
+#   ./scripts/check.sh player <folder>    a check that takes arguments
+#
+# Why the checks are separate programs at all: there is no XCTest or SwiftPM
+# test target here (see the header of typecheck.sh), so each check is a
+# standalone executable in tests/ compiled against the few app files it
+# touches, then run. The file lists live here instead of in fifteen
+# near-identical wrappers.
+set -eu
+cd "$(dirname "$0")/.."
+
+# Compiles with the flags almost every check wants, then runs the result.
+# Usage: compile_and_run <label> <source...>
+compile_and_run() {
+  label=$1
+  shift
+  binary=$(mktemp "/tmp/lnreader-$label.XXXXXX")
+  trap 'rm -f "$binary"' EXIT
+  xcrun swiftc -parse-as-library -swift-version 5 -disable-sandbox "$@" -o "$binary"
+  "$binary"
+}
+
+# Same, for the checks that compile without -swift-version/-disable-sandbox.
+# Usage: compile_and_run_plain <label> <source...>
+compile_and_run_plain() {
+  label=$1
+  shift
+  binary=$(mktemp "/tmp/lnreader-$label.XXXXXX")
+  trap 'rm -f "$binary"' EXIT
+  xcrun swiftc -parse-as-library "$@" -o "$binary"
+  "$binary"
+}
+
+# The checks that take no arguments, in dependency order: the cheap layers
+# first, so a break in the foundation shows up before the expensive ones run.
+PLAIN_CHECKS="foundation schema chapter-sync page-pipeline scanlators \
+reader-settings filters sorts categories badges offline mihon-backup tts-contracts"
+
+usage() {
+  cat <<'USAGE'
+Usage: ./scripts/check.sh [check|all]
+
+No argument        list the checks
+all                run every check that takes no arguments
+<check>            run one check
+
+Checks: foundation schema chapter-sync page-pipeline scanlators reader-settings
+        filters sorts categories badges offline mihon-backup tts-contracts
+        extensions native-comments player
+
+Checks needing setup, not part of `all`:
+  extensions        needs the SwiftSoup checkout (open the project in Xcode once)
+  native-comments   needs the SwiftSoup checkout or network access, and a normal
+                    terminal: `swift run` compiles its manifest through
+                    sandbox-exec, which fails inside an agent sandbox
+  player <folder>   needs a downloaded narration package
+USAGE
+}
+
+run() {
+  case "$1" in
+    foundation)
+      compile_and_run_plain foundation \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Services/Sources/SourceModels.swift \
+        Services/Sources/SourceFilters.swift \
+        Services/Network/HTTPTypes.swift \
+        Services/Network/Interceptors.swift \
+        Utilities/DateParsing.swift \
+        tests/V2FoundationChecks.swift
+      ;;
+    schema)
+      compile_and_run schema \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Models/Schema/UpdateStrategy.swift \
+        Models/Schema/DownloadState.swift \
+        Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaMigrationPlan.swift \
+        Models/UserProfile.swift \
+        Services/Sources/SourceKey.swift \
+        tests/V2SchemaChecks.swift
+      ;;
+    chapter-sync)
+      compile_and_run chapter-sync \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Models/Schema/UpdateStrategy.swift \
+        Models/Schema/DownloadState.swift \
+        Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaMigrationPlan.swift \
+        Models/UserProfile.swift \
+        Services/Sources/SourceKey.swift \
+        Services/Sources/SourceModels.swift \
+        Services/Sources/ChapterRecognition.swift \
+        Services/Sources/ChapterSourceSync.swift \
+        tests/V2ChapterSyncChecks.swift
+      ;;
+    page-pipeline)
+      compile_and_run page-pipeline \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Services/Sources/SourceModels.swift \
+        Services/Network/HTTPTypes.swift \
+        Services/Network/Interceptors.swift \
+        Services/Network/HTTPClient.swift \
+        Services/Images/ChapterCache.swift \
+        Services/Images/PageLoader.swift \
+        Features/MangaReader/PagePrefetchPlan.swift \
+        Features/MangaReader/MangaProgress.swift \
+        tests/V2PagePipelineChecks.swift
+      ;;
+    scanlators)
+      compile_and_run scanlators \
+        Features/Novel/ScanlatorRules.swift \
+        tests/V2ScanlatorChecks.swift
+      ;;
+    reader-settings)
+      compile_and_run reader-settings \
+        Features/MangaReader/MangaReadingMode.swift \
+        Features/MangaReader/MangaReaderControls.swift \
+        Features/MangaReader/MangaReaderSettings.swift \
+        tests/V2ReaderSettingsChecks.swift
+      ;;
+    filters)
+      compile_and_run filters \
+        Models/Enums/LibraryFilter.swift \
+        tests/LibraryFilterChecks.swift
+      ;;
+    sorts)
+      compile_and_run sorts \
+        Models/Enums/SortOrder.swift \
+        Models/Enums/LibraryFilter.swift \
+        Models/Enums/LibrarySort.swift \
+        tests/LibrarySortChecks.swift
+      ;;
+    categories)
+      compile_and_run categories \
+        Models/Enums/DisplayMode.swift \
+        Models/Enums/LibraryFilter.swift \
+        Models/Enums/CategorySettings.swift \
+        tests/CategorySettingsChecks.swift
+      ;;
+    badges)
+      compile_and_run badges \
+        Models/Enums/LibraryBadges.swift \
+        tests/LibraryBadgeChecks.swift
+      ;;
+    offline)
+      compile_and_run offline \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Models/Schema/UpdateStrategy.swift \
+        Models/Schema/DownloadState.swift \
+        Models/Schema/SchemaV1.swift \
+        Models/UserProfile.swift \
+        Services/Sources/SourceKey.swift \
+        Services/Sources/SourceModels.swift \
+        Services/LibraryBackup.swift \
+        Services/OfflineChapters.swift \
+        tests/OfflineLibraryChecks.swift
+      ;;
+    mihon-backup)
+      compile_and_run mihon-backup \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Models/Schema/UpdateStrategy.swift \
+        Models/Schema/DownloadState.swift \
+        Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaMigrationPlan.swift \
+        Models/UserProfile.swift \
+        Services/Sources/SourceKey.swift \
+        Services/Extensions/ExtensionStore.swift \
+        Services/Extensions/BundledExtensions.swift \
+        Services/Backup/ProtobufReader.swift \
+        Services/Backup/MihonBackup.swift \
+        Utilities/Gzip.swift \
+        tests/MihonBackupChecks.swift
+      ;;
+    tts-contracts)
+      compile_and_run_plain tts-contracts \
+        Models/TTSAudio.swift \
+        Features/Reader/ReaderTTSJavaScript.swift \
+        Features/Reader/ReaderContentBridge.swift \
+        Services/TTSChapterSource.swift \
+        tests/TTSContractChecks.swift
+      ;;
+    player)
+      shift
+      if [ $# -lt 1 ]; then
+        echo "check.sh player: needs a downloaded package folder" >&2
+        echo "usage: ./scripts/check.sh player <complete-package-folder> [stream-parts-folder]" >&2
+        exit 2
+      fi
+      binary=$(mktemp /tmp/lnreader-player.XXXXXX)
+      trap 'rm -f "$binary"' EXIT
+      xcrun swiftc -parse-as-library \
+        Models/TTSAudio.swift \
+        Services/ReaderTTSManager.swift \
+        tests/TTSPlayerChecks.swift \
+        -o "$binary"
+      "$binary" "$@"
+      ;;
+    native-comments)
+      # SwiftSoup is a package dependency, so this one builds a throwaway
+      # SwiftPM package instead of calling swiftc directly.
+      check_dir=$(mktemp -d /tmp/lnreader-native-comments.XXXXXX)
+      trap 'rm -rf "$check_dir"' EXIT
+      mkdir -p "$check_dir/Sources/Checks"
+      cp Services/NovelFireCommentsService.swift Services/CommentSite.swift \
+        tests/NativeCommentsChecks.swift "$check_dir/Sources/Checks/"
+      python3 - "$check_dir/Package.swift" <<'PY'
+import json, os, sys
+checkout = os.environ.get('SWIFTSOUP_CHECKOUT')
+dependency = '.package(path: ' + json.dumps(checkout) + ')' if checkout else '.package(url: "https://github.com/scinfu/SwiftSoup.git", exact: "2.14.3")'
+open(sys.argv[1], 'w').write('''// swift-tools-version: 5.9
+import PackageDescription
+let package = Package(name: "NativeCommentChecks", platforms: [.macOS(.v14)], dependencies: [''' + dependency + '''], targets: [.executableTarget(name: "Checks", dependencies: [.product(name: "SwiftSoup", package: "SwiftSoup")])])
+''')
+PY
+      swift run --package-path "$check_dir" --scratch-path /tmp/lnreader-native-comment-checks-build Checks
+      ;;
+    extensions)
+      # Runs a bundle through the real host: JSC -> HTTP bridge -> SwiftSoup ->
+      # SourceEntry/Chapter/Page, with fixtures served from a local directory so
+      # the check never depends on a live site.
+      SWIFTSOUP=$(ls -d "$HOME"/Library/Developer/Xcode/DerivedData/LNReader-*/SourcePackages/checkouts/SwiftSoup/Sources 2>/dev/null | head -1)
+      if [ -z "$SWIFTSOUP" ]; then
+        echo "SwiftSoup checkout not found; open the project in Xcode once so SPM resolves." >&2
+        exit 1
+      fi
+
+      MODDIR=/tmp/lnr-mac
+      if [ ! -f "$MODDIR/libSwiftSoup.a" ]; then
+        mkdir -p "$MODDIR"
+        echo "Building SwiftSoup for macOS (once)…"
+        xcrun swiftc -emit-library -static -disable-sandbox -module-name SwiftSoup \
+          -o "$MODDIR/libSwiftSoup.a" -emit-module-path "$MODDIR/SwiftSoup.swiftmodule" \
+          "$SWIFTSOUP"/*.swift
+      fi
+
+      PORT=${PORT:-8123}
+      python3 -m http.server "$PORT" --bind 127.0.0.1 --directory tests/fixtures/extensions \
+        >/tmp/lnr-extension-server.log 2>&1 &
+      SERVER_PID=$!
+
+      binary=$(mktemp /tmp/lnreader-extensions.XXXXXX)
+      cleanup() {
+        kill "$SERVER_PID" 2>/dev/null || true
+        rm -f "$binary"
+      }
+      trap cleanup EXIT INT TERM
+
+      i=0
+      while [ $i -lt 50 ]; do
+        if curl -sf "http://127.0.0.1:$PORT/list.html" >/dev/null 2>&1; then break; fi
+        i=$((i + 1))
+        sleep 0.1
+      done
+
+      xcrun swiftc -parse-as-library -swift-version 5 -disable-sandbox \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Services/Sources/SourceKey.swift \
+        Services/Sources/SourceModels.swift \
+        Services/Sources/SourceFilters.swift \
+        Services/Sources/CatalogSource.swift \
+        Services/Network/HTTPTypes.swift \
+        Services/Network/Interceptors.swift \
+        Services/Network/HTTPClient.swift \
+        Services/Extensions/ExtensionContract.swift \
+        Services/Extensions/WebViewCapture.swift \
+        Services/Extensions/JSExtensionHost.swift \
+        Services/Extensions/JSBundleMangaSource.swift \
+        Utilities/DateParsing.swift \
+        tests/V2ExtensionChecks.swift \
+        -I "$MODDIR" -L "$MODDIR" -lSwiftSoup \
+        -o "$binary"
+
+      FIXTURE_BASE_URL="http://127.0.0.1:$PORT" "$binary"
+      ;;
+    *)
+      echo "check.sh: unknown check '$1'" >&2
+      echo >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+case "${1:-}" in
+  '')
+    usage
+    ;;
+  all)
+    for name in $PLAIN_CHECKS; do
+      echo "==> $name"
+      run "$name"
+    done
+    echo "==> all $(( $(echo $PLAIN_CHECKS | wc -w) )) checks passed"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    echo "==> $1"
+    run "$@"
+    ;;
+esac

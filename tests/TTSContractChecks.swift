@@ -1,4 +1,4 @@
-// Run on macOS with scripts/check-tts-contracts.sh
+// Run on macOS with scripts/check.sh tts-contracts
 import AppKit
 import Foundation
 import WebKit
