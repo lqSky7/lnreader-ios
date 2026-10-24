@@ -25,10 +25,17 @@ struct ChapterListView: View {
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
+    @AppStorage("chapters.ascending") private var ascending = false
     @State private var showSearchField = false
     @State private var showDirectory = false
     @State private var showScanlators = false
     @FocusState private var searchFocused: Bool
+
+    /// The whole list in the chosen order, built when the directory opens.
+    private var directoryChapters: [ChapterDisplay] {
+        let all = allChapters.isEmpty ? chapters : allChapters
+        return all.sorted { ascending ? $0.sortNumber < $1.sortNumber : $0.sortNumber > $1.sortNumber }
+    }
 
     private var isFiltered: Bool { selectedFilter != .all || !searchText.isEmpty }
     private var rangeDescription: String {
@@ -56,12 +63,18 @@ struct ChapterListView: View {
                     Image(systemName: showSearchField ? "xmark" : "magnifyingglass").frame(width: 40, height: 40)
                 }.buttonStyle(.glass).accessibilityLabel(showSearchField ? "Close chapter search" : "Search chapters")
                 Menu {
+                    Picker("Order", selection: $ascending) {
+                        Label("Newest first", systemImage: "arrow.down").tag(false)
+                        Label("Oldest first", systemImage: "arrow.up").tag(true)
+                    }
                     Picker("Filter chapters", selection: $selectedFilter) {
                         ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
                     }
                 } label: {
-                    Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill").frame(width: 40, height: 40)
-                }.buttonStyle(.glass).accessibilityLabel("Filter chapters")
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .foregroundStyle(selectedFilter == .all ? Color.primary : Color.accentColor)
+                        .frame(width: 40, height: 40)
+                }.buttonStyle(.glass).accessibilityLabel("Sort and filter chapters")
 
                 if let scanlatorSettings {
                     Button {
@@ -131,7 +144,7 @@ struct ChapterListView: View {
         .padding(.horizontal)
         .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: showSearchField)
         .sheet(isPresented: $showDirectory) {
-            ChapterDirectoryView(entry: entry, chapters: allChapters.isEmpty ? chapters : allChapters,
+            ChapterDirectoryView(entry: entry, chapters: directoryChapters,
                 sourceKey: sourceKey, currentChapterPath: chapters.first(where: { $0.unread })?.path ?? chapters.first?.path,
                 initialSearch: searchText, initialFilter: selectedFilter)
         }
@@ -297,7 +310,8 @@ struct ChapterDirectoryView: View {
         let items = filtered
         guard !items.isEmpty else { return "No chapters" }
         let range = ChapterPages.bounds(total: items.count, page: page, size: pageSize)
-        return "\(items[range.lowerBound].position + 1)–\(items[range.upperBound - 1].position + 1)"
+        let ends = [items[range.lowerBound].position, items[range.upperBound - 1].position]
+        return "\(ends.min()! + 1)–\(ends.max()! + 1)"
     }
     var body: some View {
         NavigationStack {
@@ -353,7 +367,7 @@ struct ChapterDirectoryView: View {
                         Picker("Filter", selection: Binding(get: { selectedFilter }, set: { selectedFilter = $0; page = 0 })) {
                             ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
                         }
-                    } label: { Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill") }.accessibilityLabel("Filter chapters")
+                    } label: { Image(systemName: "line.3.horizontal.decrease").foregroundStyle(selectedFilter == .all ? Color.primary : Color.accentColor) }.accessibilityLabel("Filter chapters")
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { if let onClose { onClose() } else { dismiss() } } }
             }

@@ -39,6 +39,8 @@ struct NovelDetailView: View {
 
     // Search + navigation state
     @State private var chapterSearch = ""
+    /// Chapter order for the detail list and the full directory (`ChapterListView` owns the menu).
+    @AppStorage("chapters.ascending") private var chaptersAscending = false
     @State private var navigateToChapter: ChapterDisplay? = nil
     @State private var allChapters: [ChapterDisplay] = []
     /// `allChapters` after scanlator rules and number ordering.
@@ -338,7 +340,14 @@ struct NovelDetailView: View {
         (localEntry?.kind ?? sourceEntry?.kind ?? .novel) == .manga
     }
 
+    /// `orderedChapters` is newest-first; the slicing below depends on that, so
+    /// the oldest-first option flips only what it hands to the screen.
     private var pagedChapters: [ChapterDisplay] {
+        let page = newestFirstPage
+        return chaptersAscending ? page.reversed() : page
+    }
+
+    private var newestFirstPage: [ChapterDisplay] {
         let list = filteredChapters
         guard !list.isEmpty else { return [] }
         if showsAllChapters { return list }
