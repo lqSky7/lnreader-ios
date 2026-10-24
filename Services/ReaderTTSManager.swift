@@ -130,7 +130,8 @@ final class ReaderTTSManager: ObservableObject {
     }
     func playAvailable(_ record: TTSDownloadRecord) {
         if record.isAvailable { play(renditionID: record.id); return }
-        stop(); TTSVoicePreviewPlayer.shared.stop()
+        // The caller attached the cover just before this; keep it through the stop.
+        stop(clearingArtwork: false); TTSVoicePreviewPlayer.shared.stop()
         streamRecord = record; isBuffering = true; isPaused = false
         playbackStatus = "Loading ready audio…"
         if let text = TTSOfflineLibrary.shared.localText(bookId: record.rendition.bookId, chapterId: record.rendition.chapterId), text.contentRevision == record.rendition.contentRevision {
@@ -286,12 +287,12 @@ final class ReaderTTSManager: ObservableObject {
         sleepTimerLabel = minutes.map { "\($0)m" } ?? "Off"
     }
     func sleepAfterChapter() { sleepDeadline = nil; sleepAtChapterEnd = true; sleepTimerLabel = "Chapter" }
-    func stop() {
+    func stop(clearingArtwork: Bool = true) {
         persistPosition(); cancelStream(); epoch = UUID(); seekID = nil; itemObservation?.invalidate(); itemObservation = nil
         player.pause(); player.replaceCurrentItem(with: nil)
         isSpeaking = false; isPaused = false; isBuffering = false; currentWord = nil; currentBlockIndex = nil
         manifest = nil; elapsed = 0; duration = 0
-        artworkTask?.cancel(); artworkTask = nil; artwork = nil; artworkBookId = nil
+        if clearingArtwork { artworkTask?.cancel(); artworkTask = nil; artwork = nil; artworkBookId = nil }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -383,13 +384,18 @@ final class ReaderTTSManager: ObservableObject {
         else { url = URL(fileURLWithPath: value) }
         guard let url else { return nil }
         #if os(iOS)
+        if !url.isFileURL, let cached = ImageCache.shared.object(forKey: url as NSURL) { return cached }
         if url.isFileURL { return UIImage(contentsOfFile: url.path) }
         #elseif os(macOS)
         if url.isFileURL { return NSImage(contentsOf: url) }
         #else
         return nil
         #endif
-        guard let (data, response) = try? await URLSession.shared.data(from: url),
+        // Same browser User-Agent the library covers use; CDNs block the default one.
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 15
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode ?? 200 < 400 else { return nil }
         #if os(iOS)
         return UIImage(data: data)
