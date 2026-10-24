@@ -16,10 +16,6 @@ struct MoreView: View {
     @State private var showingEditProfile = false
     @State private var showingAuth = false
 
-    // Haptic feedback generators
-    private let lightFeedback = UIImpactFeedbackGenerator(style: .light)
-    private let mediumFeedback = UIImpactFeedbackGenerator(style: .medium)
-
     private var userProfile: UserProfile {
         profiles.first ?? UserProfile(name: "Reader")
     }
@@ -70,8 +66,6 @@ struct MoreView: View {
             }
             .onAppear {
                 ensureProfileExists()
-                lightFeedback.prepare()
-                mediumFeedback.prepare()
             }
         }
     }
@@ -128,7 +122,7 @@ struct MoreView: View {
                 
                 // Pencil edit button
                 Button {
-                    lightFeedback.impactOccurred()
+                    Haptics.shared.impact(.light)
                     showingEditProfile = true
                 } label: {
                     Image(systemName: "pencil.circle.fill")
@@ -246,7 +240,7 @@ struct MoreView: View {
                 }
                 .buttonStyle(BentoCellButtonStyle())
                 .simultaneousGesture(TapGesture().onEnded {
-                    lightFeedback.impactOccurred()
+                    Haptics.shared.impact(.light)
                 })
                 
                 Rectangle()
@@ -274,7 +268,7 @@ struct MoreView: View {
                 }
                 .buttonStyle(BentoCellButtonStyle())
                 .simultaneousGesture(TapGesture().onEnded {
-                    lightFeedback.impactOccurred()
+                    Haptics.shared.impact(.light)
                 })
             }
             .frame(height: 140)
@@ -306,7 +300,7 @@ struct MoreView: View {
                 }
                 .buttonStyle(BentoCellButtonStyle())
                 .simultaneousGesture(TapGesture().onEnded {
-                    lightFeedback.impactOccurred()
+                    Haptics.shared.impact(.light)
                 })
                 
                 Rectangle()
@@ -334,7 +328,7 @@ struct MoreView: View {
                 }
                 .buttonStyle(BentoCellButtonStyle())
                 .simultaneousGesture(TapGesture().onEnded {
-                    lightFeedback.impactOccurred()
+                    Haptics.shared.impact(.light)
                 })
             }
             .frame(height: 140)
@@ -376,7 +370,7 @@ struct MoreView: View {
             }
             .buttonStyle(BentoCellButtonStyle())
             .simultaneousGesture(TapGesture().onEnded {
-                mediumFeedback.impactOccurred()
+                Haptics.shared.impact(.medium)
             })
             
             Rectangle()
@@ -416,7 +410,7 @@ struct MoreView: View {
             }
             .buttonStyle(BentoCellButtonStyle())
             .simultaneousGesture(TapGesture().onEnded {
-                mediumFeedback.impactOccurred()
+                Haptics.shared.impact(.medium)
             })
         }
         .background(

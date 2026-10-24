@@ -216,7 +216,7 @@ struct LibraryView: View {
             }
         }
         .pickerStyle(.segmented)
-        .sensoryFeedback(.selection, trigger: kindFilterRaw)
+        .hapticFeedback(.selection, trigger: kindFilterRaw)
         .padding(.horizontal)
         .padding(.top, 4)
         .padding(.bottom, 8)

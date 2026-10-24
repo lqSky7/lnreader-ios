@@ -154,7 +154,7 @@ struct CategoryTabView: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                 guard let onLongPress else { return }
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Haptics.shared.impact(.medium)
                 suppressTap = true
                 // The lift may not report a tap at all; do not eat the next real one.
                 Task { try? await Task.sleep(for: .milliseconds(600)); suppressTap = false }

@@ -111,8 +111,6 @@ struct HoldScrollConfig: Codable, Equatable {
     /// `true`: dragging up speeds the scroll up and dragging down slows it.
     /// `false`: the other way round.
     var upIncreases: Bool = true
-    /// Tick as the speed changes while holding, and a firmer tap at the limits.
-    var haptics: Bool = true
 
     init() {}
 
@@ -126,7 +124,6 @@ struct HoldScrollConfig: Codable, Equatable {
         minSpeed = try c.decodeIfPresent(Double.self, forKey: .minSpeed) ?? d.minSpeed
         maxSpeed = try c.decodeIfPresent(Double.self, forKey: .maxSpeed) ?? d.maxSpeed
         upIncreases = try c.decodeIfPresent(Bool.self, forKey: .upIncreases) ?? d.upIncreases
-        haptics = try c.decodeIfPresent(Bool.self, forKey: .haptics) ?? d.haptics
     }
 
     static let baseRange = 20.0...1200.0
@@ -142,6 +139,13 @@ struct HoldScrollConfig: Codable, Equatable {
     /// Bounds with a sane order even if the saved values were not.
     var lower: Double { max(1, min(minSpeed, maxSpeed)) }
     var upper: Double { max(lower, maxSpeed) }
+
+    /// Where `speed` sits between the slowest and fastest, 0...1. The haptic
+    /// ticks brighten along it.
+    func level(of speed: Double) -> Double {
+        guard upper > lower else { return 1 }
+        return min(max((speed - lower) / (upper - lower), 0), 1)
+    }
 }
 
 /// What the hold-to-scroll haptics should do for a speed change.

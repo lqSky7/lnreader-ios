@@ -101,9 +101,7 @@ struct ReaderView: View {
     private func setChrome(_ state: ReaderChromeState) {
         guard chrome != state else { return }
         withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) { chrome = state }
-        #if canImport(UIKit)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
+        Haptics.shared.impact(.light)
     }
 
     /// Kept out of the modifier chain: inlining it pushes the body past what the

@@ -110,7 +110,7 @@ struct ChapterRow: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                 guard let selection else { return }
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Haptics.shared.impact(.medium)
                 if selection.isActive {
                     selection.extend(to: chapter.path, in: orderedPaths())
                 } else {

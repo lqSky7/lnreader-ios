@@ -63,9 +63,42 @@ import WebKit
             var loadedCommentsHtml: String?
             var loadedHasMoreComments: Bool?
 
+            private var scrollObservation: NSKeyValueObservation?
+            private var speedometer = ScrollSpeedometer()
+            private var detents = ScrollDetents()
+            private var edgeBump = ScrollEdgeBump()
+
             init(onTap: (() -> Void)?, bridge: ReaderContentBridge?) {
                 self.onTap = onTap
                 self.bridge = bridge
+            }
+
+            /// The web view keeps its scroll view's delegate for itself, so the
+            /// offset is watched instead.
+            func watchScroll(_ scrollView: UIScrollView) {
+                scrollObservation = scrollView.observe(\.contentOffset) { [weak self] view, _ in
+                    MainActor.assumeIsolated { self?.scrolled(view) }
+                }
+            }
+
+            /// A steady tick as the text moves, and a thud on running into the
+            /// top or the end. Only for the reader's
+            /// own drag and its momentum: restores and narration follow are silent.
+            @MainActor private func scrolled(_ view: UIScrollView) {
+                let userDriven = view.isDragging || view.isDecelerating
+                let now = CACurrentMediaTime()
+                let top = Double(view.contentOffset.y)
+                let speed = speedometer.sample(offset: top, time: now)
+                let inset = view.adjustedContentInset
+                let detent = detents.update(offset: top, speed: speed, time: now, userDriven: userDriven)
+                let edge = edgeBump.update(
+                    offset: top,
+                    minOffset: -Double(inset.top),
+                    maxOffset: Double(view.contentSize.height - view.bounds.height + inset.bottom),
+                    speed: speed,
+                    userDriven: userDriven
+                )
+                if let cue = edge ?? detent { Haptics.shared.scroll(cue) }
             }
 
             func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -139,6 +172,8 @@ import WebKit
             webView.scrollView.showsHorizontalScrollIndicator = false
             webView.scrollView.contentInsetAdjustmentBehavior = .never
             webView.navigationDelegate = context.coordinator
+            context.coordinator.watchScroll(webView.scrollView)
+            Haptics.shared.prepare()
             bridge.setWebView(webView)
 
             return webView

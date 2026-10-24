@@ -39,7 +39,7 @@ compile_and_run_plain() {
 # The checks that take no arguments, in dependency order: the cheap layers
 # first, so a break in the foundation shows up before the expensive ones run.
 PLAIN_CHECKS="foundation schema chapter-sync page-pipeline scanlators \
-reader-settings filters sorts categories badges offline mihon-backup tts-contracts"
+reader-settings haptics filters sorts categories badges offline mihon-backup tts-contracts"
 
 usage() {
   cat <<'USAGE'
@@ -50,7 +50,7 @@ all                run every check that takes no arguments
 <check>            run one check
 
 Checks: foundation schema chapter-sync page-pipeline scanlators reader-settings
-        filters sorts categories badges offline mihon-backup tts-contracts
+        haptics filters sorts categories badges offline mihon-backup tts-contracts
         extensions native-comments player
 
 Checks needing setup, not part of `all`:
@@ -127,6 +127,11 @@ run() {
         Features/MangaReader/MangaReaderControls.swift \
         Features/MangaReader/MangaReaderSettings.swift \
         tests/V2ReaderSettingsChecks.swift
+      ;;
+    haptics)
+      compile_and_run haptics \
+        Services/ScrollHaptics.swift \
+        tests/HapticsChecks.swift
       ;;
     filters)
       compile_and_run filters \

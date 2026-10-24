@@ -167,7 +167,10 @@ struct MangaReaderView: View {
             setScreenAwake(false)
             libraryManager.flushProgress(context: modelContext)
         }
-        .onChange(of: currentIndex) { _, index in handlePageChange(index) }
+        .onChange(of: currentIndex) { old, index in
+            pageTurnHaptic(from: old, to: index)
+            handlePageChange(index)
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
                 settleAndFlushProgress()
@@ -809,8 +812,24 @@ struct MangaReaderView: View {
         let target = currentIndex + (forward ? 1 : -1)
         let edgeCard = (target == pages.count && hasChapter(offset: 1))
             || (target == -1 && hasChapter(offset: -1))
-        guard pages.indices.contains(target) || edgeCard else { return }
+        guard pages.indices.contains(target) || edgeCard else {
+            // Nothing further this way: the same wall a swipe would bounce off.
+            Haptics.shared.scroll(ScrollFeel.edge(speed: 400))
+            return
+        }
         currentIndex = target
+    }
+
+    /// Paged mode: a swish-and-click per page, the chapter cue on landing on an
+    /// edge card. Only one-page steps (a swipe, a tap zone, a volume key, the
+    /// slider): a chapter opening on its resume page is not a turn.
+    private func pageTurnHaptic(from old: Int, to new: Int) {
+        guard mode == .pager, !isLoading, abs(new - old) == 1 else { return }
+        if new == -1 || new == pages.count {
+            Haptics.shared.chapterBreak()
+        } else {
+            Haptics.shared.pageTurn()
+        }
     }
 
     private func setChrome(_ state: ReaderChromeState) {
@@ -818,9 +837,7 @@ struct MangaReaderView: View {
         chromeHideTask = nil
         guard chrome != state else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { chrome = state }
-        #if canImport(UIKit)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
+        Haptics.shared.impact(.light)
     }
 
     private func toggleControls() {

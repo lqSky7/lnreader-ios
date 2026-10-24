@@ -227,9 +227,10 @@ struct V2ReaderSettingsChecks {
         precondition(tracker.update(speed: 400, config: hold) == .limit, "arriving at the maximum is firmer")
         var atLimit = HoldHapticTracker(startSpeed: 100, config: hold)
         precondition(atLimit.update(speed: 100, config: hold) == nil, "starting on a limit does not fire it")
-        precondition(HoldScrollConfig().haptics, "haptics are on by default")
-        precondition(MangaControlSettings(rawValue: #"{"hold":{"baseSpeed":90}}"#)?.hold.haptics == true,
-                     "saved settings from before haptics existed get the default")
+        precondition(hold.level(of: 100) == 0 && hold.level(of: 400) == 1 && hold.level(of: 250) == 0.5,
+                     "tick brightness runs from the slowest to the fastest speed")
+        precondition(MangaControlSettings(rawValue: #"{"hold":{"baseSpeed":90,"haptics":false}}"#)?.hold.baseSpeed == 90,
+                     "settings saved with the old per-hold haptics switch still load")
     }
 
     // MARK: - Volume keys

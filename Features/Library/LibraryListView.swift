@@ -107,9 +107,7 @@ struct InteractiveListRow: View {
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4)
                 .onEnded { _ in
-                    #if os(iOS)
-                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                    #endif
+                    Haptics.shared.impact(.heavy)
                     longPressActive = true
                     onStartEditing()
                 }

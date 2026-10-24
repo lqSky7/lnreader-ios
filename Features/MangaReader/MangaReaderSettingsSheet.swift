@@ -139,7 +139,6 @@ struct MangaReaderSettingsSheet: View {
                     Text("Up").tag(true)
                     Text("Down").tag(false)
                 }
-                Toggle("Haptic feedback", isOn: $controls.hold.haptics)
             }
         } header: {
             Text("Hold to scroll")

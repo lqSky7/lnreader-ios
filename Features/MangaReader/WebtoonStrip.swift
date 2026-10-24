@@ -93,6 +93,10 @@ final class WebtoonViewController: UIViewController,
     private var observer: NSObjectProtocol?
     private var touchStoppedScroll = false
     private var lastScrollTime: CFTimeInterval = 0
+    private var speedometer = ScrollSpeedometer()
+    private var detents = ScrollDetents()
+    private var chapterMarks = ScrollChapterMarks()
+    private var edgeBump = ScrollEdgeBump()
 
     init(startIndex: Int, controller: WebtoonScrollController) {
         self.startIndex = startIndex
@@ -134,6 +138,7 @@ final class WebtoonViewController: UIViewController,
         collectionView.addGestureRecognizer(tap)
 
         controller.attach(collectionView)
+        Haptics.shared.prepare()
         controller.jumpToPage = { [weak self] chapter, index in
             guard let self, let item = self.items.firstIndex(where: {
                 if case let .page(segment, pageIndex, _) = $0 {
@@ -327,9 +332,11 @@ final class WebtoonViewController: UIViewController,
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         lastScrollTime = CACurrentMediaTime()
         guard didRestore else { return }
-        if scrollView.isDragging || scrollView.isDecelerating { controller.onScrollActivity?() }
+        let userDriven = scrollView.isDragging || scrollView.isDecelerating
+        if userDriven { controller.onScrollActivity?() }
         let top = scrollView.contentOffset.y
         let bottom = top + scrollView.bounds.height
+        playScrollHaptics(top: top, userDriven: userDriven)
 
         var current: Int?
         var endSegment: String?
@@ -356,6 +363,26 @@ final class WebtoonViewController: UIViewController,
             endCardSegment = endSegment
             onEndCard?(endSegment)
         }
+    }
+
+    // MARK: Haptics
+
+    /// A steady tick as the strip moves, a chapter cue as a divider reaches the
+    /// middle of the screen, a thud on running into either end. Only for the
+    /// reader's own drag and its momentum: hold, auto scroll and jumps are silent.
+    private func playScrollHaptics(top: CGFloat, userDriven: Bool) {
+        let now = CACurrentMediaTime()
+        let speed = speedometer.sample(offset: Double(top), time: now)
+        let line = CGPoint(x: collectionView.bounds.midX, y: top + collectionView.bounds.height / 2)
+        let row = collectionView.indexPathForItem(at: line)?.item
+        var isDivider = false
+        if let row, items.indices.contains(row), case .divider = items[row] { isDivider = true }
+        // Every tracker sees every frame, so none loses its place when another fires.
+        let detent = detents.update(offset: Double(top), speed: speed, time: now, userDriven: userDriven)
+        let chapter = chapterMarks.update(row: row, isChapterBreak: isDivider, speed: speed, userDriven: userDriven)
+        let edge = edgeBump.update(offset: Double(top), minOffset: 0, maxOffset: Double(maxOffsetY),
+                                   speed: speed, userDriven: userDriven)
+        if let cue = edge ?? chapter ?? detent { Haptics.shared.scroll(cue) }
     }
 
     // MARK: Taps

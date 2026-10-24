@@ -146,7 +146,7 @@ struct NovelHeaderView: View {
             // acknowledged by a haptic.
             .animation(.spring(response: 0.32, dampingFraction: 0.8), value: inLibrary)
             .animation(.easeInOut(duration: 0.18), value: isAddingToLibrary)
-            .sensoryFeedback(.success, trigger: inLibrary)
+            .hapticFeedback(.success, trigger: inLibrary)
         }
         .padding()
         .padding(.bottom, 8)

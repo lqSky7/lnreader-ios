@@ -121,7 +121,7 @@ struct BrowseView: View {
             }
         }
         .pickerStyle(.segmented)
-        .sensoryFeedback(.selection, trigger: kindRaw)
+        .hapticFeedback(.selection, trigger: kindRaw)
     }
 
     private var searchPrompt: String {

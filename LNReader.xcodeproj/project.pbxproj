@@ -79,6 +79,8 @@
 		8C9407C6843D94D83BC3760D /* PluginShims.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16239F828D386E43FDBB928 /* PluginShims.swift */; };
 		8D0D94AA7469B8B75A2E194F /* ScanlatorSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB18EE68F95E7A622DA3FCCC /* ScanlatorSettings.swift */; };
 		8D5A446E5B0B3585C84B2490 /* FocusModeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E6A6D07AE4B518B274A5072 /* FocusModeManager.swift */; };
+		97808F4EE7491512BF9AFDD9 /* ScrollHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A17CCDEE9E4207E1E77330A /* ScrollHaptics.swift */; };
+		EBE9076B7945ECE6BF481FFE /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB73A2B0DA83A8720F604A6 /* Haptics.swift */; };
 		936C1CA9EF06DEF42FD6D430 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C527A04CDCEF84E8DEA8EFB /* LoadingView.swift */; };
 		939B509FC87B4E6546B04724 /* ReaderContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89DF43235A3A3FF8323B318A /* ReaderContent.swift */; };
 		94D28F3920B360E7992CF402 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D146837B0A35B46E96AA935 /* BrowseView.swift */; };
@@ -206,6 +208,8 @@
 		2C7BE97FD82780D085139CC2 /* SourceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceModels.swift; sourceTree = "<group>"; };
 		2D249BF6B2E5EFC8CEE1A15F /* SourceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDetailView.swift; sourceTree = "<group>"; };
 		2E6A6D07AE4B518B274A5072 /* FocusModeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusModeManager.swift; sourceTree = "<group>"; };
+		6A17CCDEE9E4207E1E77330A /* ScrollHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollHaptics.swift; sourceTree = "<group>"; };
+		1EB73A2B0DA83A8720F604A6 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		2EEBA7B6D149D352914BE166 /* HTTPTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPTypes.swift; sourceTree = "<group>"; };
 		2F271CE6759A7893EA806D65 /* UpdateStrategy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateStrategy.swift; sourceTree = "<group>"; };
 		3098E6B5EE638FB9BAC7732D /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -554,6 +558,8 @@
 				575BF20D543425010A281D1D /* TTSAPIClient.swift */,
 				C5EE675CB77CE18FD43663D2 /* CommentSite.swift */,
 				2E6A6D07AE4B518B274A5072 /* FocusModeManager.swift */,
+				6A17CCDEE9E4207E1E77330A /* ScrollHaptics.swift */,
+				1EB73A2B0DA83A8720F604A6 /* Haptics.swift */,
 				635EBF2C4EBF46F848E6E070 /* LibraryManager.swift */,
 				8F0A8E05349ED5A1033E1967 /* LocalBookManager.swift */,
 				FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */,
@@ -850,6 +856,8 @@
 				BFFABD8B1BC6977119832E29 /* EmptyStateView.swift in Sources */,
 				529B1B70BCE0941501A626B2 /* FlexibleHeader.swift in Sources */,
 				8D5A446E5B0B3585C84B2490 /* FocusModeManager.swift in Sources */,
+				97808F4EE7491512BF9AFDD9 /* ScrollHaptics.swift in Sources */,
+				EBE9076B7945ECE6BF481FFE /* Haptics.swift in Sources */,
 				0D61A49ED5F1D91D3A515A14 /* GeneralSettingsView.swift in Sources */,
 				75995F2F5AE6494AC92E1C43 /* GlassCard.swift in Sources */,
 				EFAD3576C145DEDFF32B3D98 /* GlassOverlay.swift in Sources */,

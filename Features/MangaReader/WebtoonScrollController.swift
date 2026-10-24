@@ -51,8 +51,6 @@ final class WebtoonScrollController {
     @ObservationIgnored private var holdStartY: CGFloat = 0
     @ObservationIgnored private var lastHoldEnd = Date.distantPast
     @ObservationIgnored private var hapticTracker: HoldHapticTracker?
-    @ObservationIgnored private let tickFeedback = UISelectionFeedbackGenerator()
-    @ObservationIgnored private let limitFeedback = UIImpactFeedbackGenerator(style: .rigid)
     @ObservationIgnored private lazy var proxy = Proxy(owner: self)
     @ObservationIgnored private lazy var holdRecognizer: UILongPressGestureRecognizer = {
         let recognizer = UILongPressGestureRecognizer(target: proxy, action: #selector(Proxy.held(_:)))
@@ -89,12 +87,14 @@ final class WebtoonScrollController {
     func startAuto() {
         guard scrollView != nil, !isAutoScrolling else { return }
         isAutoScrolling = true
+        Haptics.shared.scrollEngaged()
         updateLink()
     }
 
     func stopAuto() {
         guard isAutoScrolling else { return }
         isAutoScrolling = false
+        Haptics.shared.scrollReleased()
         updateLink()
     }
 
@@ -123,13 +123,12 @@ final class WebtoonScrollController {
         holdStartY = y
         let start = hold.speed(forDrag: 0)
         holdSpeed = start
-        hapticTracker = hold.haptics ? HoldHapticTracker(startSpeed: start, config: hold) : nil
-        tickFeedback.prepare()
-        limitFeedback.prepare()
+        hapticTracker = HoldHapticTracker(startSpeed: start, config: hold)
+        Haptics.shared.prepare()
         // The hold owns the finger from here: a drag changes the speed, it
         // does not also drag the content.
         view.panGestureRecognizer.isEnabled = false
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Haptics.shared.scrollEngaged()
         updateLink()
     }
 
@@ -138,8 +137,8 @@ final class WebtoonScrollController {
         let speed = hold.speed(forDrag: Double(y - holdStartY))
         holdSpeed = speed
         switch hapticTracker?.update(speed: speed, config: hold) {
-        case .tick: tickFeedback.selectionChanged()
-        case .limit: limitFeedback.impactOccurred()
+        case .tick: Haptics.shared.scrollSpeedStep(level: hold.level(of: speed))
+        case .limit: Haptics.shared.scrollSpeedLimit()
         case nil: break
         }
     }
@@ -149,6 +148,7 @@ final class WebtoonScrollController {
         holdSpeed = nil
         hapticTracker = nil
         lastHoldEnd = Date()
+        Haptics.shared.scrollReleased()
         scrollView?.panGestureRecognizer.isEnabled = true
         updateLink()
     }

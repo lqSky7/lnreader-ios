@@ -1,5 +1,5 @@
 // GeneralSettingsView.swift
-// Library defaults and confirmations.
+// Library defaults, confirmations and the app-wide haptics switch.
 
 import SwiftUI
 
@@ -13,6 +13,10 @@ struct GeneralSettingsView: View {
     @AppStorage("general.showDownloadBadges") private var showDownloadBadges = false
     @AppStorage("general.showLanguageBadges") private var showLanguageBadges = false
     @AppStorage("general.showNewBadges") private var showNewBadges = false
+
+    @AppStorage(Haptics.enabledKey) private var hapticsEnabled = true
+    @AppStorage(Haptics.strengthKey) private var hapticStrength = 1.0
+    @AppStorage(Haptics.scrollEnabledKey) private var scrollHaptics = true
 
     var body: some View {
         Form {
@@ -50,8 +54,44 @@ struct GeneralSettingsView: View {
             Section("Library") {
                 Toggle("Confirm before remove", isOn: $confirmRemove)
             }
+
+            hapticsSection
         }
         .settingsScreen("General")
+    }
+
+    private var hapticsSection: some View {
+        Section {
+            Toggle("Vibration", isOn: $hapticsEnabled)
+                .onChange(of: hapticsEnabled) { _, on in
+                    if on { Haptics.shared.chapterBreak() }
+                }
+            if hapticsEnabled {
+                Toggle("While scrolling", isOn: $scrollHaptics)
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Strength")
+                        Spacer()
+                        Text("\(Int((hapticStrength * 100).rounded()))%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $hapticStrength, in: Haptics.strengthRange) { editing in
+                        // Let go to feel the new strength.
+                        if !editing { Haptics.shared.scroll(ScrollFeel.detent(speed: 800)) }
+                    }
+                }
+            }
+        } header: {
+            Text("Haptics")
+        } footer: {
+            Text(!hapticsEnabled
+                ? "No vibration anywhere in the app."
+                : scrollHaptics
+                    ? "Scrolling ticks steadily as the page moves, chapter breaks and the ends of a chapter knock, "
+                        + "and hold to scroll ticks as its speed changes. Applies everywhere in the app."
+                    : "Scrolling is silent. Page turns, hold to scroll and buttons still vibrate.")
+        }
     }
 
     private var defaultSortOrder: Binding<SortOrder> {
