@@ -74,6 +74,8 @@ per-series settings store comes first because reader modes, filters and incognit
   "Reset to default" appears once a series has overrides. Chapters opened outside a library entry
   are keyed by chapter URL. The global default is edited from the new Reader settings sheet
   (options menu → Reader settings…) as well as through "Use for all series".
+  The sheet has a single `.medium` detent: with `.large` as well, scrolling its list pulled
+  the sheet to full height.
 - **R2 original plan.** Today `manga.readingMode` / `manga.pagingDirection` are global
   `@AppStorage`. Add a "this series" override with a "use default" state, shown in the reader
   options menu. Novels keep their own reader settings; only manga needs this.

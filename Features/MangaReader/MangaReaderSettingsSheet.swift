@@ -31,9 +31,9 @@ struct MangaReaderSettingsSheet: View {
             }
         }
         // A partial-height sheet keeps the page in view above it and takes the
-        // system glass material; a full-height modal is for tasks that need the
-        // whole screen.
-        .presentationDetents([.medium, .large])
+        // system glass material. Medium is the only detent so scrolling the
+        // list can't pull the sheet up to full height.
+        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
     }
 
