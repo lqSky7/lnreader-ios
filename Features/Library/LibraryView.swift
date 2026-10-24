@@ -69,22 +69,10 @@ struct LibraryView: View {
                         action: { showFileImporter = true }
                     )
                 } else {
-                    // The picker is chrome and stays put; only the grid pages.
-                    // Paging the whole screen made a swipe drag a duplicate of
-                    // the picker along with the books.
-                    Group {
-                        if showsKindPicker {
-                            libraryPager
-                                // `safeAreaInset`, not a VStack: the scroll view
-                                // has to know the picker is above it, or it adds
-                                // its own navigation-bar inset and leaves a gap.
-                                .safeAreaInset(edge: .top, spacing: 0) {
-                                    kindPicker
-                                        .background(Color(uiColor: .systemBackground))
-                                }
-                        } else {
-                            libraryPage(.all)
-                        }
+                    if showsKindPicker {
+                        libraryPager
+                    } else {
+                        libraryPage(.all)
                     }
                 }
             }
@@ -197,14 +185,28 @@ struct LibraryView: View {
 
     // MARK: - Content
 
-    /// Only the selected kind is built; the segmented control and the swipe both move it.
+    /// Only the selected kind is built; the segmented control and the swipe both
+    /// move it. One scroll view, rows cross-fading in place: swapping the whole
+    /// page rebuilt the scroll view under the navigation bar and lagged.
     private var libraryPager: some View {
         libraryPage(LibraryKindFilter(rawValue: kindFilterRaw) ?? .all)
-            .horizontalSwipe(
-                selection: $kindFilterRaw,
-                options: LibraryKindFilter.allCases.map(\.rawValue),
-                isEnabled: !isEditingLibrary
-            )
+            .animation(AppMotion.tabSwitch(reduceMotion: reduceMotion), value: kindFilterRaw)
+            .simultaneousGesture(kindSwipe)
+    }
+
+    /// Steps between kinds on a clearly horizontal swipe. Only reacts when the
+    /// drag ends, so vertical scrolling is never touched.
+    private var kindSwipe: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onEnded { value in
+                let dx = value.translation.width
+                guard !isEditingLibrary,
+                      abs(dx) > 80, abs(dx) > abs(value.translation.height) * 2 else { return }
+                let options = LibraryKindFilter.allCases.map(\.rawValue)
+                guard let current = options.firstIndex(of: kindFilterRaw) else { return }
+                let next = current + (dx < 0 ? 1 : -1)
+                if options.indices.contains(next) { kindFilterRaw = options[next] }
+            }
     }
 
     private var kindPicker: some View {
@@ -214,6 +216,7 @@ struct LibraryView: View {
             }
         }
         .pickerStyle(.segmented)
+        .sensoryFeedback(.selection, trigger: kindFilterRaw)
         .padding(.horizontal)
         .padding(.top, 4)
         .padding(.bottom, 8)
@@ -224,6 +227,10 @@ struct LibraryView: View {
         let items = pageItems(for: kind)
 
         return ScrollView {
+            // First thing in the scroll view, so it scrolls away with the content
+            // instead of pinning over the search field.
+            if showsKindPicker { kindPicker }
+
             if !categories.isEmpty {
                 CategoryTabView(
                     categories: categories,
