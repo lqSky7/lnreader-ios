@@ -26,7 +26,7 @@ struct NovelInfoSection: View {
                         withAnimation { showFullDescription.toggle() }
                     }
                     .font(Typography.caption)
-                    .foregroundStyle(.primary)
+                    .buttonStyle(.borderless)
                 }
             }
 

@@ -146,11 +146,10 @@ struct ReaderSettings: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") {
+                            Button("Done", role: .confirm) {
                                 commitChanges()
                                 dismiss()
                             }
-                            .fontWeight(.semibold)
                         }
                     }
             }
@@ -164,63 +163,12 @@ struct ReaderSettings: View {
             pinnedPreview
             
             Form {
-                Section("Theme & Colors") {
-                    themesGrid
-                    
-                    Toggle("Paper texture", isOn: Binding(get: { localGrainIntensity > 0 }, set: { localGrainIntensity = $0 ? 10 : 0 }))
-                    if localGrainIntensity > 0 {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("GRAIN INTENSITY")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.secondary)
-                            
-                            HStack(spacing: 12) {
-                                Image(systemName: "circle.dotted")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 24)
-                                
-                                Slider(value: $localGrainIntensity, in: 0...100, step: 5)
-                                
-                                Text("\(Int(localGrainIntensity))%")
-                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 42, alignment: .trailing)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-                    
-                    ColorPicker("Word highlight", selection: Binding(
-                        get: { Color(hex: ReaderAppearance.highlightHex(background: localBackgroundColorHex, custom: highlightColorHex)) ?? .green },
-                        set: { if let hex = $0.toHex() { highlightColorHex = hex } }
-                    ), supportsOpacity: false)
-                    if !highlightColorHex.isEmpty {
-                        Button("Use theme highlight") { highlightColorHex = "" }
-                    }
-                    HStack {
-                        Text("Highlight strength")
-                        Slider(value: $highlightOpacity, in: 0.1...0.65, step: 0.05)
-                    }
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !isCustomizing {
-                            customizeButton
-                                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        } else {
-                            customizeToggleHeader
-                                .transition(.opacity)
-                            groupedLayoutSection
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
-                    }
-                }
-                
+                themeSection
+
                 if isCustomizing {
+                    spacingSection
                     typographySection
-                        .transition(.opacity.combined(with: .move(edge: .top)))
                     moreLayoutSection
-                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 
                 lineFocusSection
@@ -270,138 +218,55 @@ struct ReaderSettings: View {
         .padding(.vertical, 4)
     }
 
-    private var customizeButton: some View {
-        Button(action: {
-            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
-                isCustomizing = true
+    private var themeSection: some View {
+        Section("Theme & Colors") {
+            themesGrid
+
+            Toggle("Paper texture", isOn: Binding(get: { localGrainIntensity > 0 }, set: { localGrainIntensity = $0 ? 10 : 0 }))
+            if localGrainIntensity > 0 {
+                sliderRow("Grain intensity", symbol: "circle.dotted", value: $localGrainIntensity, range: 0...100, step: 5, valueText: "\(Int(localGrainIntensity))%")
             }
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 15))
-                Text("Customize")
-                    .font(.system(size: 15, weight: .semibold))
+
+            ColorPicker("Word highlight", selection: Binding(
+                get: { Color(hex: ReaderAppearance.highlightHex(background: localBackgroundColorHex, custom: highlightColorHex)) ?? .green },
+                set: { if let hex = $0.toHex() { highlightColorHex = hex } }
+            ), supportsOpacity: false)
+            if !highlightColorHex.isEmpty {
+                Button("Use theme highlight") { highlightColorHex = "" }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(Color.secondary.opacity(0.18))
-            .cornerRadius(22)
-            .foregroundStyle(.primary)
+            sliderRow("Highlight strength", symbol: "highlighter", value: $highlightOpacity, range: 0.1...0.65, step: 0.05, valueText: "\(Int(highlightOpacity * 100))%")
+
+            Toggle("Customize", isOn: $isCustomizing.animation(AppMotion.gentle(reduceMotion: reduceMotion)))
         }
-        .buttonStyle(.plain)
-        .padding(.vertical, 4)
     }
 
-    private var customizeToggleHeader: some View {
-        HStack {
-            Text("Customize")
-                .font(.system(size: 15, weight: .semibold))
-            Spacer()
-            Toggle("", isOn: $isCustomizing.animation(AppMotion.gentle(reduceMotion: reduceMotion)))
-                .labelsHidden()
+    /// A labelled slider as one Form row: title and value on top, slider below.
+    private func sliderRow(
+        _ title: LocalizedStringKey, symbol: String, value: Binding<Double>,
+        range: ClosedRange<Double>, step: Double, valueText: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent {
+                Text(valueText).monospacedDigit()
+            } label: {
+                Label(title, systemImage: symbol)
+            }
+            Slider(value: value, in: range, step: step)
+                .accessibilityLabel(title)
+                .accessibilityValue(valueText)
         }
-        .padding(.vertical, 4)
     }
 
-    private var groupedLayoutSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // LINE SPACING
-            VStack(alignment: .leading, spacing: 6) {
-                Text("LINE SPACING")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                
-                HStack(spacing: 12) {
-                    Image(systemName: "arrow.up.and.down.text.horizontal")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-                    
-                    Slider(value: $localLineHeight, in: 1.0...2.5, step: 0.05)
-                    
-                    Text(String(format: "%.2f", localLineHeight))
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 42, alignment: .trailing)
+    private var spacingSection: some View {
+        Section("Spacing") {
+            sliderRow("Line spacing", symbol: "arrow.up.and.down.text.horizontal", value: $localLineHeight, range: 1.0...2.5, step: 0.05, valueText: String(format: "%.2f", localLineHeight))
+            sliderRow("Character spacing", symbol: "arrow.left.and.right", value: $localCharacterSpacing, range: -5...30, step: 1, valueText: "\(Int(localCharacterSpacing))%")
+            sliderRow("Word spacing", symbol: "text.alignleft", value: $localWordSpacing, range: 0...50, step: 2, valueText: "\(Int(localWordSpacing))%")
+            sliderRow("Margins", symbol: "square", value: $localMargins, range: 0...100, step: 5, valueText: "\(Int(localMargins))%")
+                .onChange(of: localMargins) { _, newValue in
+                    localHorizontalPadding = (newValue / 100.0) * 48.0
                 }
-            }
-            
-            Divider()
-                .background(Color.secondary.opacity(0.2))
-            
-            // CHARACTER SPACING
-            VStack(alignment: .leading, spacing: 6) {
-                Text("CHARACTER SPACING")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                
-                HStack(spacing: 12) {
-                    Image(systemName: "arrow.left.and.right")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-                    
-                    Slider(value: $localCharacterSpacing, in: -5...30, step: 1)
-                    
-                    Text("\(Int(localCharacterSpacing))%")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 42, alignment: .trailing)
-                }
-            }
-            
-            Divider()
-                .background(Color.secondary.opacity(0.2))
-            
-            // WORD SPACING
-            VStack(alignment: .leading, spacing: 6) {
-                Text("WORD SPACING")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                
-                HStack(spacing: 12) {
-                    Image(systemName: "text.alignleft")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-                    
-                    Slider(value: $localWordSpacing, in: 0...50, step: 2)
-                    
-                    Text("\(Int(localWordSpacing))%")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 42, alignment: .trailing)
-                }
-            }
-            
-            Divider()
-                .background(Color.secondary.opacity(0.2))
-            
-            // MARGINS
-            VStack(alignment: .leading, spacing: 6) {
-                Text("MARGINS")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                
-                HStack(spacing: 12) {
-                    Image(systemName: "square")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-                    
-                    Slider(value: $localMargins, in: 0...100, step: 5)
-                        .onChange(of: localMargins) { _, newValue in
-                            localHorizontalPadding = (newValue / 100.0) * 48.0
-                        }
-                    
-                    Text("\(Int(localMargins))%")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 42, alignment: .trailing)
-                }
-            }
         }
-        .padding(.vertical, 8)
     }
 
     private var typographySection: some View {
@@ -409,25 +274,21 @@ struct ReaderSettings: View {
             Picker("Font", selection: $localFontFamily) {
                 ForEach(fontFamilies, id: \.self) { font in
                     Text(font)
-                        .font(.custom(font, size: 15))
+                        .font(.custom(font, size: 15, relativeTo: .subheadline))
                         .tag(font)
                 }
             }
 
-            VStack(alignment: .leading) {
-                Text("Font Size: \(Int(localFontSize))px")
-                    .font(Typography.caption)
-                Slider(value: $localFontSize, in: 12...32, step: 1)
+            Stepper(value: $localFontSize, in: 12...32, step: 1) {
+                LabeledContent("Font size", value: "\(Int(localFontSize))px")
             }
         }
     }
 
     private var moreLayoutSection: some View {
         Section("Custom Layout & Colors") {
-            VStack(alignment: .leading) {
-                Text("Vertical Padding: \(Int(localVerticalPadding))px")
-                    .font(Typography.caption)
-                Slider(value: $localVerticalPadding, in: 0...80, step: 4)
+            Stepper(value: $localVerticalPadding, in: 0...80, step: 4) {
+                LabeledContent("Vertical padding", value: "\(Int(localVerticalPadding))px")
             }
             
             Toggle("Bionic Reading", isOn: $localBionicReading)
@@ -440,75 +301,56 @@ struct ReaderSettings: View {
     }
 
     private var focusSection: some View {
-        Section("Focus Integration") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Show active Focus mode (moon/work/sleep) near the top of the reader area.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                
-                Picker("Active Focus Display", selection: $localFocusOverride) {
-                    Text("Off (Disabled)").tag("none")
-                    Text("System Auto").tag("auto")
-                    Text("Do Not Disturb").tag("dnd")
-                    Text("Work Focus").tag("work")
-                    Text("Sleep Focus").tag("sleep")
-                }
-                .pickerStyle(.menu)
-                
-                if localFocusOverride == "auto" {
-                    let authStatus = focusManager.authorizationStatus
-                    if authStatus == 0 { // notDetermined
-                        Button("Allow Access to Focus Status") {
-                            focusManager.requestAuthorization()
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    } else if authStatus == 1 { // denied
-                        Text("Access to Focus status has been denied. You can enable it in iOS Settings > Privacy & Security > Focus.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.red)
-                    } else if authStatus == 2 { // authorized
-                        Text("Focus status authorized. Active Focus: \(focusManager.isFocused ? focusManager.currentFocusType.displayName : "None")")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+        Section {
+            Picker("Active Focus display", selection: $localFocusOverride) {
+                Text("Off").tag("none")
+                Text("System auto").tag("auto")
+                Text("Do Not Disturb").tag("dnd")
+                Text("Work Focus").tag("work")
+                Text("Sleep Focus").tag("sleep")
             }
+            .pickerStyle(.menu)
+
+            if localFocusOverride == "auto" {
+                focusAuthorizationRow
+            }
+        } header: {
+            Text("Focus Integration")
+        } footer: {
+            Text("Show the active Focus mode (moon, work, sleep) near the top of the reader area.")
+        }
+    }
+
+    @ViewBuilder
+    private var focusAuthorizationRow: some View {
+        let authStatus = focusManager.authorizationStatus
+        if authStatus == 0 { // notDetermined
+            Button("Allow Access to Focus Status") {
+                focusManager.requestAuthorization()
+            }
+        } else if authStatus == 1 { // denied
+            Label("Access to Focus status has been denied. You can enable it in iOS Settings > Privacy & Security > Focus.", systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(AppTheme.warning)
+        } else if authStatus == 2 { // authorized
+            LabeledContent("Active Focus", value: focusManager.isFocused ? focusManager.currentFocusType.displayName : "None")
         }
     }
 
     private var lineFocusSection: some View {
         Section("Line Focus") {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(AppMotion.gentle(reduceMotion: reduceMotion)))
-                
-                if localLineFocusEnabled {
-                    VStack(alignment: .leading, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Focused Lines")
-                                .font(Typography.caption)
-                                .foregroundStyle(.secondary)
-                            Picker("Focused Lines", selection: $localLineFocusLines) {
-                                Text("1 Line").tag(1)
-                                Text("2 Lines").tag(2)
-                                Text("3 Lines").tag(3)
-                            }
-                            .pickerStyle(.segmented)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Background Dulling")
-                                .font(Typography.caption)
-                                .foregroundStyle(.secondary)
-                            Picker("Background Dulling", selection: $localLineFocusDulling) {
-                                Text("Low").tag("low")
-                                Text("Medium").tag("mid")
-                                Text("High").tag("high")
-                            }
-                            .pickerStyle(.segmented)
-                        }
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(AppMotion.gentle(reduceMotion: reduceMotion)))
+
+            if localLineFocusEnabled {
+                Picker("Focused lines", selection: $localLineFocusLines) {
+                    Text("1 Line").tag(1)
+                    Text("2 Lines").tag(2)
+                    Text("3 Lines").tag(3)
+                }
+                Picker("Background dulling", selection: $localLineFocusDulling) {
+                    Text("Low").tag("low")
+                    Text("Medium").tag("mid")
+                    Text("High").tag("high")
                 }
             }
         }
@@ -545,7 +387,7 @@ struct ReaderSettings: View {
     private var pinnedPreview: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Preview").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text("Preview").font(Typography.caption).foregroundStyle(.secondary)
                 Spacer()
                 Text("Spoken word").font(.caption).foregroundStyle(resolvedLocalTextColor)
                     .padding(.horizontal, 7).padding(.vertical, 3)
@@ -593,9 +435,9 @@ struct ReaderSettings: View {
                             .frame(height: focusHeight)
                             .overlay(
                                 VStack {
-                                    Divider().background(Color.secondary.opacity(0.4))
+                                    Divider()
                                     Spacer()
-                                    Divider().background(Color.secondary.opacity(0.4))
+                                    Divider()
                                 }
                             )
                         
@@ -606,7 +448,7 @@ struct ReaderSettings: View {
             }
             .frame(height: 165, alignment: .topLeading)
             .clipped()
-            .cornerRadius(12)
+            .clipShape(.rect(cornerRadius: 12))
             .transaction { $0.animation = nil }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
@@ -712,40 +554,32 @@ struct ThemePickerCard: View {
     let isSelected: Bool
     let action: () -> Void
     
+    private var cardFill: Color {
+        preset.bg.isEmpty ? Color(.secondarySystemBackground) : (Color(hex: preset.bg) ?? Color(.secondarySystemBackground))
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Text("Aa")
-                    .font(.system(size: 28, weight: preset.isBold ? .bold : .regular, design: preset.isSerif ? .serif : .default))
+                    .font(.system(.title, design: preset.isSerif ? .serif : .default, weight: preset.isBold ? .bold : .regular))
                     .foregroundStyle(preset.text.isEmpty ? .primary : (Color(hex: preset.text) ?? .primary))
                 
                 Text(preset.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(Typography.caption)
                     .foregroundStyle(preset.text.isEmpty ? .secondary : (Color(hex: preset.text) ?? .secondary))
                     .opacity(preset.text.isEmpty ? 1.0 : 0.8)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 80)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(preset.bg.isEmpty ? Color(.secondarySystemBackground) : (Color(hex: preset.bg) ?? Color(.secondarySystemBackground)))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color(hex: ReaderAppearance.highlightHex(background: preset.bg)) ?? .primary, lineWidth: isSelected ? 3 : 0)
-            )
-            .overlay(
-                Group {
-                    if preset.isPremium {
-                        Text("*")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(preset.text.isEmpty ? .secondary : (Color(hex: preset.text) ?? .secondary))
-                            .opacity(0.6)
-                            .padding([.top, .trailing], 8)
-                    }
-                },
-                alignment: .topTrailing
-            )
+            .background(cardFill, in: .rect(cornerRadius: 16))
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color(hex: ReaderAppearance.highlightHex(background: preset.bg)) ?? .primary, lineWidth: 3)
+                }
+            }
+            .contentShape(.rect(cornerRadius: 16))
         }
         .buttonStyle(.plain)
     }

@@ -36,9 +36,12 @@ struct SourceIconView: View {
 
     private var placeholder: some View {
         Image(systemName: source.kind.symbolName)
-            .font(.system(size: size * 0.45, weight: .semibold))
+            .resizable()
+            .scaledToFit()
+            .fontWeight(.semibold)
+            .padding(size * 0.27)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.secondary.opacity(0.12))
+            .background(.quaternary)
     }
 }

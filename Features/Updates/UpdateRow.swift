@@ -15,7 +15,7 @@ struct UpdateRow: View {
                     aspectRatio: LayoutConstants.coverAspectRatio
                 )
                 .frame(width: 44, height: 63)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(.rect(cornerRadius: 6))
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -44,9 +44,11 @@ struct UpdateRow: View {
 
             // Unread indicator
             if !chapter.read {
-                Circle()
-                    .fill(Color.primary)
-                    .frame(width: 8, height: 8)
+                Image(systemName: "circle.fill")
+                    .font(Typography.small)
+                    .imageScale(.small)
+                    .foregroundStyle(.primary)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.vertical, 4)

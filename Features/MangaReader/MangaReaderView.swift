@@ -265,20 +265,18 @@ struct MangaReaderView: View {
     }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.largeTitle)
-                .foregroundStyle(.white.opacity(0.8))
+        ContentUnavailableView {
+            Label("Can't show this chapter", systemImage: "exclamationmark.triangle")
+        } description: {
             Text(message)
-                .font(.callout)
-                .foregroundStyle(.white.opacity(0.8))
-                .multilineTextAlignment(.center)
+        } actions: {
             Button("Try again") {
                 Task { await loadChapter() }
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
+            .buttonStyle(.glass)
         }
+        // The reader surface is black in every appearance.
+        .environment(\.colorScheme, .dark)
         .padding(32)
     }
 
@@ -311,20 +309,16 @@ struct MangaReaderView: View {
         GlassEffectContainer {
             ZStack {
                 HStack {
-                    glassCircleButton("chevron.left", label: "Close reader") { dismiss() }
+                    GlassIconButton(symbol: "chevron.left", label: "Close reader") { dismiss() }
                     Spacer()
                     optionsMenu
                 }
 
-                Button { showChapterSheet = true } label: {
+                GlassPillButton { showChapterSheet = true } label: {
                     Text(chapterName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                        .frame(height: 46)
-                        .padding(.horizontal, 20)
-                        .glassEffect(.regular.interactive(), in: .capsule)
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, 60)
                 .accessibilityLabel("Chapters: \(chapterName)")
             }
@@ -374,10 +368,12 @@ struct MangaReaderView: View {
             Button("Reader settings…", systemImage: "gearshape") { showReaderSettings = true }
         } label: {
             Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 44, height: 44)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .font(.body.weight(.semibold))
         }
+        .menuStyle(.button)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
         .accessibilityLabel("Reader options")
     }
 
@@ -387,47 +383,19 @@ struct MangaReaderView: View {
                 if pages.count > 1 {
                     MangaPageSlider(index: Binding(get: { currentIndex }, set: seekPage), pageCount: pages.count)
                 }
-                HStack(spacing: 0) {
-                    chapterButton(offset: -1, symbol: "chevron.left", label: "Previous chapter")
-                    Divider().frame(height: 24)
-                    chapterButton(offset: 1, symbol: "chevron.right", label: "Next chapter")
-                }
-                .glassEffect(.regular.interactive(), in: .capsule)
+                GlassStepper(
+                    backLabel: "Previous chapter",
+                    forwardLabel: "Next chapter",
+                    canGoBack: !isLoading && hasChapter(offset: -1),
+                    canGoForward: !isLoading && hasChapter(offset: 1),
+                    back: { Task { await moveChapter(by: -1) } },
+                    forward: { Task { await moveChapter(by: 1) } }
+                )
             }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
-    }
-
-    private func glassCircleButton(
-        _ symbol: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 44, height: 44)
-                .glassEffect(.regular.interactive(), in: .circle)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-
-    private func chapterButton(offset: Int, symbol: String, label: String) -> some View {
-        let available = !isLoading && hasChapter(offset: offset)
-        return Button {
-            Task { await moveChapter(by: offset) }
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .disabled(!available)
-        .opacity(available ? 1 : 0.35)
-        .accessibilityLabel(label)
     }
 
     // MARK: - Loading
@@ -738,25 +706,20 @@ struct MangaReaderView: View {
         VStack {
             if let speed = scroller.holdSpeed {
                 Text("\(Int(speed)) pt/s")
-                    .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
-                    .frame(height: 36)
+                    .padding(.vertical, 8)
                     .glassEffect(.regular, in: .capsule)
                     .padding(.top, 60)
                     .transition(.opacity)
             }
             Spacer()
             if scroller.isAutoScrolling {
-                Button { scroller.stopAuto() } label: {
+                GlassPillButton { scroller.stopAuto() } label: {
                     Label("Auto scroll", systemImage: "pause.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 18)
-                        .frame(height: 44)
-                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .font(.subheadline.weight(.semibold))
                 }
-                .buttonStyle(.plain)
                 .padding(.bottom, chrome.isControl ? 96 : 28)
                 .accessibilityLabel("Stop auto scroll")
             }
@@ -941,57 +904,34 @@ struct MangaReaderView: View {
     }
 }
 
-/// A 44-point control so the scrubber aligns with the chapter navigation capsule.
+/// The page scrubber: a native `Slider` stepping one page at a time, inside a
+/// glass capsule so it lines up with the chapter navigation capsule.
 private struct MangaPageSlider: View {
     @Binding var index: Int
     let pageCount: Int
 
-    private var progress: CGFloat {
-        CGFloat(index) / CGFloat(max(pageCount - 1, 1))
-    }
-
     var body: some View {
-        GeometryReader { geometry in
-            let trackWidth = max(geometry.size.width - 88, 1)
-            HStack(spacing: 8) {
-                Text("\(index + 1)")
-                    .frame(width: 24, alignment: .trailing)
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.25))
-                    Capsule().fill(.white)
-                        .frame(width: max(6, trackWidth * progress))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 6)
-                .accessibilityHidden(true)
-                Text("\(pageCount)")
-                    .frame(width: 24, alignment: .leading)
-            }
-            .font(.caption.monospacedDigit().weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .contentShape(Capsule())
-            .highPriorityGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let fraction = min(max((value.location.x - 44) / trackWidth, 0), 1)
-                        index = Int((fraction * CGFloat(max(pageCount - 1, 0))).rounded())
-                    }
-            )
+        Slider(
+            value: Binding(
+                get: { Double(index) },
+                set: { index = Int($0.rounded()) }
+            ),
+            in: 0...Double(max(pageCount - 1, 1)),
+            step: 1
+        ) {
+            Text("Page")
+        } minimumValueLabel: {
+            Text("\(index + 1)").frame(minWidth: 24, alignment: .trailing)
+        } maximumValueLabel: {
+            Text("\(pageCount)").frame(minWidth: 24, alignment: .leading)
         }
-        .frame(height: 44)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Page")
+        .font(.caption.monospacedDigit().weight(.semibold))
+        .tint(.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(minHeight: 44)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityValue("\(index + 1) of \(pageCount)")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: index = min(index + 1, pageCount - 1)
-            case .decrement: index = max(index - 1, 0)
-            @unknown default: break
-            }
-        }
     }
 }
 

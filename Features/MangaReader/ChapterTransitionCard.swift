@@ -11,11 +11,12 @@ struct ChapterTransitionCard: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: direction == .next ? "chevron.down.circle" : "chevron.up.circle")
-                .font(.system(size: 34, weight: .light))
+                .font(.largeTitle.weight(.light))
+                .imageScale(.large)
             Text(direction == .next ? "Next chapter" : "Previous chapter")
                 .font(.footnote.weight(.semibold))
                 .textCase(.uppercase)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white.secondary)
             Text(title)
                 .font(.headline)
                 .multilineTextAlignment(.center)

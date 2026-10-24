@@ -31,17 +31,6 @@ struct SourceDetailView: View {
 
     var body: some View {
         ScrollView {
-            if entries.isEmpty && !isLoading {
-                EmptyStateView(
-                    icon: "books.vertical",
-                    title: "No Results",
-                    subtitle: isSearching
-                        ? "Try a different search term."
-                        : "This source is not installed, or returned nothing."
-                )
-                .padding(.top, 100)
-            }
-
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(entries) { entry in
                     NavigationLink {
@@ -76,6 +65,16 @@ struct SourceDetailView: View {
         .overlay {
             if isLoading && entries.isEmpty {
                 LoadingView(message: "Loading...")
+            } else if entries.isEmpty && !isLoading {
+                if isSearching {
+                    ContentUnavailableView.search(text: searchText)
+                } else {
+                    ContentUnavailableView(
+                        "No Results",
+                        systemImage: "books.vertical",
+                        description: Text("This source is not installed, or returned nothing.")
+                    )
+                }
             }
         }
         .task { await loadPopular() }

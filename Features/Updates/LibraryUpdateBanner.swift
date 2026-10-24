@@ -12,31 +12,33 @@ struct LibraryUpdateBanner: View {
 
     var body: some View {
         if let progress = libraryManager.updateProgress {
-            Button { showDetail = true } label: {
-                HStack(spacing: 12) {
-                    if progress.isFinished {
-                        Image(systemName: icon(for: progress))
-                            .foregroundStyle(progress.failures.isEmpty ? .green : .orange)
-                    } else {
-                        ProgressView(value: progress.fraction)
-                            .progressViewStyle(.circular)
-                    }
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(headline(progress)).font(.subheadline.weight(.semibold))
-                        Text(subtitle(progress)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.up").font(.caption).foregroundStyle(.secondary)
+            Button { showDetail = true } label: { bannerLabel(progress) }
+                .buttonStyle(.plain)
+                .sheet(isPresented: $showDetail) {
+                    LibraryUpdateSheet().presentationDetents([.medium, .large])
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .sheet(isPresented: $showDetail) {
-                LibraryUpdateSheet().presentationDetents([.medium, .large])
-            }
         }
+    }
+
+    private func bannerLabel(_ progress: LibraryUpdateProgress) -> some View {
+        HStack(spacing: 12) {
+            if progress.isFinished {
+                Image(systemName: icon(for: progress))
+                    .foregroundStyle(progress.failures.isEmpty ? Color.green : AppTheme.warning)
+            } else {
+                ProgressView(value: progress.fraction)
+                    .progressViewStyle(.circular)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(headline(progress)).font(.subheadline.weight(.semibold))
+                Text(subtitle(progress)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.up").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .contentShape(.rect)
     }
 
     private func icon(for progress: LibraryUpdateProgress) -> String {
@@ -88,8 +90,7 @@ struct LibraryUpdateSheet: View {
                             if progress.notInstalled > 0 {
                                 LabeledContent("Skipped (source not installed)", value: "\(progress.notInstalled)")
                             }
-                            Text(progress.automatic ? "Started automatically." : "Started by you.")
-                                .font(.footnote).foregroundStyle(.secondary)
+                            LabeledContent("Started", value: progress.automatic ? "Automatically" : "By you")
                         }
                     }
 

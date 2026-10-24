@@ -43,22 +43,9 @@ struct TTSPlaybackControls: View {
     }
 
     private var followBanner: some View {
-        Button(action: onFollow) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.uturn.backward.circle.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                Text("Back to current")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 16)
-            .frame(minHeight: 44)
-            .glassEffect()
-            .clipShape(Capsule())
-            .contentShape(Capsule())
+        GlassPillButton(action: onFollow) {
+            Label("Back to current", systemImage: "arrow.uturn.backward.circle.fill")
         }
-        .buttonStyle(.plain)
         .accessibilityLabel("Back to current reading position")
         .padding(.top, 72)
     }
@@ -73,7 +60,7 @@ struct TTSPlaybackControls: View {
         .padding(.vertical, 6)
         .background(alignment: .bottom) {
             LinearGradient(colors: TTSVoicePalette.colors(for: voiceId).map { $0.opacity(0.30) } + [.clear], startPoint: .bottomLeading, endPoint: .topTrailing)
-                .mask(LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom))
+                .mask(LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom))
                 .clipShape(.rect(cornerRadius: 26))
         }
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
@@ -100,7 +87,7 @@ struct TTSPlaybackControls: View {
                     .foregroundStyle(.secondary)
 
                 Spacer(minLength: 8)
-                if let playbackStatus { Text(playbackStatus).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1) }
+                if let playbackStatus { Text(playbackStatus).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
                 Spacer(minLength: 8)
 
                 Text("-" + formatTime(max(0, safeDuration - displayedTime)))
@@ -110,105 +97,102 @@ struct TTSPlaybackControls: View {
         }
     }
 
+    private var sleepActive: Bool { !(sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") }
+
     private var transportRow: some View {
         HStack(spacing: 0) {
             Button(action: onSleep) {
                 VStack(spacing: 2) {
-                    Image(systemName: (sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? "moon.zzz" : "moon.zzz.fill")
-                        .font(.system(size: 18))
-                    if !(sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") {
+                    Image(systemName: sleepActive ? "moon.zzz.fill" : "moon.zzz")
+                        .font(.title3)
+                    if sleepActive {
                         Text(sleepTimerLabel)
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .font(.system(.caption2, design: .rounded, weight: .bold))
                     }
                 }
-                .foregroundStyle((sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? .secondary : .primary)
+                .foregroundStyle(sleepActive ? .primary : .secondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(sleepActive ? "Sleep timer: \(sleepTimerLabel)" : "Sleep timer")
+
+            transportButton("gobackward.15", label: "Rewind 15 seconds", action: onSkipBack)
+
+            playPauseButton
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel((sleepTimerLabel.isEmpty || sleepTimerLabel == "Off") ? "Sleep timer" : "Sleep timer: \(sleepTimerLabel)")
 
-            Button(action: onSkipBack) {
-                Image(systemName: "gobackward.15")
-                    .font(.system(size: 20))
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Rewind 15 seconds")
-
-            Button(action: onPlayPause) {
-                ZStack {
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 44, height: 44)
-
-                    if isBuffering {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(.black)
-                    } else {
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(.black)
-                    }
-                }
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isBuffering ? "Buffering" : (isPlaying ? "Pause" : "Play"))
-
-            Button(action: onSkipForward) {
-                Image(systemName: "goforward.30")
-                    .font(.system(size: 20))
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Fast forward 30 seconds")
+            transportButton("goforward.30", label: "Fast forward 30 seconds", action: onSkipForward)
 
             Button(action: onRate) {
                 Text(formatRate(rate))
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
+            .foregroundStyle(.primary)
             .accessibilityLabel("Playback speed \(formatRate(rate))")
         }
+    }
+
+    private func transportButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.primary)
+        .accessibilityLabel(label)
+    }
+
+    private var playPauseButton: some View {
+        Button(action: onPlayPause) {
+            if isBuffering {
+                ProgressView()
+            } else {
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    .font(.title3.weight(.bold))
+            }
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel(isBuffering ? "Buffering" : (isPlaying ? "Pause" : "Play"))
     }
 
     private var secondaryRow: some View {
         ZStack {
             HStack {
                 Button(action: onSettings) {
-                    Image(systemName: "textformat.size")
-                        .font(.system(size: 18))
-                        .frame(width: 44, height: 44)
+                    Label("Reader settings", systemImage: "textformat.size")
+                        .labelStyle(.iconOnly)
+                        .font(.title3)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Reader settings")
+                .buttonStyle(.borderless)
+                .foregroundStyle(.primary)
 
                 Spacer()
 
                 Button(action: onBookmark) {
-                    Image(systemName: "bookmark")
-                        .font(.system(size: 18))
-                        .frame(width: 44, height: 44)
+                    Label("Bookmark", systemImage: "bookmark")
+                        .labelStyle(.iconOnly)
+                        .font(.title3)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Bookmark")
+                .buttonStyle(.borderless)
+                .foregroundStyle(.primary)
             }
 
             Button(action: onVoice) {
                 TTSVoiceChip(voiceId: voiceId, name: voiceName)
                     .frame(minHeight: 44)
-                    .contentShape(Capsule())
+                    .contentShape(.capsule)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Voice: \(voiceName)")

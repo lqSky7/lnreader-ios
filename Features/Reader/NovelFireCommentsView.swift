@@ -52,10 +52,14 @@ struct NovelFireCommentsView: View {
                         .listRowBackground(Color.clear)
                 }
                 if let errorMessage {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label(errorMessage, systemImage: "exclamationmark.circle").foregroundStyle(.secondary)
+                    ContentUnavailableView {
+                        Label("Couldn't load comments", systemImage: "exclamationmark.circle")
+                    } description: {
+                        Text(errorMessage)
+                    } actions: {
                         Button("Try again") { Task { await loadFirstPage() } }
                     }
+                    .listRowBackground(Color.clear)
                 }
                 ForEach(visibleComments) { comment in
                     NativeCommentThread(comment: comment, activeVotes: activeVotes, hideSpoilers: hideSpoilers, onVote: vote)
@@ -64,12 +68,13 @@ struct NovelFireCommentsView: View {
                 }
                 if hasMoreComments {
                     Button { Task { await loadMore() } } label: {
-                        HStack {
-                            Spacer()
+                        Group {
                             if isLoading { ProgressView() } else { Label("More comments", systemImage: "arrow.down.circle") }
-                            Spacer()
-                        }.padding(.vertical, 8)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                     .disabled(isLoading)
                     .listRowBackground(Color.clear)
                 }
@@ -81,7 +86,7 @@ struct NovelFireCommentsView: View {
             .navigationTitle("Comments")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Done", role: .close) { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Toggle("Hide spoilers", isOn: $hideSpoilers)
@@ -89,8 +94,8 @@ struct NovelFireCommentsView: View {
                         Divider()
                         Button { showLoginSheet = true } label: { Label("Sign in to \(site.displayName)", systemImage: "person.crop.circle") }
                     } label: {
-                        Image(systemName: hideSpoilers || onlyReplies ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
-                    }.accessibilityLabel("Comment filters and account")
+                        Label("Comment filters and account", systemImage: hideSpoilers || onlyReplies ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                    }
                 }
             }
             .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: hideSpoilers)

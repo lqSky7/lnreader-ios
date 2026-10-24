@@ -8,6 +8,9 @@ struct ChapterRow: View {
     @Namespace private var chapterTransition
     @ObservedObject private var audioLibrary = TTSOfflineLibrary.shared
     @State private var showAudioDownloads = false
+    /// A hold ends with a lift that the button also reads as a tap; without this
+    /// the tap would toggle the row the hold just selected straight back off.
+    @State private var suppressTap = false
     let chapter: ChapterDisplay
     let entry: Entry?
     let sourceKey: String
@@ -22,8 +25,30 @@ struct ChapterRow: View {
     private var bookID: String { TTSBookIdentity.make(pluginId: sourceKey, novelPath: bookPath) }
     private var audioCount: Int { audioLibrary.downloads(bookId: bookID, chapterId: chapter.path).filter(\.isAvailable).count }
 
+    /// The unread dot, or the selection circle while picking. One fixed slot, so
+    /// entering selection mode does not shift the title.
+    private var leadingIndicator: some View {
+        Group {
+            if isSelecting {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+            } else {
+                Circle()
+                    .fill(chapter.unread ? AnyShapeStyle(.primary) : AnyShapeStyle(.clear))
+                    .frame(width: 8, height: 8)
+            }
+        }
+        .frame(width: 22)
+        .accessibilityHidden(true)
+    }
+
     var body: some View {
         Button {
+            if suppressTap {
+                suppressTap = false
+                return
+            }
             if let selection, selection.isActive {
                 selection.toggle(chapter.path)
                 return
@@ -36,18 +61,7 @@ struct ChapterRow: View {
             )
         } label: {
             HStack(spacing: 12) {
-                if isSelecting {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
-                        .frame(width: 8)
-                        .padding(.trailing, 6)
-                } else {
-                    // Unread indicator dot
-                    Circle()
-                        .fill(chapter.unread ? Color.primary : .clear)
-                        .frame(width: 8, height: 8)
-                }
+                leadingIndicator
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(chapter.name)
@@ -99,8 +113,9 @@ struct ChapterRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .background(isSelected ? Color.accentColor.opacity(0.14) : .clear)
+            .background(isSelected ? AnyShapeStyle(.tint.opacity(0.16)) : AnyShapeStyle(.clear))
             .bookTransitionSource(chapter.path, in: chapterTransition)
         }
         .buttonStyle(.plain)
@@ -111,6 +126,9 @@ struct ChapterRow: View {
             LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                 guard let selection else { return }
                 Haptics.shared.impact(.medium)
+                suppressTap = true
+                // The lift may not report a tap at all; don't eat the next real one.
+                Task { try? await Task.sleep(for: .milliseconds(600)); suppressTap = false }
                 if selection.isActive {
                     selection.extend(to: chapter.path, in: orderedPaths())
                 } else {
@@ -166,8 +184,10 @@ final class ChapterSelection {
     func end() { isActive = false; paths = []; anchor = nil }
 }
 
-/// Bottom bar for a chapter selection: read state, download, and the rest.
-struct ChapterSelectionBar: View {
+/// Selection actions as a system bottom bar: read state, download and a menu for
+/// the rest. Apply with `chapterSelectionToolbar`, so the host's own bottom items
+/// stay untouched while nothing is selected.
+struct ChapterSelectionToolbar: ViewModifier {
     @Environment(\.modelContext) private var modelContext
     @Environment(TrackingManager.self) private var tracking
     let selection: ChapterSelection
@@ -186,61 +206,67 @@ struct ChapterSelectionBar: View {
     private var canDownload: Bool { entry?.isLocal == false }
     private var bookPath: String { entry?.url ?? "" }
 
-    var body: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Text("\(selection.paths.count) selected").font(.subheadline.weight(.semibold))
-                Spacer()
-                Button("Cancel") { selection.end() }.font(.subheadline)
-            }
-            HStack(spacing: 8) {
-                action("Read", "checkmark.circle") { setRead(true) }
-                action("Unread", "circle") { setRead(false) }
-                if canDownload { action("Download", "arrow.down.circle") { download() } }
-                Menu {
-                    Button("Select all below", systemImage: "arrow.down.to.line") { selection.selectBelow(in: orderedPaths) }
-                    Button("Select all", systemImage: "checkmark.circle") { selection.selectAll(in: orderedPaths) }
-                    Button("Invert selection", systemImage: "circle.lefthalf.filled") { selection.invert(in: orderedPaths) }
-                    Divider()
-                    Button("Mark previous as read", systemImage: "arrow.up.to.line") { markPreviousRead() }
-                    Button(allBookmarked ? "Remove bookmark" : "Bookmark", systemImage: "bookmark") { toggleBookmark() }
-                    if canDownload {
-                        Button("Delete download", systemImage: "trash", role: .destructive) { deleteDownloads() }
-                    }
-                    if selection.paths.count == 1, (entry?.kind ?? .novel) == .novel {
-                        Button("Chapter audio", systemImage: "headphones") { showAudio = true }
-                    }
-                } label: {
-                    barLabel("More", "ellipsis.circle")
+    func body(content: Content) -> some View {
+        content
+            .toolbar { if selection.isActive { selectionItems } }
+            .toolbar(selection.isActive ? .visible : .automatic, for: .bottomBar)
+            .toolbarVisibility(selection.isActive ? .hidden : .automatic, for: .tabBar)
+            .sheet(isPresented: $showAudio) { audioSheet }
+    }
+
+    @ToolbarContentBuilder private var selectionItems: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button { selection.end() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark")
+                    Text("\(selection.paths.count)").monospacedDigit()
                 }
+                .font(.subheadline.weight(.semibold))
+            }
+            .accessibilityLabel("Cancel selection")
+            .accessibilityValue("\(selection.paths.count) selected")
+        }
+        ToolbarItemGroup(placement: .bottomBar) {
+            Button { setRead(true) } label: { Label("Mark as read", systemImage: "eye") }
+            Button { setRead(false) } label: { Label("Mark as unread", systemImage: "eye.slash") }
+            if canDownload {
+                Button { download() } label: { Label("Download", systemImage: "arrow.down.circle") }
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(.bar)
-        .sheet(isPresented: $showAudio) {
-            if let chapter = ordered.first(where: { selection.paths.contains($0.path) }) {
-                BookAudioDownloadsView(
-                    bookId: TTSBookIdentity.make(pluginId: sourceKey, novelPath: bookPath),
-                    bookTitle: entry?.displayTitle ?? chapter.name, sourceKey: sourceKey, entryURL: bookPath,
-                    chapters: [TTSChapterChoice(chapter)], coverURL: entry?.displayThumbnailURL, initialChapter: chapter.path)
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        ToolbarItem(placement: .bottomBar) { moreMenu }
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button("Select all below", systemImage: "arrow.down.to.line") { selection.selectBelow(in: orderedPaths) }
+            Button("Select all", systemImage: "checklist") { selection.selectAll(in: orderedPaths) }
+            Button("Invert selection", systemImage: "arrow.left.arrow.right") { selection.invert(in: orderedPaths) }
+            Divider()
+            Button("Mark previous as read", systemImage: "eye") { markPreviousRead() }
+            Button(allBookmarked ? "Remove bookmark" : "Bookmark", systemImage: "bookmark") { toggleBookmark() }
+            if selection.paths.count == 1, (entry?.kind ?? .novel) == .novel {
+                Button("Chapter audio", systemImage: "headphones") { showAudio = true }
             }
+            if canDownload {
+                Divider()
+                Button("Delete download", systemImage: "trash", role: .destructive) { deleteDownloads() }
+            }
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+        }
+    }
+
+    @ViewBuilder private var audioSheet: some View {
+        if let chapter = ordered.first(where: { selection.paths.contains($0.path) }) {
+            BookAudioDownloadsView(
+                bookId: TTSBookIdentity.make(pluginId: sourceKey, novelPath: bookPath),
+                bookTitle: entry?.displayTitle ?? chapter.name, sourceKey: sourceKey, entryURL: bookPath,
+                chapters: [TTSChapterChoice(chapter)], coverURL: entry?.displayThumbnailURL, initialChapter: chapter.path)
         }
     }
 
     private var allBookmarked: Bool { !picked.isEmpty && picked.allSatisfy(\.bookmark) }
-
-    private func action(_ title: String, _ icon: String, _ run: @escaping () -> Void) -> some View {
-        Button(action: run) { barLabel(title, icon) }.buttonStyle(.plain)
-    }
-
-    private func barLabel(_ title: String, _ icon: String) -> some View {
-        VStack(spacing: 3) {
-            Image(systemName: icon).font(.title3)
-            Text(title).font(.caption2)
-        }
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .contentShape(Rectangle())
-    }
 
     // MARK: Actions
 
@@ -287,5 +313,16 @@ struct ChapterSelectionBar: View {
     private func deleteDownloads() {
         for item in picked.compactMap(\.downloadItem) { ChapterDownloadManager.shared.remove(item) }
         selection.end()
+    }
+}
+
+extension View {
+    func chapterSelectionToolbar(
+        selection: ChapterSelection, entry: Entry?, ordered: [ChapterDisplay],
+        allChapters: [ChapterDisplay], sourceKey: String
+    ) -> some View {
+        modifier(ChapterSelectionToolbar(
+            selection: selection, entry: entry, ordered: ordered,
+            allChapters: allChapters, sourceKey: sourceKey))
     }
 }

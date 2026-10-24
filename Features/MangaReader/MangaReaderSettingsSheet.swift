@@ -110,16 +110,13 @@ struct MangaReaderSettingsSheet: View {
 
     private var stripSection: some View {
         Section {
-            VStack(alignment: .leading) {
-                HStack {
-                    Text("Width")
-                    Spacer()
-                    Text("\(Int((controls.stripWidth * 100).rounded()))%")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                Slider(value: $controls.stripWidth, in: MangaControlSettings.stripWidthRange, step: 0.05)
-            }
+            sliderRow(
+                "Width",
+                valueText: "\(Int((controls.stripWidth * 100).rounded()))%",
+                value: $controls.stripWidth,
+                range: MangaControlSettings.stripWidthRange,
+                step: 0.05
+            )
             Picker("Momentum", selection: $controls.momentum) {
                 ForEach(WebtoonMomentum.allCases) { Text($0.displayName).tag($0) }
             }
@@ -175,16 +172,12 @@ struct MangaReaderSettingsSheet: View {
                 speedSlider("Speed", value: $controls.hold.baseSpeed, range: HoldScrollConfig.baseRange)
                 speedSlider("Slowest", value: $controls.hold.minSpeed, range: 10...600)
                 speedSlider("Fastest", value: $controls.hold.maxSpeed, range: 100...3000)
-                VStack(alignment: .leading) {
-                    HStack {
-                        Text("Change per swipe")
-                        Spacer()
-                        Text(String(format: "%.1f pt/s per pt", controls.hold.speedPerPoint))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    Slider(value: $controls.hold.speedPerPoint, in: HoldScrollConfig.stepRange)
-                }
+                sliderRow(
+                    "Change per swipe",
+                    valueText: String(format: "%.1f pt/s per pt", controls.hold.speedPerPoint),
+                    value: $controls.hold.speedPerPoint,
+                    range: HoldScrollConfig.stepRange
+                )
                 Picker("Faster when you swipe", selection: $controls.hold.upIncreases) {
                     Text("Up").tag(true)
                     Text("Down").tag(false)
@@ -200,15 +193,27 @@ struct MangaReaderSettingsSheet: View {
     }
 
     private func speedSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text("\(Int(value.wrappedValue)) pt/s")
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+        sliderRow(title, valueText: "\(Int(value.wrappedValue)) pt/s", value: value, range: range)
+    }
+
+    /// A form row for a slider: the title and its value as a `LabeledContent`,
+    /// the slider beneath.
+    private func sliderRow(
+        _ title: String,
+        valueText: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent(title) {
+                Text(valueText).monospacedDigit()
             }
-            Slider(value: value, in: range)
+            if let step {
+                Slider(value: value, in: range, step: step) { Text(title) }
+            } else {
+                Slider(value: value, in: range) { Text(title) }
+            }
         }
     }
 }

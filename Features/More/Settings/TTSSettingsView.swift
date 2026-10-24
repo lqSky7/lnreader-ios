@@ -28,14 +28,19 @@ struct TTSSettingsView: View {
                                 }
                                 if let message = record.error { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(AppTheme.warning).accessibilityLabel(message) }
                                 Spacer()
-                                Button(role: .destructive) { Task { await library.delete(record.id) } } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
+                                Button(role: .destructive) { Task { await library.delete(record.id) } } label: { Image(systemName: "trash") }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel("Delete audio")
                             }
                         }
                     }.navigationTitle("Audio storage")
                 }
-                Text("Audio stays until you delete it. Deleting chapter audio also clears its server preparation and cache. Offline deletions sync when you reconnect.").font(.caption).foregroundStyle(.secondary)
                 Button("Refresh voices and download previews") { Task { await library.refreshVoices() } }
-                if let error = library.errorMessage { Text(error).font(.caption).foregroundStyle(.secondary) }
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Audio stays until you delete it. Deleting chapter audio also clears its server preparation and cache. Offline deletions sync when you reconnect.")
+                    if let error = library.errorMessage { Text(error) }
+                }
             }
         }
         .settingsScreen("Narration")

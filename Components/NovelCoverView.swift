@@ -36,12 +36,12 @@ struct NovelCoverView: View {
                 }
             }
             .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .clipShape(.rect(cornerRadius: cornerRadius, style: .continuous))
     }
 
     private var placeholderView: some View {
-        RoundedRectangle(cornerRadius: 0)
-            .fill(Color.secondary.opacity(0.15))
+        Rectangle()
+            .fill(.quaternary)
             .overlay {
                 Image(systemName: "book.closed.fill")
                     .font(.title2)
@@ -50,11 +50,10 @@ struct NovelCoverView: View {
     }
 
     private var shimmerPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 0)
-            .fill(Color.secondary.opacity(0.1))
+        Rectangle()
+            .fill(.quaternary.opacity(0.6))
             .overlay {
                 ProgressView()
-                    .tint(.secondary)
             }
     }
 }

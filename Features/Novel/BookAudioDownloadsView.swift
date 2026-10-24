@@ -37,7 +37,7 @@ struct NarrationVoicePicker: View {
                     if selected.contains(voice.id) { selected.remove(voice.id) } else { selected.insert(voice.id) }
                 } label: {
                     HStack {
-                        Image(systemName: selected.contains(voice.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(.primary)
+                        Image(systemName: selected.contains(voice.id) ? "checkmark.circle.fill" : "circle")
                         VStack(alignment: .leading, spacing: 3) {
                             TTSVoiceChip(voiceId: voice.id, name: voice.name)
                             Text(voice.description).font(.caption).foregroundStyle(.secondary)
@@ -45,21 +45,24 @@ struct NarrationVoicePicker: View {
                             if let error = voice.preview?.error { Text(error).font(.caption2).foregroundStyle(AppTheme.warning) }
                         }
                         Spacer()
-                    }.frame(minHeight: 48)
+                    }
                 }.buttonStyle(.plain)
                 if let sample = library.records.first(where: { $0.isPreview && $0.isAvailable && $0.rendition.voiceId == voice.id }) {
-                    Button { preview.play(sample) } label: { Image(systemName: preview.voiceId == voice.id ? "stop.fill" : "play.fill").frame(width: 44, height: 44) }
-                        .accessibilityLabel("\(preview.voiceId == voice.id ? "Stop" : "Play") downloaded \(voice.name) preview")
+                    Button { preview.play(sample) } label: {
+                        Label("\(preview.voiceId == voice.id ? "Stop" : "Play") downloaded \(voice.name) preview", systemImage: preview.voiceId == voice.id ? "stop.fill" : "play.fill")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.borderless)
                 } else if let sample = voice.preview, sample.status == "failed" {
                     Button {
                         Task {
                             do { try await TTSAPIClient().action("retry", renditionId: sample.id); await library.refreshVoices() }
                             catch { library.errorMessage = error.localizedDescription }
                         }
-                    } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
-                    .accessibilityLabel("Retry \(voice.name) preview")
+                    } label: { Label("Retry \(voice.name) preview", systemImage: "arrow.clockwise").labelStyle(.iconOnly) }
+                    .buttonStyle(.borderless)
                 } else {
-                    Image(systemName: "arrow.down.circle").foregroundStyle(.tertiary).frame(width: 44, height: 44).accessibilityLabel("Preview is being prepared")
+                    ProgressView().accessibilityLabel("Preview is being prepared")
                 }
             }
             .contextMenu {
@@ -138,8 +141,7 @@ struct VoiceReferencePassageView: View {
                     copied = true
                 } label: {
                     Label(copied ? "Passage copied" : "Copy passage", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                }
+                        }
                 .accessibilityHint("Copies only the passage text")
             } header: {
                 Text("The Rainbow Passage")
@@ -147,7 +149,7 @@ struct VoiceReferencePassageView: View {
                 Text("A public-domain passage for sampling English speech sounds, by Grant Fairbanks.")
             }
             Section {
-                Link("Read the original at IDEA", destination: URL(string: "https://www.dialectsarchive.com/the-rainbow-passage")!)
+                Link(destination: URL(string: "https://www.dialectsarchive.com/the-rainbow-passage")!) { Label("Read the original at IDEA", systemImage: "arrow.up.right.square") }
             }
         }
         .navigationTitle("Recording passage")
@@ -174,7 +176,6 @@ struct BookAudioDownloadsView: View {
     @State private var preparationTask: Task<Void, Never>?
     @State private var error: String?
     @State private var search = ""
-    @State private var isSearching = false
     @State private var stateFilter = "All"
     @State private var showVoices = false
     @State private var showRange = false
@@ -183,7 +184,6 @@ struct BookAudioDownloadsView: View {
     @State private var deleteIDs: [String] = []
     @State private var voiceFilter = "all"
     @State private var chapterPage = 0
-    @FocusState private var searchFocused: Bool
     @AppStorage("tts.provider") private var computeProvider = "kaggle"
     @AppStorage("tts.wifiOnly") private var wifiOnly = true
 
@@ -193,6 +193,12 @@ struct BookAudioDownloadsView: View {
         let end = min(max(throughChapter - 1, start), chapters.count - 1)
         return Array(chapters[start...end])
     }
+    private var visibleAll: [TTSChapterChoice] {
+        let indexed = groups
+        return chapters.filter { matches($0, records: indexed[$0.path] ?? []) }
+    }
+    private var pageCount: Int { max(1, (visibleAll.count + 99) / 100) }
+    private var currentPage: Int { min(chapterPage, pageCount - 1) }
     private var currentChoice: TTSChapterChoice? { chapters.first { $0.path == initialChapter } ?? chapters.first }
     private var bookRecords: [TTSDownloadRecord] { library.downloads(bookId: bookId) }
     private var byteCount: Int64 { bookRecords.filter(\.isAvailable).reduce(0) { $0 + $1.bytesExpected } }
@@ -221,7 +227,7 @@ struct BookAudioDownloadsView: View {
                 if preparing || error != nil || library.errorMessage != nil || library.engineState?.needsAttention == true {
                     Section {
                         if preparing {
-                            HStack { ProgressView(); Text(preparationProgress).font(.caption); Spacer(); Button("Stop") { preparationTask?.cancel() } }
+                            HStack { ProgressView(); Text(preparationProgress).font(.caption); Spacer(); Button("Stop") { preparationTask?.cancel() }.buttonStyle(.borderless) }
                         }
                         if let message = error ?? library.errorMessage ?? (library.engineState?.needsAttention == true ? library.engineState?.message : nil) {
                             Label(message, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(AppTheme.warning)
@@ -230,20 +236,10 @@ struct BookAudioDownloadsView: View {
                 }
                 Section {
                     let indexed = groups
-                    let visible = chapters.filter { matches($0, records: indexed[$0.path] ?? []) }
-                    let pageCount = max(1, (visible.count + 99) / 100)
+                    let visible = visibleAll
                     let page = min(chapterPage, pageCount - 1)
                     ForEach(Array(visible.dropFirst(page * 100).prefix(100))) { chapter in
                         chapterRow(chapter, records: indexed[chapter.path] ?? [])
-                    }
-                    if pageCount > 1 {
-                        HStack {
-                            Button { chapterPage = max(0, page - 1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.disabled(page == 0)
-                            Spacer()
-                            Text("\(page * 100 + 1)–\(min((page + 1) * 100, visible.count)) of \(visible.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            Spacer()
-                            Button { chapterPage = min(pageCount - 1, page + 1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }.disabled(page + 1 >= pageCount)
-                        }.buttonStyle(.borderless)
                     }
                     if visible.isEmpty { ContentUnavailableView("No chapters", systemImage: "headphones", description: Text("Try another search or filter.")) }
                 } header: {
@@ -276,10 +272,23 @@ struct BookAudioDownloadsView: View {
                             let paths = Set(selectedChapters.map(\.path))
                             deleteIDs = bookRecords.filter { paths.contains($0.rendition.chapterId) && (voiceFilter == "all" || $0.rendition.voiceId == voiceFilter) }.map(\.id)
                         }.disabled(bookRecords.isEmpty)
-                    } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("Audio download options")
+                    } label: { Label("Audio download options", systemImage: "ellipsis.circle") }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
+            .toolbar(pageCount > 1 ? .visible : .hidden, for: .bottomBar)
+            .toolbar {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button { chapterPage = max(0, currentPage - 1) } label: { Label("Previous chapters", systemImage: "chevron.left").labelStyle(.iconOnly) }
+                        .disabled(currentPage == 0)
+                    Spacer()
+                    Text("\(currentPage * 100 + 1)–\(min((currentPage + 1) * 100, visibleAll.count)) of \(visibleAll.count)").font(.caption.monospacedDigit())
+                    Spacer()
+                    Button { chapterPage = min(pageCount - 1, currentPage + 1) } label: { Label("Next chapters", systemImage: "chevron.right").labelStyle(.iconOnly) }
+                        .disabled(currentPage + 1 >= pageCount)
+                }
+            }
+            .searchable(text: $search, prompt: "Chapter number or title")
             .sheet(isPresented: $showVoices) {
                 NavigationStack {
                     List { Section { NarrationComputePicker() }; Section("Narrator") { NarrationVoicePicker(selected: $selectedVoices) } }
@@ -333,65 +342,19 @@ struct BookAudioDownloadsView: View {
         let title = playable.map(canPlay) == true ? "Play this chapter" : pending ? "Preparing…" : retry ? "Retry this chapter" : selectedChapters.count == 1 ? "Download this chapter" : "Download \(selectedChapters.count) chapters"
         let symbol = playable.map(canPlay) == true ? "play.fill" : pending ? "waveform" : retry ? "arrow.clockwise" : "arrow.down.circle.fill"
         let blocked = preparing || pending || selectedVoices.isEmpty || selectedChapters.isEmpty
-        return HStack(spacing: 8) {
-            if isSearching {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").font(.subheadline).foregroundStyle(.secondary)
-                    TextField("Chapter number or title", text: $search)
-                        .focused($searchFocused)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.search)
-                    Button { closeSearch() } label: {
-                        Image(systemName: "xmark").font(.footnote.bold()).foregroundStyle(.secondary)
-                            .frame(width: 32, height: 46)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close search")
-                }
-                .padding(.leading, 14)
-                .frame(height: 46)
-                .background(AppTheme.surface, in: .capsule)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else {
-                Button {
-                    if let playable, canPlay(playable) { playAudio(playable) }
-                    else if let playable, retry { Task { await library.retry(playable.id) } }
-                    else { prepareSelected() }
-                } label: {
-                    Label(title, systemImage: symbol)
-                        .font(.subheadline.bold()).lineLimit(1)
-                        .frame(maxWidth: .infinity).frame(height: 46)
-                        .foregroundStyle(AppTheme.onPrimaryFill)
-                        .background(AppTheme.primaryFill, in: .capsule)
-                        .opacity(blocked ? 0.45 : 1)
-                }
-                .buttonStyle(.plain)
-                .disabled(blocked)
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-
-                Button { openSearch() } label: {
-                    Image(systemName: "magnifyingglass")
-                        .font(.callout.weight(.semibold))
-                        .frame(width: 46, height: 46)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .background(AppTheme.surface, in: .circle)
-                .accessibilityLabel("Search chapters")
-                .transition(.opacity.combined(with: .scale(scale: 0.9)))
-            }
+        return Button {
+            if let playable, canPlay(playable) { playAudio(playable) }
+            else if let playable, retry { Task { await library.retry(playable.id) } }
+            else { prepareSelected() }
+        } label: {
+            Label(title, systemImage: symbol)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
         }
-        .animation(.spring(response: 0.34, dampingFraction: 0.7), value: isSearching)
-    }
-    private func openSearch() {
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.7)) { isSearching = true }
-        Task { try? await Task.sleep(for: .milliseconds(160)); searchFocused = true }
-    }
-    private func closeSearch() {
-        search = ""
-        searchFocused = false
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.7)) { isSearching = false }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .disabled(blocked)
     }
     private var dashboard: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -408,7 +371,7 @@ struct BookAudioDownloadsView: View {
                 Button { showVoices = true } label: {
                     TTSVoiceChip(voiceId: activeVoice, name: library.voices.first { $0.id == activeVoice }?.name ?? "Narrator")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .accessibilityLabel("Choose narrator voice")
                 Spacer(minLength: 0)
                 Menu {
@@ -423,11 +386,11 @@ struct BookAudioDownloadsView: View {
         NavigationStack {
             Form {
                 Section("Chapter numbers · 1–\(chapters.count)") {
-                    HStack { Text("From"); Spacer(); TextField("From", value: $fromChapter, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 100) }
-                    HStack { Text("Through"); Spacer(); TextField("Through", value: $throughChapter, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 100) }
+                    LabeledContent("From") { TextField("From", value: $fromChapter, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
+                    LabeledContent("Through") { TextField("Through", value: $throughChapter, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
                     Button("All remaining chapters") { throughChapter = chapters.count }
                 }
-                Text("Select voices separately. You can keep and manage several voices for each chapter.").font(.caption).foregroundStyle(.secondary)
+                Section { } footer: { Text("Select voices separately. You can keep and manage several voices for each chapter.") }
             }.navigationTitle("Choose chapters").navigationBarTitleDisplayMode(.large)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") {
                     fromChapter = min(max(1, fromChapter), max(1, chapters.count))
@@ -474,13 +437,13 @@ struct BookAudioDownloadsView: View {
                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 if let primary, canPlay(primary) {
-                    Button { playAudio(primary) } label: { Image(systemName: "play.circle.fill").font(.title).frame(width: 44, height: 44) }.accessibilityLabel("Play \(chapter.title)")
+                    Button { playAudio(primary) } label: { Label("Play \(chapter.title)", systemImage: "play.circle.fill").labelStyle(.iconOnly).font(.title) }
                 } else if let primary, ["failed", "paused"].contains(primary.state) {
-                    Button { Task { await library.retry(primary.id) } } label: { Image(systemName: "arrow.clockwise.circle").font(.title2).frame(width: 44, height: 44) }.accessibilityLabel("Retry \(chapter.title)")
+                    Button { Task { await library.retry(primary.id) } } label: { Label("Retry \(chapter.title)", systemImage: "arrow.clockwise.circle").labelStyle(.iconOnly).font(.title2) }
                 } else if primary != nil {
-                    ProgressView().frame(width: 44, height: 44)
+                    ProgressView()
                 } else {
-                    Button { downloadChapter(chapter) } label: { Image(systemName: "arrow.down.circle").font(.title2).frame(width: 44, height: 44) }.disabled(preparing).accessibilityLabel("Download \(chapter.title)")
+                    Button { downloadChapter(chapter) } label: { Label("Download \(chapter.title)", systemImage: "arrow.down.circle").labelStyle(.iconOnly).font(.title2) }.disabled(preparing)
                 }
             }.buttonStyle(.borderless)
             if let primary, ["waiting", "downloading"].contains(primary.state) { ProgressView(value: primary.progress) }
@@ -547,47 +510,6 @@ struct BookAudioDownloadsView: View {
 }
 
 
-
-struct AudioQuickActionCard: View {
-    let title: String
-    let subtitle: String
-    let symbol: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: symbol)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .frame(width: 32, height: 32)
-                    .background(AppTheme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                Spacer(minLength: 4)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine)
-            }
-            .padding(12)
-            .frame(width: 154, alignment: .leading)
-            .frame(minHeight: 112, alignment: .topLeading)
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-}
 
 @MainActor
 private final class VoiceSampleRecorder: NSObject, ObservableObject, AVAudioPlayerDelegate, AVAudioRecorderDelegate {
@@ -718,7 +640,7 @@ private struct CustomVoiceCreationView: View {
                 } header: { Text("Transcript · optional") } footer: {
                     Text("Enter exactly what was spoken. Leave blank to transcribe the sample automatically during preparation.")
                 }
-                if let message = error ?? sample.error { Section { Text(message).foregroundStyle(.red).textSelection(.enabled) } }
+                if let message = error ?? sample.error { Section { Text(message).foregroundStyle(AppTheme.destructive).textSelection(.enabled) } }
                 Section {
                     Button {
                         guard let file = sample.file else { return }
@@ -768,7 +690,6 @@ struct TTSChapterAudioDetailView: View {
     var onPlay: ((TTSDownloadRecord) -> Void)? = nil
     var onAddVoice: (() -> Void)? = nil
 
-    @State private var touch = CGPoint(x: 195, y: 420)
     @State private var deleteTarget: TTSDownloadRecord?
 
     private var records: [TTSDownloadRecord] { library.downloads(bookId: bookId, chapterId: chapter.path) }
@@ -778,28 +699,20 @@ struct TTSChapterAudioDetailView: View {
     }
 
     var body: some View {
-        ZStack {
-            AuroraBackdrop(touch: touch)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    if let primary { statusCard(primary) }
-                    if let preview { previewCard(preview) }
-                    if records.isEmpty { emptyCard }
-                    if !records.isEmpty { voicesSection }
-                    if let onAddVoice { addVoiceButton(onAddVoice) }
+        List {
+            Section { header }
+            if let primary { statusSection(primary) }
+            if let preview { previewSection(preview) }
+            if records.isEmpty { emptySection }
+            if !records.isEmpty { voicesSection }
+            if let onAddVoice {
+                Section {
+                    Button(action: onAddVoice) { Label("Download another voice", systemImage: "waveform.badge.plus") }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 6)
-                .padding(.bottom, 40)
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
-        .background(Color.black)
         .navigationTitle("Chapter \(chapter.position + 1)")
         .navigationBarTitleDisplayMode(.large)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { touch = $0.location })
         .confirmationDialog("Delete this voice's audio everywhere?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })) {
             if let record = deleteTarget {
                 Button("Delete \(voiceName(record))", role: .destructive) {
@@ -818,35 +731,28 @@ struct TTSChapterAudioDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(chapter.title)
                     .font(.title3.bold())
-                    .foregroundStyle(.primary)
                     .lineLimit(3)
                 Text(bookTitle).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                 Text(summaryLine).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
             }
-            Spacer(minLength: 0)
         }
     }
 
-    private func statusCard(_ record: TTSDownloadRecord) -> some View {
-        card {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(statusText(record)).font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text("\(Int((min(max(record.progress, 0), 1) * 100).rounded()))%")
-                        .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+    private func statusSection(_ record: TTSDownloadRecord) -> some View {
+        let progress = min(max(record.progress, 0), 1)
+        return Section("Status") {
+            VStack(alignment: .leading, spacing: 8) {
+                LabeledContent(statusText(record)) {
+                    Text("\(Int((progress * 100).rounded()))%").monospacedDigit()
                 }
-                ProgressView(value: min(max(record.progress, 0), 1))
-                    .tint(.white)
-                HStack(spacing: 18) {
-                    metric("Parts", "\(record.rendition.completedChunks)/\(record.rendition.totalChunks)")
-                    metric("Size", ByteCountFormatter.string(fromByteCount: record.bytesExpected, countStyle: .file))
-                    if let provider = record.rendition.computeProvider { metric("Prepared on", provider.capitalized) }
-                }
-                if let message = record.error {
-                    Label(message, systemImage: record.state == "waiting" ? "arrow.clockwise" : "exclamationmark.circle")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                ProgressView(value: progress)
+            }
+            LabeledContent("Parts", value: "\(record.rendition.completedChunks)/\(record.rendition.totalChunks)")
+            LabeledContent("Size", value: ByteCountFormatter.string(fromByteCount: record.bytesExpected, countStyle: .file))
+            if let provider = record.rendition.computeProvider { LabeledContent("Prepared on", value: provider.capitalized) }
+            if let message = record.error {
+                Label(message, systemImage: record.state == "waiting" ? "arrow.clockwise" : "exclamationmark.circle")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -859,126 +765,73 @@ struct TTSChapterAudioDetailView: View {
         return text.isEmpty ? nil : text
     }
 
-    private func previewCard(_ text: String) -> some View {
-        card {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("From the chapter")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(4)
-                    .lineLimit(6)
-            }
+    private func previewSection(_ text: String) -> some View {
+        Section("From the chapter") {
+            Text(text)
+                .font(.subheadline)
+                .lineSpacing(4)
+                .lineLimit(6)
+        }
+    }
+
+    private var emptySection: some View {
+        Section {
+            ContentUnavailableView("No audio yet", systemImage: "headphones", description: Text("Prepare this chapter in a voice to listen offline."))
         }
     }
 
     private var voicesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Voices").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-            ForEach(records) { record in voiceCard(record) }
+        Section("Voices") {
+            ForEach(records) { record in voiceRow(record) }
         }
     }
 
-    private func voiceCard(_ record: TTSDownloadRecord) -> some View {
+    private func voiceRow(_ record: TTSDownloadRecord) -> some View {
         let selected = library.selectedVoice(bookId: bookId, chapterId: chapter.path) == record.rendition.voiceId
-        return card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Text(voiceName(record)).font(.subheadline.weight(.semibold))
-                    if selected {
-                        Text("Selected")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(.white.opacity(0.14), in: .capsule)
-                    }
-                    Spacer()
-                    Text(ByteCountFormatter.string(fromByteCount: record.bytesExpected, countStyle: .file))
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                Text(statusText(record)).font(.caption).foregroundStyle(.secondary)
-                if !record.isAvailable, record.state != "failed", record.state != "paused" {
-                    ProgressView(value: min(max(record.progress, 0), 1)).tint(.white)
-                }
-                if let message = record.error, record.state != "waiting" {
-                    Text(message).font(.caption).foregroundStyle(AppTheme.warning).lineLimit(3)
-                }
+        return VStack(alignment: .leading, spacing: 10) {
+            LabeledContent {
+                Text(ByteCountFormatter.string(fromByteCount: record.bytesExpected, countStyle: .file))
+                    .monospacedDigit()
+            } label: {
                 HStack(spacing: 8) {
-                    if canPlay(record) {
-                        action("Play", "play.fill", prominent: true) { play(record) }
-                        if !selected { action("Use voice", "checkmark.circle", prominent: false) { library.selectVoice(record.rendition.voiceId, bookId: bookId, chapterId: chapter.path) } }
-                    } else if record.state == "failed" || record.state == "paused" {
-                        action("Retry", "arrow.clockwise", prominent: true) { Task { await library.retry(record.id) } }
-                    } else {
-                        action("Pause", "pause.fill", prominent: false) { library.pause(record.id) }
-                    }
-                    Spacer(minLength: 0)
-                    Button(role: .destructive) { deleteTarget = record } label: {
-                        Image(systemName: "trash").frame(width: 40, height: 34)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Delete \(voiceName(record))")
+                    Text(voiceName(record))
+                    if selected { Image(systemName: "checkmark.circle.fill").accessibilityLabel("Selected") }
                 }
             }
-        }
-    }
-
-    private var emptyCard: some View {
-        card {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("No audio yet").font(.subheadline.weight(.semibold))
-                Text("Prepare this chapter in a voice to listen offline.")
-                    .font(.caption).foregroundStyle(.secondary)
+            Text(statusText(record)).font(.caption).foregroundStyle(.secondary)
+            if !record.isAvailable, record.state != "failed", record.state != "paused" {
+                ProgressView(value: min(max(record.progress, 0), 1))
             }
+            if let message = record.error, record.state != "waiting" {
+                Text(message).font(.caption).foregroundStyle(AppTheme.warning).lineLimit(3)
+            }
+            HStack(spacing: 8) {
+                if canPlay(record) {
+                    action("Play", "play.fill", prominent: true) { play(record) }
+                    if !selected { action("Use voice", "checkmark.circle", prominent: false) { library.selectVoice(record.rendition.voiceId, bookId: bookId, chapterId: chapter.path) } }
+                } else if record.state == "failed" || record.state == "paused" {
+                    action("Retry", "arrow.clockwise", prominent: true) { Task { await library.retry(record.id) } }
+                } else {
+                    action("Pause", "pause.fill", prominent: false) { library.pause(record.id) }
+                }
+                Spacer(minLength: 0)
+                Button(role: .destructive) { deleteTarget = record } label: {
+                    Label("Delete \(voiceName(record))", systemImage: "trash").labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+            }
+            .controlSize(.small)
         }
-    }
-
-    private func addVoiceButton(_ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label("Download another voice", systemImage: "waveform.badge.plus")
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .foregroundStyle(.primary)
-                .background(.white.opacity(0.10), in: .capsule)
-                .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: Pieces
-
-    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(.primary)
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(.white.opacity(0.14), lineWidth: 1)
-            )
-    }
-
-    private func metric(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.caption.monospacedDigit().weight(.medium)).foregroundStyle(.primary)
+        .padding(.vertical, 4)
+        .swipeActions {
+            Button("Delete", systemImage: "trash", role: .destructive) { deleteTarget = record }
         }
     }
 
     private func action(_ title: String, _ symbol: String, prominent: Bool, run: @escaping () -> Void) -> some View {
-        Button(action: run) {
-            Label(title, systemImage: symbol)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 14)
-                .frame(height: 34)
-                .background(prominent ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.12)), in: .capsule)
-                .foregroundStyle(prominent ? Color.black : Color.white)
-        }
-        .buttonStyle(.plain)
+        Button(action: run) { Label(title, systemImage: symbol) }
+            .modifier(RowActionStyle(prominent: prominent))
     }
 
     // MARK: Helpers
@@ -1011,6 +864,18 @@ struct TTSChapterAudioDetailView: View {
             return "\(label) · \(record.rendition.completedChunks)/\(record.rendition.totalChunks) parts"
         case "downloading": return "Downloading to this phone"
         default: return record.state.capitalized
+        }
+    }
+}
+
+/// Capsule action inside a list row: filled for the main action, tinted-off for the rest.
+private struct RowActionStyle: ViewModifier {
+    let prominent: Bool
+    func body(content: Content) -> some View {
+        if prominent {
+            content.buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
+        } else {
+            content.buttonStyle(.bordered).buttonBorderShape(.capsule)
         }
     }
 }

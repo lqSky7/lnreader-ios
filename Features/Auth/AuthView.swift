@@ -16,71 +16,26 @@ struct AuthView: View {
         @Bindable var syncManager = syncManager
 
         NavigationStack {
-            ZStack {
-                VStack(spacing: 0) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
-                            header
-                            
-                            Picker("Mode", selection: $mode) {
-                                ForEach(AuthMode.allCases) { mode in
-                                    Text(mode.title).tag(mode)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .padding(.vertical, 4)
-                            
-                            formFields
-                            
-                            if let error = syncManager.lastError {
-                                Label(error, systemImage: "exclamationmark.circle")
-                                    .font(.footnote)
-                                    .foregroundStyle(.red)
-                                    .padding(.horizontal, 4)
-                            } else if let message = syncManager.lastMessage {
-                                Label(message, systemImage: "checkmark.circle")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 4)
-                            }
-                        }
-                        .padding(.horizontal, 22)
-                        .padding(.top, 24)
-                        .padding(.bottom, 110) // Space for floating button
-                    }
-                    
-                    // Floating Action Button
-                    VStack {
-                        Button {
-                            Task { await submit() }
-                        } label: {
-                            HStack(spacing: 12) {
-                                if syncManager.isWorking {
-                                    ProgressView()
-                                }
-                                Text(mode.actionTitle)
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
-                        }
-                        .disabled(syncManager.isWorking || !canSubmit)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .opacity(canSubmit ? 1.0 : 0.5)
-                        .animation(.smooth, value: canSubmit)
-                        .padding(.horizontal, 22)
-                        .padding(.bottom, 24)
-                    }
-                    .background(
-                        LinearGradient(
-                            colors: [.clear, Color(.systemBackground).opacity(0.8), Color(.systemBackground)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .ignoresSafeArea()
-                    )
+            Form {
+                Section {
+                    header
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
                 }
+
+                Section {
+                    Picker("Mode", selection: $mode) {
+                        ForEach(AuthMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+
+                credentialsSection
+                statusSection
             }
             .navigationTitle("Account")
             .navigationBarTitleDisplayMode(.large)
@@ -89,6 +44,7 @@ struct AuthView: View {
                     Button("Close") { dismiss() }
                 }
             }
+            .safeAreaInset(edge: .bottom) { submitBar }
             .onAppear {
                 backendURL = syncManager.backendURL
             }
@@ -100,81 +56,84 @@ struct AuthView: View {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.largeTitle.weight(.semibold))
                 .foregroundStyle(.primary)
+                .accessibilityHidden(true)
 
             Text("Sync your reader")
-                .font(.title2.weight(.bold))
+                .font(Typography.title)
 
             Text("Use one account for profile, sources, and non-local library entries.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.top, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private var formFields: some View {
-        VStack(spacing: 0) {
+    private var credentialsSection: some View {
+        Section {
             if mode == .register {
-                customField(placeholder: "Username", text: $username, icon: "person")
-                Divider().padding(.horizontal, 16)
+                TextField("Username", text: $username)
+                    .textContentType(.username)
             }
-            
+
             if mode == .login {
-                customField(placeholder: "Email or username", text: $identifier, icon: "envelope")
-                Divider().padding(.horizontal, 16)
+                TextField("Email or username", text: $identifier)
+                    .textContentType(.username)
             } else if mode == .register || mode == .forgot {
-                customField(placeholder: "Email", text: $email, icon: "envelope", keyboardType: .emailAddress)
-                Divider().padding(.horizontal, 16)
+                TextField("Email", text: $email)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
             }
-            
+
             if mode == .reset {
-                customField(placeholder: "Reset token", text: $resetToken, icon: "key")
-                Divider().padding(.horizontal, 16)
+                TextField("Reset token", text: $resetToken)
             }
-            
+
             if mode != .forgot {
-                customSecureField(placeholder: "Password", text: $password, icon: "lock")
-                Divider().padding(.horizontal, 16)
+                SecureField("Password", text: $password)
+                    .textContentType(mode == .login ? .password : .newPassword)
             }
-            
-            customField(placeholder: "Backend URL", text: $backendURL, icon: "link", keyboardType: .URL)
+
+            TextField("Backend URL", text: $backendURL)
+                .keyboardType(.URL)
         }
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-    }
-    
-    @ViewBuilder
-    private func customField(placeholder: String, text: Binding<String>, icon: String, keyboardType: UIKeyboardType = .default) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-            
-            TextField("", text: text, prompt: Text(placeholder).foregroundStyle(.secondary.opacity(0.5)))
-                .font(.headline.weight(.medium))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(keyboardType)
-        }
-        .padding(.vertical, 18)
-        .padding(.horizontal, 20)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
     }
 
     @ViewBuilder
-    private func customSecureField(placeholder: String, text: Binding<String>, icon: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-            
-            SecureField("", text: text, prompt: Text(placeholder).foregroundStyle(.secondary.opacity(0.5)))
-                .font(.headline.weight(.medium))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+    private var statusSection: some View {
+        if let error = syncManager.lastError {
+            Section {
+                Label(error, systemImage: "exclamationmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.destructive)
+            }
+        } else if let message = syncManager.lastMessage {
+            Section {
+                Label(message, systemImage: "checkmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.vertical, 18)
-        .padding(.horizontal, 20)
+    }
+
+    private var submitBar: some View {
+        Button {
+            Task { await submit() }
+        } label: {
+            HStack(spacing: 12) {
+                if syncManager.isWorking {
+                    ProgressView()
+                }
+                Text(mode.actionTitle)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .primaryActionStyle()
+        .controlSize(.large)
+        .disabled(syncManager.isWorking || !canSubmit)
+        .padding(.horizontal)
+        .padding(.bottom, 8)
     }
 
     private var canSubmit: Bool {

@@ -82,7 +82,7 @@ struct TrackerSheet: View {
 
     private func resultRow(_ result: TrackSearchResult) -> some View {
         HStack(spacing: 12) {
-            AsyncImage(url: result.cover) { $0.resizable().scaledToFill() } placeholder: { Color.secondary.opacity(0.2) }
+            AsyncImage(url: result.cover) { $0.resizable().scaledToFill() } placeholder: { Rectangle().fill(.quaternary) }
                 .frame(width: 44, height: 62).clipShape(.rect(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 3) {
                 Text(result.title).font(.subheadline.weight(.medium)).lineLimit(2)
@@ -169,12 +169,12 @@ struct TrackerSheet: View {
         HStack {
             if let date {
                 DatePicker(title, selection: Binding(get: { date }, set: { set($0) }), displayedComponents: .date)
-                Button { set(nil) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                    .buttonStyle(.plain).accessibilityLabel("Clear \(title.lowercased()) date")
+                Button { set(nil) } label: { Label("Clear \(title.lowercased()) date", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }
+                    .buttonStyle(.borderless).foregroundStyle(.secondary)
             } else {
                 Text(title)
                 Spacer()
-                Button("Set") { set(.now) }
+                Button("Set") { set(.now) }.buttonStyle(.borderless)
             }
         }
     }

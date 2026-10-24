@@ -38,7 +38,8 @@ struct IconBadge: View {
 
     var body: some View {
         Image(systemName: icon)
-            .font(.system(size: 10, weight: .bold))
+            .font(Typography.small.weight(.bold))
+            .imageScale(.small)
             .foregroundStyle(AppTheme.onPrimaryFill)
             .padding(4)
             .background(color, in: .circle)

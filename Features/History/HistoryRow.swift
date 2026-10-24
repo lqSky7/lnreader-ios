@@ -107,7 +107,8 @@ private struct RunToggle: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        // Expanded is on, folded is off: a toggle button, not a hand-drawn pill.
+        Toggle(isOn: Binding(get: { isExpanded }, set: { _ in action() })) {
             HStack(spacing: 3) {
                 Text("+\(count)")
                     .font(Typography.small.weight(.semibold))
@@ -116,17 +117,11 @@ private struct RunToggle: View {
                     .font(Typography.small.weight(.bold))
                     .rotationEffect(.degrees(isExpanded ? -180 : 0))
             }
-            .foregroundStyle(isExpanded ? AppTheme.onPrimaryFill : .secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                Capsule().fill(isExpanded ? AnyShapeStyle(AppTheme.primaryFill) : AnyShapeStyle(.quaternary))
-            )
-            // The pill is small; the tap target is not.
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .toggleStyle(.button)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+        .tint(AppTheme.primaryFill)
         .accessibilityLabel(isExpanded ? "Hide earlier chapters" : "Show \(count) earlier chapters")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
     }
@@ -141,9 +136,7 @@ struct HistoryChapterRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Capsule()
-                .fill(.quaternary)
-                .frame(width: 2)
+            Divider()
                 .frame(width: 44)
 
             HStack(spacing: 12) {

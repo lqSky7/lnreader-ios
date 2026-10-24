@@ -37,18 +37,15 @@ struct NovelFireLoginView: View {
             if isLoading {
                 ProgressView("Loading Google Sign-in...")
                     .padding()
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
             }
             
             if let error = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(.red)
+                ContentUnavailableView {
+                    Label("Sign-in failed", systemImage: "exclamationmark.triangle.fill")
+                } description: {
                     Text(error)
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                } actions: {
                     Button("Retry") {
                         errorMessage = nil
                         isLoading = true
@@ -56,12 +53,7 @@ struct NovelFireLoginView: View {
                     }
                     .primaryActionStyle()
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                #if os(iOS)
                 .background(Color(.systemBackground))
-                #else
-                .background(Color(.windowBackgroundColor))
-                #endif
             }
           }
           .navigationTitle("Sign In to \(site.displayName)")
