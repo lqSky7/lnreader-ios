@@ -38,7 +38,7 @@ struct NovelHeaderView: View {
             // Content overlay
             contentOverlay
         }
-        .frame(height: 660)
+        .frame(height: 520)
     }
 
     // MARK: - Hero Background
