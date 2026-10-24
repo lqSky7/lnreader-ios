@@ -17,6 +17,9 @@ struct HistoryView: View {
     @State private var searchText = ""
     @State private var path = NavigationPath()
     @State private var showClearConfirmation = false
+    /// Runs the user has opened, by `HistoryRun.id`.
+    @State private var expandedRuns: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -31,29 +34,10 @@ struct HistoryView: View {
                     )
                 } else {
                     List {
-                        ForEach(groupedHistory, id: \.key) { date, entries in
+                        ForEach(groupedHistory, id: \.key) { date, runs in
                             Section(date) {
-                                ForEach(entries) { item in
-                                    if let chapter = item.chapter {
-                                        HistoryRow(
-                                            history: item,
-                                            onOpenEntry: {
-                                                if let entry = chapter.entry { path.append(entry) }
-                                            },
-                                            onOpenChapter: {
-                                                readerRouter.open(
-                                                    sourceKey: chapter.entry?.sourceKey ?? "",
-                                                    entryURL: chapter.entry?.url,
-                                                    kind: chapter.entry?.kind ?? .novel,
-                                                    chapterURL: chapter.url,
-                                                    chapterName: chapter.name
-                                                )
-                                            }
-                                        )
-                                    }
-                                }
-                                .onDelete { offsets in
-                                    deleteEntries(offsets, from: entries)
+                                ForEach(runs) { run in
+                                    runRows(run)
                                 }
                             }
                         }
@@ -91,6 +75,52 @@ struct HistoryView: View {
         }
     }
 
+    // MARK: - Rows
+
+    /// A run's head row, then its earlier chapters when it is open.
+    @ViewBuilder
+    private func runRows(_ run: HistoryRun) -> some View {
+        let isExpanded = expandedRuns.contains(run.id)
+        HistoryRow(
+            history: run.head,
+            earlierCount: run.earlier.count,
+            isExpanded: isExpanded,
+            onOpenEntry: {
+                if let entry = run.head.chapter?.entry { path.append(entry) }
+            },
+            onOpenChapter: { open(run.head) },
+            onToggle: { toggle(run) }
+        )
+        .swipeActions {
+            Button(role: .destructive) {
+                delete([run.head])
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            if !isExpanded, !run.earlier.isEmpty {
+                Button {
+                    delete(run.items)
+                } label: {
+                    Label("Delete All", systemImage: "trash.fill")
+                }
+                .tint(.orange)
+            }
+        }
+
+        if isExpanded {
+            ForEach(run.earlier) { item in
+                HistoryChapterRow(history: item, onOpenChapter: { open(item) })
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            delete([item])
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+            }
+        }
+    }
+
     // MARK: - Filtering & Grouping
 
     private var filteredHistory: [History] {
@@ -103,18 +133,38 @@ struct HistoryView: View {
         }
     }
 
-    private var groupedHistory: [(key: String, value: [History])] {
+    /// Day sections, each split into runs: back-to-back reads of the same
+    /// entry collapse into one row. A run never crosses a day boundary.
+    private var groupedHistory: [(key: String, value: [HistoryRun])] {
         let calendar = Calendar.current
         var buckets: [Date: [History]] = [:]
-        for item in filteredHistory {
+        for item in filteredHistory where item.chapter != nil {
             buckets[calendar.startOfDay(for: item.lastRead), default: []].append(item)
         }
         return buckets.keys.sorted(by: >).map { day in
-            (day.daySectionTitle, buckets[day] ?? [])
+            (day.daySectionTitle, HistoryRun.runs(of: buckets[day] ?? []))
         }
     }
 
     // MARK: - Actions
+
+    private func open(_ item: History) {
+        guard let chapter = item.chapter else { return }
+        readerRouter.open(
+            sourceKey: chapter.entry?.sourceKey ?? "",
+            entryURL: chapter.entry?.url,
+            kind: chapter.entry?.kind ?? .novel,
+            chapterURL: chapter.url,
+            chapterName: chapter.name
+        )
+    }
+
+    private func toggle(_ run: HistoryRun) {
+        Haptics.shared.impact(.light, intensity: 0.8)
+        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
+            if expandedRuns.remove(run.id) == nil { expandedRuns.insert(run.id) }
+        }
+    }
 
     private func resumeLatest() {
         guard path.isEmpty, readerRouter.request == nil,
@@ -128,9 +178,9 @@ struct HistoryView: View {
         )
     }
 
-    private func deleteEntries(_ offsets: IndexSet, from entries: [History]) {
-        for index in offsets {
-            modelContext.delete(entries[index])
+    private func delete(_ items: [History]) {
+        for item in items {
+            modelContext.delete(item)
         }
         try? modelContext.save()
     }
@@ -140,5 +190,34 @@ struct HistoryView: View {
             modelContext.delete(item)
         }
         try? modelContext.save()
+    }
+}
+
+/// Back-to-back history items for one entry, newest first.
+struct HistoryRun: Identifiable {
+    let items: [History]
+
+    var head: History { items[0] }
+    var earlier: ArraySlice<History> { items.dropFirst() }
+
+    /// The oldest item's chapter, so reading on in the same entry keeps the
+    /// run's id, and an open run stays open.
+    var id: String { items[items.count - 1].chapterURL }
+
+    /// Splits newest-first items wherever the entry changes. Items with no
+    /// entry each stand alone.
+    static func runs(of items: [History]) -> [HistoryRun] {
+        var runs: [[History]] = []
+        var lastEntry: PersistentIdentifier?
+        for item in items {
+            let entry = item.chapter?.entry?.persistentModelID
+            if let entry, entry == lastEntry {
+                runs[runs.count - 1].append(item)
+            } else {
+                runs.append([item])
+            }
+            lastEntry = entry
+        }
+        return runs.map(HistoryRun.init)
     }
 }

@@ -96,6 +96,8 @@ docs/              Status ledger, performance numbers, feature notes
 
 ## Docs
 
+- [AGENTS.md](AGENTS.md) — the rules and assumptions condensed from the docs below, for anyone
+  (or any agent) about to change code.
 - [docs/V2_PROGRESS.md](docs/V2_PROGRESS.md) — status of everything, open issues, next steps.
   Start here.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — measured hot paths and the rules that came out
