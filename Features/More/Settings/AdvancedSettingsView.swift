@@ -21,14 +21,13 @@ struct AdvancedSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Advanced")
-        .navigationBarTitleDisplayMode(.large)
+        .settingsScreen("Advanced")
         .confirmationDialog(
             "Clear plugin cache?",
             isPresented: $showClearPluginsDialog,
             titleVisibility: .visible
         ) {
-            Button("Clear Plugin Cache", role: .destructive) {
+            Button("Clear plugin cache", role: .destructive) {
                 clearPluginCache()
             }
         } message: {
@@ -39,7 +38,7 @@ struct AdvancedSettingsView: View {
             isPresented: $showResetReaderDialog,
             titleVisibility: .visible
         ) {
-            Button("Reset Reader Settings", role: .destructive) {
+            Button("Reset reader settings", role: .destructive) {
                 resetReaderSettings()
             }
         } message: {

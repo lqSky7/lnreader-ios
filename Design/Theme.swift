@@ -256,3 +256,14 @@ struct AuroraBackdrop: View {
         .allowsHitTesting(false)
     }
 }
+
+extension View {
+    /// Chrome shared by every settings screen: a large sentence-case title and
+    /// the app's control tint, so switches look the same wherever they are.
+    func settingsScreen(_ title: String) -> some View {
+        self
+            .tint(AppTheme.controlFill)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.large)
+    }
+}

@@ -37,7 +37,6 @@ struct ReaderSettingsView: View {
             grainIntensity: $grainIntensity,
             isEmbedded: true
         )
-        .navigationTitle("Reader Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .settingsScreen("Reader settings")
     }
 }

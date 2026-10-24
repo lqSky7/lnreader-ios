@@ -22,7 +22,7 @@ struct OfflineLibraryView: View {
                     Button("Download unread chapters") { downloads.enqueue(entry.chapters.filter { !$0.read }) }
                     Button("Download all chapters") { downloads.enqueue(entry.chapters) }
                 }
-                Toggle("Wi-Fi only", isOn: $wifiOnly).tint(AppTheme.controlFill).onChange(of: wifiOnly) { _, _ in downloads.resume() }
+                Toggle("Wi-Fi only", isOn: $wifiOnly).onChange(of: wifiOnly) { _, _ in downloads.resume() }
                 Text("Novels save chapter text. Manga saves every page. Add a title to your library before downloading.")
                     .font(.footnote).foregroundStyle(.secondary)
                 Button("Resume queue") { downloads.resume(); LibraryMaintenance.scheduleDownloads() }
@@ -50,7 +50,7 @@ struct OfflineLibraryView: View {
                 }
             }
         }
-        .navigationTitle("Downloads")
+        .settingsScreen("Downloads")
     }
 }
 
@@ -69,16 +69,16 @@ struct LibraryUpdateSettingsView: View {
     var body: some View {
         Form {
             Section("On launch") {
-                Toggle("Update library on launch", isOn: $autoUpdateOnLaunch).tint(AppTheme.controlFill)
+                Toggle("Update library on launch", isOn: $autoUpdateOnLaunch)
             }
             Section("Background refresh") {
-                Toggle("Check for new chapters", isOn: $enabled).tint(AppTheme.controlFill)
+                Toggle("Check for new chapters", isOn: $enabled)
                 Stepper("Requested interval: \(Int(hours)) hours", value: $hours, in: 1...72, step: 1)
-                Toggle("Wi-Fi only", isOn: $wifiOnly).tint(AppTheme.controlFill)
-                Toggle("Only titles with unread chapters", isOn: $unreadOnly).tint(AppTheme.controlFill)
-                Toggle("Skip completed titles", isOn: $skipCompleted).tint(AppTheme.controlFill)
-                Toggle("Download new chapters", isOn: $autoDownload).tint(AppTheme.controlFill)
-                Toggle("Notify about new chapters", isOn: $notify).tint(AppTheme.controlFill)
+                Toggle("Wi-Fi only", isOn: $wifiOnly)
+                Toggle("Only titles with unread chapters", isOn: $unreadOnly)
+                Toggle("Skip completed titles", isOn: $skipCompleted)
+                Toggle("Download new chapters", isOn: $autoDownload)
+                Toggle("Notify about new chapters", isOn: $notify)
                 Text("iOS chooses when background work runs. Low Power Mode and Background App Refresh settings can delay it.")
                     .font(.footnote).foregroundStyle(.secondary)
                 if !schedulingError.isEmpty { Text(schedulingError).font(.footnote).foregroundStyle(.secondary) }
@@ -91,7 +91,7 @@ struct LibraryUpdateSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Library updates")
+        .settingsScreen("Library updates")
         .onChange(of: enabled) { _, _ in LibraryMaintenance.schedule() }
         .onChange(of: hours) { _, _ in LibraryMaintenance.schedule() }
         .onChange(of: notify) { _, value in
@@ -149,7 +149,7 @@ struct LibraryBackupView: View {
             if busy { ProgressView("Working…") }
             if let message { Section { Text(message) } }
         }
-        .navigationTitle("Backup & restore")
+        .settingsScreen("Backup & restore")
         .task { do { recoveryKey = try LibraryBackup.key() } catch { message = error.localizedDescription } }
         .fileExporter(isPresented: $exporting, document: document, contentType: .lnreaderBackup,
                       defaultFilename: "lnreader_\(Date().formatted(.iso8601.year().month().day())).lnbk") { result in

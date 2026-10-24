@@ -24,8 +24,7 @@ struct AboutView: View {
                 )
             }
         }
-        .navigationTitle("About")
-        .navigationBarTitleDisplayMode(.large)
+        .settingsScreen("About")
     }
 
     private var header: some View {

@@ -17,19 +17,19 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section("Defaults") {
-                Picker("Sort Order", selection: defaultSortOrder) {
+                Picker("Sort order", selection: defaultSortOrder) {
                     ForEach(SortOrder.allCases) { order in
                         Text(order.displayName).tag(order)
                     }
                 }
 
-                Picker("Sort Direction", selection: defaultSortDirection) {
+                Picker("Sort direction", selection: defaultSortDirection) {
                     ForEach(SortDirection.allCases, id: \.self) { direction in
                         Text(direction.rawValue).tag(direction)
                     }
                 }
 
-                Picker("Display Mode", selection: defaultDisplayMode) {
+                Picker("Display mode", selection: defaultDisplayMode) {
                     ForEach(DisplayMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
                     }
@@ -37,10 +37,10 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                Toggle("Unread count", isOn: $showUnreadBadges).tint(AppTheme.controlFill)
-                Toggle("New chapters", isOn: $showNewBadges).tint(AppTheme.controlFill)
-                Toggle("Downloaded count", isOn: $showDownloadBadges).tint(AppTheme.controlFill)
-                Toggle("Source language", isOn: $showLanguageBadges).tint(AppTheme.controlFill)
+                Toggle("Unread count", isOn: $showUnreadBadges)
+                Toggle("New chapters", isOn: $showNewBadges)
+                Toggle("Downloaded count", isOn: $showDownloadBadges)
+                Toggle("Source language", isOn: $showLanguageBadges)
             } header: {
                 Text("Library badges")
             } footer: {
@@ -48,11 +48,10 @@ struct GeneralSettingsView: View {
             }
 
             Section("Library") {
-                Toggle("Confirm before remove", isOn: $confirmRemove).tint(AppTheme.controlFill)
+                Toggle("Confirm before remove", isOn: $confirmRemove)
             }
         }
-        .navigationTitle("General")
-        .navigationBarTitleDisplayMode(.large)
+        .settingsScreen("General")
     }
 
     private var defaultSortOrder: Binding<SortOrder> {
