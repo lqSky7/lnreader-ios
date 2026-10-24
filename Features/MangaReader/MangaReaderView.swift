@@ -2,7 +2,7 @@
 //
 // One view for both layouts; the mode is a setting, not a different screen.
 // Pages come from `MangaSource`, bytes from `PageLoader`, progress goes back
-// through `LibraryManager`. See docs/MANGA_SUPPORT_PLAN.md §4.
+// through `LibraryManager`.
 
 import SwiftData
 import SwiftUI

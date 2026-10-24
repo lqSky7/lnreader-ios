@@ -2,7 +2,7 @@
 //
 // Kept pure and separate from the viewer: the pager and the webtoon strip both
 // need the same answer, and getting the order wrong is invisible in a screenshot
-// but very visible while scrolling. See plan §4.
+// but very visible while scrolling.
 
 import Foundation
 

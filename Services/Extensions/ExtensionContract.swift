@@ -1,6 +1,6 @@
 // ExtensionContract.swift - What a transpiled extension bundle looks like.
 //
-// The Kotlin/JS transpiler (plan §3.3) emits one JS file per extension. This is
+// The Kotlin/JS transpiler (docs/MANGA_SUPPORT_PLAN.md §1) emits one JS file per extension. This is
 // the contract that file must satisfy: a single global `extension` object whose
 // methods are synchronous and return plain objects. Synchronous on purpose —
 // the host blocks the JS thread while `http.get` runs, which keeps bundles

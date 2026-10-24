@@ -1,10 +1,10 @@
 // MihonBackup.swift - Reads and restores `.tachibk` backups.
 //
 // `.tachibk` is the format Mihon, Tachiyomi forks, Yokai and Tachimanga write: a
-// gzipped protobuf `Backup` message. Field numbers below are theirs; see
-// docs/MANGA_SUPPORT_PLAN.md §6.1. Only the manga half is read. Preferences,
-// extension repos and source preferences belong to another app's settings
-// model and are ignored.
+// gzipped protobuf `Backup` message. Field numbers below are theirs; the
+// import rules are written up in docs/OFFLINE_LIBRARY.md. Only the manga half
+// is read: preferences, extension repos and source preferences belong to
+// another app's settings model and are ignored.
 
 import Foundation
 import SwiftData
@@ -269,7 +269,7 @@ enum MihonBackup {
     /// Runs on whatever thread calls it, with its own `ModelContext`, so call it
     /// off the main actor: a large library is tens of thousands of rows.
     ///
-    /// Merge rules, from Mihon's `BackupRestorer` (plan §6.1): categories match by
+    /// Merge rules, from Mihon's `BackupRestorer` (docs/OFFLINE_LIBRARY.md): categories match by
     /// name, titles by (source, url) and keep their stored details; chapters
     /// match by url with read and bookmark OR-ed and the further page kept;
     /// history keeps the later read; trackers match by service and keep the

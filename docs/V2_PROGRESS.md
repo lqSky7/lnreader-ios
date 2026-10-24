@@ -1,58 +1,64 @@
 # v2 rewrite — status
 
-**Updated** 2026-10-23 · **Branch** `main` · **Version** 2.0.0 (build 3)
-· **Latest update** Library R8–R10 (sorts, per-category display and update scope, badges), manual chapter fetching
+**Updated** 2026-10-25 · **Branch** `main` · **Version** 2.0.0 (build 3)
+· **Latest update** Browse rebuilt (native search, glass switcher), webtoon strip as a
+collection view with chapter stitching, device profiling script
 
 The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end, and puts
 every source behind one protocol so a JS plugin and a transpiled extension are the same
 thing to the rest of the app.
 
-Migration (`docs/MIGRATION_TO_V2.md`, plan §1) stays **deferred by decision**. The one
-migration property that is honoured is the cheap one: v2 opens its own store file and never
-touches `default.store`, so the old data stays recoverable on disk.
+Migration from v1 is **deferred by decision**, and nothing implements it: v2 opens its own
+store file (`LNReader-v2.store`) and never touches `default.store`, so v1 data stays
+recoverable on disk. There is no `v1-final` bridge build and no "Export for v2" screen —
+do not write a migration doc until they exist. Fresh installs start empty; `.tachibk`
+import already covers a manga library.
+
+**Built** means it compiles and passes its headless checks. **Verified** means it has also been
+used on the iPhone. The readers and the library are verified. Downloads, update scheduling,
+backup/restore and narration are built but have never been exercised on a device — see
+[Next, in order](#next-in-order).
 
 ## At a glance
 
 | Area | State | Notes |
 |---|---|---|
-| Data model | **Done** | `SchemaV1`, own store `LNReader-v2.store`, v1 models deleted |
-| Novel read path | **Done** | Library, detail, chapter list, web reader, history, updates, stats |
-| Manga read path | **Done** | Pager + webtoon, cache, prefetch, progress |
-| Source abstraction | **Done** | `CatalogSource` / `NovelSource` / `MangaSource`; `SourceManager` registry |
-| JS extension host | **Done** | JSC + `http`/`dom` bridge, bundle contract, repo/trust/install service |
-| First extension | **Done** | MangaFire, ported from keiyoushi, verified live |
-| Chapter lists | **Done** | Number ordering, all-chapters for manga, scanlator priority |
-| Browse | **Done** | Split into Light Novels / Manga |
-| Reader and Browse UI polish | **Implemented; device check pending** | Manga controls and dismiss swipe; Browse title and switcher; English default for novel sources |
-| Extension repo UI | **On hold by user** | Existing service retained |
-| WebView fetch primitive | **On hold by user** | Captcha-gated sources remain blocked |
-| Kotlin/JS transpiler | **On hold by user** | Toolchain also absent |
-| Downloads | **Implemented; device check pending** | Novel text and manga pages, durable queue, offline reader paths, pause/retry/remove, Wi-Fi and storage guards |
-| Update scheduling | **Implemented; device check pending** | App refresh, continued/processing download tasks, per-title policy, optional notifications and new-chapter downloads |
-| Trackers | **AniList implemented; device check pending** | Implicit-flow login (Keychain token, redirect `lnreader://anilist-auth`), search/bind/edit sheet on the detail screen, auto-update on chapter finish (3 s debounce, highest chapter read), offline queue flushed on foreground and network change. Other trackers not started |
-| Migration (`.tachibk`, bridge) | **Deferred** | User's call; fresh installs start empty |
-| Backup / restore (`.lnbk`) | **Local v2 format implemented; device check pending** | Authenticated encrypted snapshots, recovery key, merge restore; protobuf/cloud interoperability remains deferred |
-| Library (R7–R10) | **Implemented; device check pending** | Filters, per-category sort / display / update scope, badges. No category editor yet (see Open issues) |
-| Chapter fetching | **Implemented; device check pending** | Opening an entry no longer refetches; last-fetched time and a Refresh button |
-| Performance | **Pass done; device trace pending** | Library counts cached off-main, reader writes coalesced, covers downsampled; see [PERFORMANCE.md](PERFORMANCE.md) |
+| Data model | **Built** | `SchemaV1`, own store file, v1 models deleted |
+| Novel read path | **Verified** | Library, detail, chapter list, web reader, history, updates, stats |
+| Manga read path | **Verified** | Pager + webtoon, cache, prefetch, progress; all reader gestures checked on device |
+| Source abstraction | **Built** | `CatalogSource` / `NovelSource` / `MangaSource`; `SourceManager` registry |
+| JS extension host | **Built** | JSC + `http`/`dom`/`webview` bridge, bundle contract, repo/trust/install |
+| Bundled extensions | **Built** | MangaFire and AllManga, ported from keiyoushi, both verified live |
+| Chapter lists | **Built** | Number ordering, all-chapters for manga, scanlator priority |
+| Browse | **Built** | Split into Light Novels / Manga; native search, glass switcher |
+| Downloads | **Built** | Novel text and manga pages, durable queue, offline reader paths, pause/retry/remove, Wi-Fi and storage guards. Not exercised on a device |
+| Update scheduling | **Built** | App refresh, continued/processing tasks, per-title policy, notifications, new-chapter downloads. Not exercised on a device |
+| Trackers | **AniList built** | Implicit-flow login, bind/edit sheet on detail, auto-update on finish, offline queue. Others not started |
+| Backup / restore | **Built (local)** | Encrypted `.lnbk` snapshots, recovery key, merge restore; `.tachibk` import. Export to `.tachibk` and cloud sync remain deferred. Not exercised on a device |
+| Library | **Verified** | Filters, per-category sort / display / update scope, badges — all checked on device. No category editor yet |
+| Chapter fetching | **Verified** | Opening an entry no longer refetches; last-fetched time and a Refresh button |
+| Performance | **Pass done** | Library counts cached off-main, reader writes coalesced, covers downsampled; numbers in [PERFORMANCE.md](PERFORMANCE.md), next rewrite in [LIBRARY_QUERY_PLAN.md](LIBRARY_QUERY_PLAN.md) |
+| Extension repo UI | **On hold** | Existing service retained |
+| Kotlin/JS transpiler | **On hold** | Toolchain also absent; rationale in [MANGA_SUPPORT_PLAN.md](MANGA_SUPPORT_PLAN.md) §1 |
+| Migration (v1 → v2) | **Deferred** | User's call; fresh installs start empty. Importing another app's `.tachibk` is the only way in |
 
 ## Roadmap — Mihon / Yokai parity
 
-Ordered by dependency, not by size: the
-per-series settings store comes first because reader modes, filters and incognito all read it.
+Ordered by dependency: the per-series settings store comes first because reader modes,
+filters and incognito all read it.
 
 | # | Feature | State | Depends on |
 |---|---|---|---|
-| R1 | Per-series reader settings store | **Implemented; device check pending** | — |
-| R2 | Per-series read mode (pager / webtoon / direction) | **Implemented; device check pending** | R1 |
-| R3 | Tap-zone layouts | **Implemented; device check pending** | R1 |
-| R4 | Volume-key page turns | **Implemented; device check pending** | R1 |
-| R5 | Auto scroll | **Implemented; device check pending** | R1 |
-| R6 | Hold to scroll, with swipe-to-change-speed | **Implemented; device check pending** | R5 |
-| R7 | Library filters | **Implemented; device check pending** | — |
-| R8 | Library sorts (per category) | **Implemented; device check pending** | R7 |
-| R9 | Categories: per-category sort, display, update scope | **Implemented; device check pending** | R7, R8 |
-| R10 | Library badges | **Implemented; device check pending** | — |
+| R1 | Per-series reader settings store | **Verified** | — |
+| R2 | Per-series read mode (pager / webtoon / direction) | **Verified** | R1 |
+| R3 | Tap-zone layouts | **Verified** | R1 |
+| R4 | Volume-key page turns | **Verified** | R1 |
+| R5 | Auto scroll | **Verified** | R1 |
+| R6 | Hold to scroll, with swipe-to-change-speed | **Verified** | R5 |
+| R7 | Library filters | **Verified** | — |
+| R8 | Library sorts (per category) | **Verified** | R7 |
+| R9 | Categories: per-category sort, display, update scope | **Verified** | R7, R8 |
+| R10 | Library badges | **Verified** | — |
 | R11 | Duplicate detection | Planned | — |
 | R12 | Migrate manga / novel to another source | Planned | R11 |
 | R13 | Incognito mode | Planned | — |
@@ -60,358 +66,189 @@ per-series settings store comes first because reader modes, filters and incognit
 
 ### Reader (R1–R6)
 
-- **R1 settings store.** One resolved-settings struct: series override ➝ global default.
-  Keep it in UserDefaults keyed by `sourceKey::url`, like scanlator rules, not in the
-  schema — it is a view preference. Everything below reads through it.
-- **R1 as built.** `MangaReaderSettings.swift`: `MangaReaderOverrides` (optional fields, so
-  adding a setting never breaks saved data), `MangaReaderPreferences` (resolved values) and
-  `MangaSeriesSettings` (the persisted `@Observable` store, key `mangareader.<sourceKey>::<url>`).
-  Overrides win field by field; a series that never overrode a field follows the global default,
-  and an empty override set is removed rather than stored. Later settings are new optional fields
-  on `MangaReaderOverrides`.
-- **R2 as built.** The reader's layout menu now writes the series override. "Use for all series"
-  promotes the series' effective values to the global defaults and drops the override;
-  "Reset to default" appears once a series has overrides. Chapters opened outside a library entry
-  are keyed by chapter URL. The global default is edited from the new Reader settings sheet
-  (options menu → Reader settings…) as well as through "Use for all series".
-  The sheet has a single `.medium` detent: with `.large` as well, scrolling its list pulled
-  the sheet to full height.
-- **R2 original plan.** Today `manga.readingMode` / `manga.pagingDirection` are global
-  `@AppStorage`. Add a "this series" override with a "use default" state, shown in the reader
-  options menu. Novels keep their own reader settings; only manga needs this.
-- **R3 tap zones.** Layouts: default (thirds), L-shaped, Kindlish, edge, disabled, plus an
-  invert toggle. Zones stay a simultaneous gesture, never an overlay (see Decisions).
-  Zones must respect right-to-left.
-- **R4 volume keys.** Needs a hardware-key hook (observe `AVAudioSession` output volume or
-  `onHardwareKeyPress`/`UIPress`), swallow the HUD where possible, and invert in RTL.
-  Per-series override optional. Check it does not fight the screen-awake setting.
-- **R5 auto scroll.** Webtoon only at first: a `CADisplayLink`-driven offset, not a timer,
-  so speed is frame-rate independent. Setting: speed in points/second, default and
-  min/max. Stops on touch, resumes on a tap or after a configurable delay.
-- **R6 hold to scroll.** Press and hold scrolls at a configurable speed; while holding,
-  dragging up or down raises or lowers the speed. Configurable: base speed, step size per
-  point dragged, min/max, and **which direction increases** (up = faster by default, with
-  an invert option). Must not use an overlay that eats the scroll view's drag; implement as
-  a simultaneous long-press-then-drag gesture and cancel it when the hold ends. Share the
-  scroller with R5 so there is one animation driver.
+Pure rules live in `Features/MangaReader/MangaReaderControls.swift`, checked headless by
+`./scripts/check.sh reader-settings` (`MangaTapZoneLayout`, `HoldScrollConfig`,
+`ScrollStep`, `VolumeKeyDetector`, `MangaControlSettings` under `manga.controls`).
 
-**How R3–R6 were built** (`Features/MangaReader/`):
-
-- **Pure rules** in `MangaReaderControls.swift`, checked headless by
-  `scripts/check-v2-reader-settings.sh`: `MangaTapZoneLayout.action(at:in:…)`,
-  `HoldScrollConfig.speed(forDrag:)`, `ScrollStep.advance`, `VolumeKeyDetector`, and
-  `MangaControlSettings` (one JSON value under `manga.controls`; missing fields keep defaults).
-- **R3 tap zones** — Default, L-shaped, Kindle-style, Edges, Disabled, plus invert. Per series
-  (R1 overrides `tapZones` / `invertTapZones`). Right-to-left and invert are two reversals that
-  cancel. Paged mode only; webtoon taps still toggle the controls.
-- **R4 volume keys** — `VolumeKeyHost`. iOS reports a press only as a change in
-  `AVAudioSession.outputVolume`, so while the reader is open the media volume is parked at 50 %,
-  each change is read as up or down, then the volume is set back to 50 %; the user's volume is
-  restored on leaving and whenever the app resigns active. A hidden `MPVolumeView` suppresses
-  the HUD. Volume up goes back, down goes forward, with an invert option. Paged: one page;
-  webtoon: ~85 % of a screen. This is a global setting, not per series.
-- **R5 auto scroll** — `WebtoonScrollController` drives the strip's `UIScrollView` from a
-  `CADisplayLink` (SwiftUI has no per-frame offset API; SwiftUI's own position tracking follows
-  the offset). Speed in pt/s; the user's finger always wins — it waits for the drag and its
-  momentum to end, then continues. Starts from the options menu, hides the controls, shows a
-  stop button, and brings the controls back at the end of the chapter. Webtoon only; the pager
-  has no equivalent yet.
-- **R6 hold to scroll** — a `UILongPressGestureRecognizer` on the same scroll view (0.3 s). While
-  held, the pan recognizer is disabled so the finger changes the speed instead of dragging the
-  content; swiping up/down raises or lowers speed by `speedPerPoint` pt/s per point, clamped to
-  min/max, and which direction speeds up is a setting. A speed readout shows while holding, and
-  the tap that the lifted finger would otherwise register is suppressed for 0.4 s. Optional
-  haptics (`HoldHapticTracker`): a selection tick per 40 pt/s crossed, a firmer tap on reaching
-  the slowest or fastest speed.
-- **Tap zones apply in webtoon too** (scroll ~85 % of a screen; "Disabled" restores
-  tap-only-toggles). Reading direction does not apply to a vertical strip.
-- **Settings** — `MangaReaderSettingsSheet` (options menu → Reader settings…): layout, direction,
-  tap zones and invert are per series; volume keys, auto scroll speed and every hold-to-scroll
-  value are global.
-
-**Device checks R3–R6 need** (none could be run here — no Simulator runtime, device unavailable):
-the scroll view is actually found from the webtoon content (`WebtoonScrollBridge`); hold works
-without the strip also scrolling and without the lifted finger toggling the controls; auto scroll
-pauses and resumes around a drag; the volume HUD stays hidden, presses register at the ends of
-the range, and the volume is restored after closing the reader or backgrounding the app.
+- **R1/R2 settings.** `MangaReaderOverrides` (all optional, so a new setting never breaks
+  saved data) resolve into `MangaReaderPreferences`, persisted under
+  `mangareader.<sourceKey>::<url>`. Overrides win field by field; an empty override set is
+  removed. "Use for all series" promotes to the global defaults; chapters opened outside a
+  library entry are keyed by chapter URL.
+- **R3 tap zones.** Default, L, Kindle, Edges, Disabled, plus invert, per series. RTL and
+  invert are two reversals that cancel. Paged only; in webtoon a tap still toggles the
+  controls. Always a simultaneous gesture, never an overlay — an overlay above a scroll view
+  eats the drag.
+- **R4 volume keys.** iOS reports a press only as an `AVAudioSession.outputVolume` change, so
+  `VolumeKeyHost` parks media volume at 50 % while the reader is open, reads each change as up
+  or down, and restores it on exit and on resigning active. A hidden `MPVolumeView` suppresses
+  the HUD. Up = back, down = forward, invertable. Global, not per series.
+- **R5/R6 scrolling.** `WebtoonScrollController` drives the `UIScrollView` from a
+  `CADisplayLink` (SwiftUI has no per-frame offset API); the finger always wins. Hold-to-scroll
+  disables the pan recognizer so the drag changes speed instead of position, and suppresses
+  the would-be tap for 0.4 s. Both webtoon only.
+- **Settings sheet:** layout, direction and tap zones are per series; volume keys and scroll
+  speeds are global.
 
 ### Library (R7–R10)
 
-- **R7 filters.** Downloaded, unread, started, completed, tracked, source/kind. Tri-state
-  (include / exclude / off) like Mihon, persisted per category. Counts must come from
-  `LibraryChapterCounts` — no relationship walks in a `body` (see Decisions).
-- **R7 as built.** `LibraryFilter` (`Models/Enums/LibraryFilter.swift`): downloaded, unread,
-  started, completed, tracked, each a `TriState`. `LibraryFilterStore` keeps one filter per
-  category (keyed by name; `nil` is All) as one JSON value under `library.filters`.
-  `LibraryChapterCounts.Counts` gained `downloaded`; the view loads counts for the filter into
-  `filterCounts` off-main (only when a count-based rule is on) and entries whose counts have not
-  arrived yet pass, so the library never blanks. UI: toolbar button → `LibraryFilterSheet`.
-  Checked headless by `scripts/check-library-filters.sh`; typechecks. Source/kind filtering
-  is still the existing All/Novels/Manga picker. Device check: filter counts match the cells,
-  and a filter set on one category does not leak into another.
-- **R8 sorts.** Sort orders exist today (`SortOrder`); add per-category sort + direction,
-  and "latest chapter", "last checked", "chapter fetch date". Sorting by unread must use the
-  cached counts, never `Entry.unreadCount`.
-- **R8 as built.** `LibrarySort` / `LibrarySorter` / `LibrarySortStore`
-  (`Models/Enums/LibrarySort.swift`): one sort per category as one JSON value under
-  `library.sorts`; a category with no entry follows the global default from Settings. The
-  Sort menu is scoped to the selected category and offers "Use default sort" once it has
-  an override. Ascending now means smallest first everywhere (A to Z, oldest first); an
-  order starts in its natural direction, so a saved Alphabetical + Descending now reads
-  Z to A (it used to read A to Z). New orders: **Latest Chapter** (newest `dateUpload`)
-  and **Chapter Fetch Date** (newest `dateFetch`; it is the "unseen update" stamp, so it
-  empties when Updates are cleared). "Last Updated" is shown as **Last Checked**: it is
-  `Entry.lastUpdate`, set on every successful refresh. The two date orders add two
-  `fetchLimit 1` queries per entry to the cached count pass, only while one is selected.
-  Checked headless by `scripts/check-library-sorts.sh`; typechecks. Device check: each
-  category keeps its own sort, and unread/latest-chapter sorts wait for the count pass.
-  `LibraryView.hasLoadedCounts` holds the page back until the first pass lands: sorting with
-  every count at 0 and then re-sorting visibly reshuffled the library on launch.
-  **Sort menu rework.** One "View options" menu (Sort, Display, Import) beside the Filter
-  button replaces four toolbar buttons. Sort is an inline picker for the order (a plain
-  checkmark, no leading chevron to indent the rows), then a Direction picker worded per order
-  ("Fewest first / Most first", "A to Z", "Oldest first / Newest first"), then an
-  **Empty ones last** toggle (`LibrarySort.emptyLast`, stored per category, decoded as off for
-  older saves). Selecting a count-based order turns it on, so ascending Unread no longer opens
-  with every finished title. Empty means 0 unread, 0 chapters, or no date for that order.
-- **R9 categories.** Per-category display mode, sort, filter and update scope. The category
-  chip row already exists; this adds the per-category state behind it.
-- **R9 as built.** Sort (R8) and filter (R7) were already per category; R9 adds the other two.
-  *Display mode* is a `LibraryDisplayStore` (`Models/Enums/CategorySettings.swift`), one JSON
-  value under `library.displays`; the toolbar Display menu now edits the selected category,
-  falls back to the Settings default, and offers "Use default display" (it used to overwrite
-  that Settings default). *Update scope* is the `CategoryFlags.excludedFromUpdates` bit of
-  `Category.flags` (already carried by `.lnbk`): long-press a chip (a popover with a gap from the chip) → "Include in library
-  updates"; excluded chips show a pause glyph. `LibraryUpdateScope` decides who updates:
-  automatic, background and library-wide runs skip a title if **any** of its categories is
-  excluded (exclusion wins, as in Mihon); `updateLibrary(category:)` updates exactly that
-  category's titles and ignores its exclusion. Pull-to-refresh inside a category, and the
-  chip menu's "Update this category", use it. Checked headless by
-  `scripts/check-library-categories.sh`; typechecks. **Gap:** there is still no UI to
-  create, rename, reorder, delete or assign categories (they only arrive from a Mihon
-  restore), so this is only reachable after an import until a category editor exists.
-  Device check: a category's display mode stays with it, an excluded category is skipped
-  by Updates and the background refresh, and a category refresh updates only its titles.
-- **R10 badges.** Unread, downloaded, source/language, "new". Compute off-main and cache;
-  badges are the main per-cell cost in the grid.
-
-- **R10 as built.** Four toggles under Settings → General → Library badges:
-  unread (the old toggle, same key, on by default), new chapters, downloaded count and
-  source language; the last three are off by default so the grid looks as it did.
-  `LibraryBadges.resolve` (`Models/Enums/LibraryBadges.swift`) decides what a cell shows
-  from the cached counts, and `LanguageLabel` turns a source's tag ("pt-BR") or name
-  ("English") into "EN" / "PT-BR" / "MULTI" / "LOCAL". "New" is unread chapters whose
-  `dateFetch` is still set, so it clears with Updates, and is never more than unread.
-  Counts stay off-main: `LibraryChapterCounts.counts(for:container:extras:)` takes `.newCount`
-  or `.dates`, each costing extra queries only when asked, and remembers every extra any
-  caller wanted so the sort pass and the cells do not evict each other (they stay on for
-  the session once requested). Grid cells draw `LibraryCoverBadges` as an overlay on the
-  cover (state top right, facts top left); list rows add symbols to the caption line.
-  Checked headless by `scripts/check-library-badges.sh`; typechecks. Device check: badges
-  do not move cell heights, toggling a badge updates cells without a relaunch, and the grid
-  scrolls as smoothly as before with all four on.
+- **Filters** (`library.filters`), **sorts** (`library.sorts`) and **display**
+  (`library.displays`) are each one JSON value per category; a category with no entry follows
+  the Settings default. Filters are tri-state (downloaded, unread, started, completed,
+  tracked). Entries whose counts have not arrived yet pass, so the library never blanks.
+- **Ascending means smallest first** everywhere, and an order starts in its natural
+  direction, so a saved Alphabetical + Descending now reads Z to A. **Chapter Fetch Date**
+  empties when Updates are cleared (`dateFetch` is the unseen-update stamp); "Last Updated" is
+  labelled **Last Checked**. `LibraryView.hasLoadedCounts` holds the page until the first
+  count pass lands, or the library visibly reshuffles on launch.
+- **Update scope** is the `CategoryFlags.excludedFromUpdates` bit (carried by `.lnbk`).
+  Exclusion wins when **any** category is excluded, while `updateLibrary(category:)` updates
+  its own category regardless. There is no category editor, so per-category settings are
+  reachable only after a Mihon import.
+- **Badges:** unread (the old key, on), new chapters, downloaded count, source language (the
+  last three off). "New" is unread with `dateFetch` set, so it clears with Updates. Counts
+  stay off-main and extras are remembered so the sort pass and the cells do not evict each
+  other.
 
 ### Library maintenance (R11–R13)
 
 - **R11 duplicates.** On add-to-library, match by normalized title (and alt titles) across
-  sources and warn with a "view existing / add anyway" choice. Matching must be cheap: index
-  once, not per keystroke.
+  sources and warn with a "view existing / add anyway" choice. Index once, not per keystroke.
 - **R12 migrate.** Pick a destination source, search it, choose the match, then carry over
   chapters read, bookmarks, categories, added date and tracking, and offer to keep or remove
-  the old entry. Match chapters by number (reuse `ChapterRecognition`). Do this as one
-  background transaction so a failed migrate leaves the old entry intact. Works for both
-  manga and novels.
-- **R13 incognito.** A global toggle that suppresses history writes, reading progress, and
-  `lastReadAt`. Must be visible (a banner or icon) so it is never on by accident, and must
-  be respected by both readers and the downloader's auto-mark-read.
+  the old entry. Match chapters by number (reuse `ChapterRecognition`). One background
+  transaction so a failed migrate leaves the old entry intact. Works for manga and novels.
+- **R13 incognito.** A global toggle that suppresses history writes, reading progress and
+  `lastReadAt`. Must be visible (banner or icon) so it is never on by accident, and must be
+  respected by both readers and the downloader's auto-mark-read.
 
 ### Downloads (R14)
 
-Polish the More → Downloads screen and the per-chapter download controls: clearer
-queue states (queued / downloading / paused / waiting for Wi-Fi / failed), reorderable
-queue, per-title progress, swipe actions, a visible download state on chapter rows, a
-storage summary with a clear-all, and a sensible empty state. The queue and guards already
-exist; this is UI and information design, so it needs a device pass.
+The queue and guards already exist; this is UI and information design, so it needs a device
+pass: clearer states (queued / downloading / paused / waiting for Wi-Fi / failed),
+reorderable queue, per-title progress, swipe actions, a download state on chapter rows, a
+storage summary with clear-all, and a sensible empty state.
 
 ## Chapter fetching is manual
 
-Opening an entry no longer refetches it. `NovelDetailView.fetchDetails` fetches on its own only
-when there is nothing stored to show: a browse result, or a library entry with no `lastUpdate`.
-A stored entry shows "Last fetched …" (from `Entry.lastUpdate`, or this screen's own fetch time
-for a browse result) with a **Refresh** button; a failed refresh raises an alert and leaves the
-page up. `addToLibrary` stamps `lastUpdate` when chapters came with the add, so a title just added
-from Browse does not refetch on first open. Library-wide updates (pull to refresh, background)
-are unchanged. Device check: opening a library entry makes no network request, Refresh updates
-the time and the chapter list, and a title added from Browse before its fetch finishes still
-gets its chapters.
+Opening an entry no longer refetches it. `NovelDetailView.fetchDetails` fetches on its own
+only when there is nothing stored to show: a browse result, or a library entry with no
+`lastUpdate`. A stored entry shows "Last fetched …" with a **Refresh** button; a failed
+refresh raises an alert and leaves the page up. `addToLibrary` stamps `lastUpdate` when
+chapters came with the add, so a title just added from Browse does not refetch on first
+open. Library-wide updates (pull to refresh, background) are unchanged.
 
-## Landed
+## Offline, background work, backups
 
-| Commit | What |
-|---|---|
-| `8308535` | v2 foundations: schema, container factory, HTTP stack, source protocols, `SourceKey` |
-| `8de89a5` | App runs on v2: read path ported, v1 models deleted, sync mapping |
-| `3cce227` | Browse through the source layer (`CatalogSource`, `SourceEntry`) |
-| `a1c7d7d` | `ChapterSourceSync` + `ChapterRecognition` (Yokai port, 40 reference cases) |
-| `d2cba3b` | `ChapterCache` (LRU) + `PagePrefetchPlan` |
-| `bcf0f7f` | Manga reader: pager/webtoon, progress, `ChapterReader` routing |
-| `11a7ed8` | Fix: project patch had dropped asset/icon references |
-| `b1923c5` | Extension host: JSC bridge, bundle contract, store, repo/trust |
-| `7423959` | MangaFire shipped as the first extension |
-| `007fab2` | Reader as its own full-screen window; source icons; library kind filter |
-| `ced3897` | Reader chrome states: focus / control, Liquid Glass controls |
-| `8ed3d42` | Fix: tap overlay was eating scroll and swipe gestures |
-| `629cb31` | Fix: order chapters by number; manga lists show everything |
-| `abc7f23` | Scanlator priority + per-scanlator visibility |
-| `6c32ca4` | Browse split into two catalogues |
-| `86d0c39` | Version 2.0.0 |
-| `3072d5d` | Reader controls polish, Browse refinement (Glur backdrop) |
-| `846d553` | Offline chapters, background updates, encrypted library backups |
-| `2092e97` | Rewrote this progress tracker as a status ledger |
-| `3072d5d` | Reader/Browse UI fixes, shared manga chapter directory, audit, sample source removal |
-| `d42d6b0` | R8: per-category library sorts; Latest Chapter and Chapter Fetch Date orders |
-| `b59fe75` | R9: per-category display mode; exclude categories from updates; refresh one category |
-| `e656c82` | R10: library badges (new chapters, downloaded count, source language) |
-| `fd0ccac` | Chapters are no longer refetched on open; last fetched time and manual Refresh |
-| `e02deda` | Fix: category chip actions open from a long press gesture |
-| `b4ee552` | Fix: anchor the category actions to the pressed chip |
+Full detail in [OFFLINE_LIBRARY.md](OFFLINE_LIBRARY.md); the shape:
 
-## Offline library update
+- **Downloads.** More → Downloads: title batches, per-chapter actions, durable queue,
+  pause/retry/remove, progress, Wi-Fi waiting, 200 MB free-space guard. Novels save chapter
+  HTML/text; manga saves page files. Both readers prefer validated durable files before the
+  network. Chapter folders are published with a manifest only after completion.
+- **Background work.** Task identifiers registered and declared. User batches request iOS 26
+  continued processing; pending work resumes in a scheduled processing task. App refresh has
+  an interval, Wi-Fi preference, unread/completed filters, per-entry strategies, optional
+  notifications and new-chapter downloads.
+- **Backup.** AES-256-GCM `.lnbk` with a random Keychain recovery key; merge restore that
+  keeps existing details and newer progress. Media, audio, source packages and credentials
+  are excluded. `.tachibk` import reads Mihon/Yokai/Tachimanga files; `.tachibk` **export**
+  and cloud sync are still deferred.
 
-- **Downloads:** More → Downloads provides title batches, per-chapter context actions,
-  durable queue state, pause/retry/removal, errors, progress, Wi-Fi waiting, and a 200 MB
-  free-space guard. Novels save chapter HTML/text; manga saves page files. Both readers
-  prefer validated durable files before consulting the network. Chapter folders are
-  published with a manifest only after completion and survive cache eviction.
-- **Background work:** task identifiers and modes are registered and declared. User
-  batches request iOS 26 continued processing; pending work can resume in a scheduled
-  processing task. Library app refresh has a requested interval, Wi-Fi preference,
-  unread/completed filters, per-entry strategies, optional notifications and new-chapter
-  downloads. Manual refresh overrides automatic-only entry restrictions. iOS controls
-  when scheduled tasks run.
-- **Backup:** More → Backup & restore exports AES-256-GCM `.lnbk` snapshots with a random
-  Keychain recovery key. Covers metadata, categories, chapters, reading state/history,
-  existing tracker records, preferences, profile, and local imported books. Restore
-  merges without replacing existing title details or newer progress. Downloaded media,
-  audio, source packages, credentials, and cloud transfer are excluded.
-- **Format decision:** the local snapshot uses authenticated `LNRB` envelope version 2
-  and a JSON payload with a random recovery key. It is distinct from the plan's proposed
-  Argon2/protobuf format. `.tachibk` interoperability remains deferred migration work.
-- **Checks:** simulator SDK build, offline-library encryption/restore/policy checks,
-  existing schema checks, and page-pipeline checks passed. Interactive verification is
-  unavailable: no installed Simulator runtime and the paired iPhone is unavailable.
-- See [offline library notes](OFFLINE_LIBRARY.md) for usage, recovery, background behavior,
-  current media/format boundaries, and the remaining device acceptance checklist.
+## Trackers
 
-## UI update
+AniList only: implicit-flow login via `ASWebAuthenticationSession` with our own client ID and
+`lnreader://anilist-auth`, token in the Keychain, search/bind/edit sheet on the detail
+screen, auto-update on chapter finish (3 s debounce, highest chapter read), and a
+`PendingTrackUpdate` queue flushed on foreground and network change. Other trackers are not
+started; the protocol is in [MANGA_SUPPORT_PLAN.md](MANGA_SUPPORT_PLAN.md) §2.
 
-- **Manga reader:** top controls follow the novel reader's layout. The bottom controls now
-  put a custom 44-point page slider and paired chapter buttons in one row, without a
-  page-count pill. The slider and chapter buttons share the Liquid Glass capsule style.
-  Light Glur backdrop blur replaces the black edge fade when controls are visible. A
-  leftward swipe from the right edge dismisses the full-screen reader. The chapter sheet
-  now uses the shared reader directory with cover/title metadata, search, jump, filters,
-  and 50-chapter pages. It fetches source chapters for titles outside the library and
-  applies scanlator rules consistently with adjacent navigation. The scrubber is a bar
-  without a circular thumb and seeks both paged and webtoon content.
-- **Browse:** uses the standard SwiftUI navigation title, a dedicated Light Novels / Manga
-  switcher with `systemGray6`, one spring-sliding white selection, and selection haptics.
-  The switcher and search field share a 44-point height, corner radius, and row margins.
-  The selected language pill is white with black text; Global Search sits above the tab bar
-  on the lower right. Available Light Novel sources default to English.
-- **Verification:** iOS Simulator SDK Debug build and page-pipeline/scanlator checks passed.
-  No Simulator runtime is installed here. The manga swipe, slider, safe-area layout, and
-  Browse animation still need a device interaction check. See [UI audit](UI_AUDIT.md)
-  for corrected defects, remaining issues, and the limits of these checks.
-- **Sample source:** removed the offline sample manga source, its startup registration,
-  and its Xcode project references.
+## Narration
 
-## UX pass
+Breeze TTS 2 with the original 16-bit checkpoint, four LNReader voice designs plus custom
+reference voices, default narrator "Warm narrator"; downloaded Qwen packages stay readable.
+The app validates the Breeze model and accepts zero-length word-timing bins rather than
+inventing highlight durations.
 
-- **Swiping switches kinds.** The Library kind picker and the Browse source switcher both
-  looked like tabs but did nothing on swipe. They are now bound to the same `@AppStorage`
-  key, with the chrome pinned above the content so a swipe moves only the list. They began as
-  page-style `TabView`s; those were replaced with a single rendered page and a
-  `horizontalSwipe` modifier (`Extensions/View+Extensions.swift`) because the nested pager
-  built every page up front and fought the scroll view. Each Library page has its own empty
-  state, so a filter that matches nothing no longer claims the whole library is empty.
-  Category chips stay inside the page — they filter the grid, so they are content.
-- **Browse's floating search button is an overlay**, not a bottom safe-area inset. The
-  inset reserved a strip that nothing painted, which showed as a black bar under the list;
-  the list now reserves scroll room with `.contentMargins` instead.
-- **Add to Library answers immediately.** It used to require the details request to have
-  finished — before that, taps were dropped with no feedback. It now seeds from the browse
-  row, shows a spinner and disables itself while writing, and animates to "In Library"
-  with a haptic. Details and the chapter list are fetched concurrently instead of in
-  series, and the chapter list says "Loading chapters…" instead of "No chapters yet".
-- **Launch update is deferred** by two seconds so the first frame and first tap are not
-  competing with a library-wide refresh.
-- **Risk:** the swipe is disabled while the library is in edit mode so it cannot compete
-  with drag-and-drop reordering; check on a device that a long-press drag still starts.
+The superseded Qwen design is kept in [TTS_REVAMP_PLAN.md](TTS_REVAMP_PLAN.md) for reference
+only. **The backend docs have not caught up** — see open issue 6. Playback on the device
+(lock screen, backgrounding, seeking against real audio) has not been verified.
 
 ## Open issues
 
-1. **MangaFire captcha.** A `403 {"error":"captcha_required"}` from the API surfaces as an
-   error. Upstream solves it with OpenCV.js in a WebView and a `waf_pass` cookie. Needs the
-   WebView fetch primitive below.
-2. **Reader UI needs device verification.** Shared chapter directory and scanlator
-   rules are wired; seeking, gestures, large text, and blur still need interactive checks.
+1. **MangaFire captcha.** A `403 {"error":"captcha_required"}` surfaces as an error.
+   Upstream solves it with OpenCV.js in a WebView and a `waf_pass` cookie. The host
+   primitive now exists (`webview.capture`), but the MangaFire bundle does not use it.
+2. **No category editor.** Categories only arrive from a Mihon restore, so R9's
+   per-category settings are reachable only after an import.
 3. **Global search is novel-only.** `GlobalSearchView` iterates `sourceManager.novelSources`;
-   hidden on the Manga tab rather than shown broken.
-4. **Offline/background features need device acceptance.** Verify airplane-mode reading,
-   queue cancellation and relaunch, Files/Keychain recovery, and system task expiration.
-5. **Bundle signing.** Repositories pin a signing-key fingerprint, but bundle bytes are not
+   it is hidden on the Manga tab rather than shown broken.
+4. **Bundle signing.** Repositories pin a signing-key fingerprint, but bundle bytes are not
    verified.
+5. **UI follow-ups from the audit** (Glur private API, Dynamic Type in narrow layouts): see
+   [UI_AUDIT.md](UI_AUDIT.md). The audit's right-edge-dismissal concern is settled — the
+   device pass showed the edge swipe does not advance a page.
+6. **Backend narration docs are stale.** The app moved to Breeze TTS 2 on 24 October, but
+   `lnreader-backend/docs/` still documents the Qwen pipeline (snapshot 20 October) and the
+   `breeze-tts-2.md` that an earlier entry here referred to was never written. Whoever owns
+   the backend should write it before the Qwen notes get mistaken for current.
 
 ## Next, in order
 
-0. **Check the library features on a device** (R7–R10 and manual fetching): each category keeps its
-   own sort and display mode; an excluded category is skipped by Updates and the background refresh;
-   a chip's long-press popover opens beside that chip and its category refresh updates only its
-   titles; badges do not change cell heights; opening a library entry makes no request and Refresh
-   works. Each feature's "device check" note above has the detail.
+1. **Device pass on the parts that have never been exercised.** Readers and the library are
+   verified; what is left is offline reading in airplane mode (both kinds), queue
+   cancellation and recovery after relaunch, `.lnbk` export/import through Files with a
+   fresh-device recovery key, background scheduling and expiration with notifications, and
+   Breeze narration playback.
+2. **Then R11 → R14** (duplicates, migrate source, incognito, download UI).
 
-1. **Check the UI changes interactively.** Confirm manga paging and
-   webtoon scrolling still work alongside the edge swipe, and check Browse on a compact phone.
-2. **Exercise offline reading and queue recovery** on hardware for both novels and manga.
-3. **Exercise background task scheduling/expiration**, notifications, and automatic download rules.
-4. **Export and restore `.lnbk` through Files**, including a fresh-device recovery key and local imported book.
-
-Extension WebView fetching, repository UI, and Kotlin/JS shims are on hold at the user's
-request. Migration remains deferred; AniList tracking is in (see the Trackers row). Cloud and `.tachibk` backup interoperability
-are separate from the implemented local `.lnbk` snapshot.
-
-## Library follow-ups
-
-- **No category editor.** Categories only arrive from a Mihon restore: nothing in the app creates,
-  renames, reorders, deletes or assigns them, so R9's per-category settings are only reachable after
-  an import. A category editor (plus assigning from the detail screen) is the missing piece.
-- **Planned next:** R11 duplicate detection, R12 migrate source, R13 incognito, R14 download UI.
+Extension repository UI and the Kotlin/JS shims stay on hold at the user's request.
 
 ## Verification
 
-| Script | Covers |
+`./scripts/check.sh all` runs every check that needs no setup; `./scripts/check.sh` alone
+lists them. Each one compiles a program from `tests/` against the app files it touches and
+runs it — no Simulator, no XCTest, no SwiftPM target (see the header of `typecheck.sh` for
+why).
+
+Offline checks (no device, no network):
+
+| Check | Covers |
 |---|---|
 | `scripts/typecheck.sh` | Whole app, `-D DEBUG` so DEBUG-only code is checked |
-| `scripts/check-v2-schema.sh` | CRUD, cascades, uniqueness, history cascade, download queue |
-| `scripts/check-offline-library.sh` | Backup encryption, rejection/merge rules, durable manifests, manual vs automatic update policy |
-| `scripts/check-v2-foundation.sh` | Status mapping, identity, filters, dates, HTTP values |
-| `scripts/check-v2-chapter-sync.sh` | Chapter parsing (40 Yokai cases), merge, delete guard |
-| `scripts/check-v2-page-pipeline.sh` | Cache LRU, loader dedupe, prefetch order, progress |
-| `scripts/check-v2-extensions.sh` | Bundle through the real host against a localhost fixture |
-| `scripts/check-v2-scanlators.sh` | Dedup/hide rules, hidden-winner fallback |
-| `scripts/check-library-sorts.sh` | Every sort order and direction, nil dates, tie-breaks, per-category store |
-| `scripts/check-library-categories.sh` | Per-category display store, exclude-from-updates flag, update scope |
-| `scripts/check-library-badges.sh` | Badge settings, count clamping, new-vs-unread, language labels |
-| `scripts/check-v2-reader-settings.sh` | Per-series reader settings: resolution, persistence, reset, make default |
+| `check.sh schema` | CRUD, cascades, uniqueness, history cascade, download queue |
+| `check.sh foundation` | Status mapping, identity, filters, dates, HTTP values |
+| `check.sh chapter-sync` | Chapter parsing (40 Yokai cases), merge, delete guard |
+| `check.sh page-pipeline` | Cache LRU, loader dedupe, prefetch order, progress |
+| `check.sh scanlators` | Dedup/hide rules, hidden-winner fallback |
+| `check.sh extensions` | Bundle through the real host against a localhost fixture (needs the SwiftSoup checkout) |
+| `check.sh reader-settings` | Per-series reader settings: resolution, persistence, reset, make default |
+| `check.sh offline` | Backup encryption, rejection/merge rules, durable manifests, manual vs automatic update policy |
+| `check.sh mihon-backup` | `.tachibk` import: merge rules, bundled source ids; `TACHIBK_SAMPLE=` runs a real file |
+| `check.sh native-comments` | Native comment provider parsing (needs the SwiftSoup checkout or network, and a normal terminal) |
+| `check.sh tts-contracts` | Swift timing contracts and real WKWebView text extraction |
+| `check.sh player <package>` | AVPlayer seek and highlight against a downloaded narration package |
+| `check.sh filters` | Tri-state filters, per-category store, count-based rules |
+| `check.sh sorts` | Every sort order and direction, nil dates, tie-breaks, per-category store |
+| `check.sh categories` | Per-category display store, exclude-from-updates flag, update scope |
+| `check.sh badges` | Badge settings, count clamping, new-vs-unread, language labels |
+
+Live and performance:
+
+| Script | Covers |
+|---|---|
 | `scripts/try-mangafire.sh` | Live MangaFire through the host (network required) |
+| `scripts/try-allmanga.sh` | Live AllManga through the host, including `webview.capture` (network required) |
 | `scripts/profile-hotpaths.sh` | Library counts, progress writes, chapter rows and ordering at library scale |
+| `scripts/profile-device.sh` | Release build on a device: hitch and Time Profiler trace |
 
 Device builds come from `./scripts/build-ipa.sh` (`release` for a Release build, `--checks`
-to typecheck first). It builds, packages and sanity-checks the archive:
+to typecheck first). It builds, packages and sanity-checks the archive, and writes
+`LNReader-<version>-unsigned.ipa` here in `lnreader-ios/`:
 
 ```sh
-./scripts/build-ipa.sh              # -> ../LNReader-<version>-unsigned.ipa
+./scripts/build-ipa.sh              # Debug
+./scripts/build-ipa.sh release      # Release
 ```
 
 `ENABLE_DEBUG_DYLIB=NO` matters: the default Debug build is a stub launcher plus a dylib,
@@ -423,36 +260,29 @@ which is fragile once re-signed.
   the app. Reader settings (novel and manga) are a half-height sheet with a single `.medium`
   detent; scrolling never grows it. Change one, change the other.
 - **Swipe right from the left edge goes back.** Pushed screens get the system gesture; the
-  full-screen readers (manga and novel) use `EdgeSwipeDismiss` (screen-edge recognizer, so it
-  never competes with scrolling or paging) and ignore it while a sheet is open. The manga
-  reader also keeps its leftward swipe from the right edge. New full-screen surfaces that hide
-  the back button must add it.
-- **Chapter lists select by holding.** Hold a row to start selecting; tap rows to toggle, hold
-  another row to take everything between it and the last pick. `ChapterSelection` (in
-  `ChapterRow.swift`) is owned by the screen (`NovelDetailView`, `ChapterDirectoryView`) so
-  `ChapterSelectionBar` pins to the screen: Read, Unread, Download, and a More menu (select all
-  below, select all, invert, mark previous as read, bookmark, delete download, chapter audio).
-  Rows have no context menu any more, since it shared the long press; its two actions moved
-  into the bar. Only library entries select: a browse result has no stored chapters to change.
-  The reader's chapter picker (`onSelect`) does not select. Device check pending.
+  full-screen readers use `EdgeSwipeDismiss` (screen-edge recognizer, so it never competes
+  with scrolling or paging) and ignore it while a sheet is open. The manga reader also keeps
+  its leftward swipe from the right edge. New full-screen surfaces that hide the back button
+  must add it.
+- **Chapter lists select by holding.** Hold a row to start selecting; tap rows to toggle,
+  hold another row to take everything between. `ChapterSelection` (in `ChapterRow.swift`) is
+  owned by the screen so `ChapterSelectionBar` pins to it: Read, Unread, Download, and a More
+  menu. Rows have no context menu — it shared the long press. Only library entries select; a
+  browse result has no stored chapters to change.
 - **Settings screens use `.settingsScreen(_:)`** (`Design/Theme.swift`): large sentence-case
   title plus the `AppTheme.controlFill` tint, applied once to the Form. Do not tint toggles
   one by one, and do not title-case labels ("Reader settings", "Sort order").
-- **Now-playing cover survives `stop()`.** `attachCover` runs before `playAvailable`, which
-  stops the player first; `stop(clearingArtwork: false)` keeps the artwork. The cover fetch
-  uses the same browser User-Agent as `CustomAsyncImage` and reads `ImageCache` first.
-
 - **`Entry.lastReadAt` is a cached column.** The library sorts by "recently read" and a
   predicate cannot walk chapters → history.
 - **`Chapter.isDownloaded` is computed**, not stored, so it cannot drift from the queue.
 - **Order by chapter number, never `sourceOrder`.** MangaFire lists newest-first, novel
   sources oldest-first; the index means different things per source.
-- **Manga sources report the whole chapter list**, so the detail screen shows all of it.
-  Novels keep the windowed preview because their sources paginate.
-- **Scanlator rules live in UserDefaults**, keyed by `sourceKey::url`. A schema
-  migration for a view preference is not worth it. Hiding and priority are
-  **independent**: hiding applies on its own, priority only merges duplicate
-  chapter numbers. The stored key for the priority toggle is still `enabled`.
+- **Manga sources report the whole chapter list**; novels keep the windowed preview because
+  their sources paginate.
+- **Scanlator rules live in UserDefaults**, keyed by `sourceKey::url` — a schema migration
+  for a view preference is not worth it. Hiding and priority are **independent**: hiding
+  applies on its own, priority only merges duplicate chapter numbers. The stored key for the
+  priority toggle is still `enabled`.
 - **The webtoon never uses `scrollPosition(id:)`.** It treats the binding as the position of
   record: when auto scroll, hold-to-scroll or the volume keys move the `UIScrollView` offset
   underneath it, the next re-render pushed the stale id back and the strip snapped to the top
@@ -461,17 +291,14 @@ which is fragile once re-signed.
 - **Tint switches with `AppTheme.controlFill`, not the accent.** The accent is white in dark
   mode, which made every `Toggle` solid white.
 - **Settings sheets are partial-height** (`.medium`/`.large` detents), not full-screen modals.
-- **Tap zones are a simultaneous gesture, never an overlay.** An overlay above a scroll view
-  eats the drag.
 - **`JSExtensionHost` is synchronous by design.** The JS thread blocks during `http.get`, so
-  bundles are straight-line code and a transpiler can emit plain calls.
+  bundles are straight-line code and a transpiler can emit plain calls. `webview.capture`
+  follows the same contract.
 - **MangaFire's "token" is upstream code, not a secret.** `VrfSigner.kt` is three
   substitution stages over the sorted query string; ported byte for byte it returns 200.
-- **No relationship counts in a `body`.** `Entry.unreadCount` faults every chapter
-  row. Read `LibraryChapterCounts` (a cached `fetchCount`) or count off-main.
-  Measured at 37 ms per grid cell, 4.8 s for a 120-book library, per body pass.
-- **No `save()` from scroll or progress callbacks.** Mutate and let
-  `LibraryManager.flushProgress` land it; a save re-runs every `@Query` in the app.
+- **Performance rules are in [PERFORMANCE.md](PERFORMANCE.md).** The two that bite most: no
+  relationship counts in a `body` (use `LibraryChapterCounts`), and no `save()` from a scroll
+  or progress callback (mutate, let `LibraryManager.flushProgress` land it).
 
 ## Gotchas for the next session
 
@@ -479,25 +306,11 @@ which is fragile once re-signed.
   bodies are split into computed properties for that reason; a 25-modifier body fails with
   "unable to type-check in reasonable time".
 - **`LNReader.xcodeproj` lists files individually.** New `.swift` files must be added to the
-  target or the build silently misses them. XcodeGen is not installed here (brew cannot
-  install it in this sandbox), so the project file is patched by script; verify membership
-  by counting files on disk against the Sources phase.
+  target or the build silently misses them. `project.yml` exists and uses directory sources,
+  but XcodeGen is not installed here (brew cannot install it in this sandbox), so the project
+  file is patched by script; verify membership by counting files on disk against the Sources
+  phase.
 - **Never let that patch touch non-Swift references.** An earlier version removed
   `Assets.xcassets` and the app icon, and the build still succeeded.
-
-## 24 October 2026 — Breeze narration migration
-
-- New narration uses Breeze TTS 2 with the original 16-bit checkpoint; no added quantization.
-- Replaced the nine Qwen presets with four clearly labeled LNReader voice designs, matching the backend catalogue. Custom reference voices remain supported.
-- New default narrator is Warm narrator. Stale cached Qwen catalogue entries no longer appear as new preparation options; existing downloaded Qwen packages remain readable.
-- Added Breeze model validation and accepted measured zero-length word timing bins without inventing highlighting durations.
-- Narration settings and preparation status now name Breeze. Failed voice previews expose a retry action.
-- iOS Simulator build passed. Backend runtime/deployment evidence is maintained in `lnreader-backend/docs/breeze-tts-2.md`.
-
-### Voice samples and account default follow-up
-
-- Voice samples download automatically at startup using small foreground transfers, including on cellular. Chapter downloads retain their Wi-Fi-only background policy.
-- Repaired previews stranded in the old background session; moved downloaded AAC to a `.m4a` staging path before AVFoundation validates duration.
-- Confirmed the four standard narrator previews are saved offline on the connected iPhone, with matching package hashes and no local errors.
-- The voice catalogue can carry an account default narrator and revision. The app applies each revision once, preserving subsequent manual choices.
-- Signed iPhone Release build and installation passed. Chapter requests are reaching production; GPU generation progress is tracked separately from local downloads.
+- **`xcodebuild` needs the sandbox bypassed and the foreground.** Inside the sandbox SPM
+  resolution dies with `sandbox-exec: sandbox_apply: Operation not permitted`.

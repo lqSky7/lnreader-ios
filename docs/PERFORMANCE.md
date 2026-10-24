@@ -1,6 +1,6 @@
 # Performance
 
-**Updated** 2026-10-23 · **Branch** `feat/v2-rewrite-manga`
+**Updated** 2026-10-25 · **Branch** `main`
 
 The app was slow in a specific, measurable way: the library and the reader both
 did per-row work that resolved SwiftData relationships, and the reader wrote to
@@ -137,7 +137,7 @@ Found by reading the code, not by a trace — verify on a Release device build.
 - **A drag gesture covered the whole strip** for the right-edge dismiss swipe. It is now a
   `UIScreenEdgePanGestureRecognizer` that only exists at the edge.
 - **Not done:** `ChapterCache.data` still rewrites the file's modification date on every read.
-  Throttling it breaks the cache's LRU contract (checked by `check-v2-page-pipeline.sh`), so it
+  Throttling it breaks the cache's LRU contract (checked by `check.sh page-pipeline`), so it
   stays unless a trace shows it matters.
 
 ## Still to look at

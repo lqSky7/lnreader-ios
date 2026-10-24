@@ -2,7 +2,7 @@
 //
 // LN JS plugins, Mihon extensions, image loaders and the backup uploader all go
 // through here, so UA spoofing, cookies, rate limiting and Cloudflare handling
-// are implemented once instead of per source. See docs/MANGA_SUPPORT_PLAN.md §3.2.
+// are implemented once instead of per source.
 
 import Foundation
 

@@ -3,7 +3,7 @@
 // A repository is a static site: `repo.json` describes it (including the
 // signing-key fingerprint to pin) and `index.min.json` lists extensions. Trust
 // is established once, on first use, and every later fetch must match.
-// See docs/MANGA_SUPPORT_PLAN.md §3.4.
+// See docs/MANGA_SUPPORT_PLAN.md §1.
 
 import CryptoKit
 import Foundation

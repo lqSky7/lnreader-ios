@@ -66,7 +66,7 @@ The volume has one API owner. Multiple API replicas would require a shared reser
 
 API: `https://lnreader.traverses.dpdns.org`. Private notebook: `https://www.kaggle.com/code/ca5qee1/lnreader-qwen-offline-narration`. Kaggle credentials are outside both repositories and available only to the backend dispatcher; the notebook receives an expiring worker token.
 
-The backend test suite covers original auth/sync, text spans and chunking, ownership and worker authorization, idempotent preparation, Redis reconstruction, expired/stale leases, actual ffmpeg packaging, cache reservations, pinned readers, and eviction/regeneration. Python tests cover fidelity rejection and refusal to infer outside Kaggle. `scripts/check-tts-contracts.sh` tests Swift timing contracts and actual WKWebView extraction on macOS.
+The backend test suite covers original auth/sync, text spans and chunking, ownership and worker authorization, idempotent preparation, Redis reconstruction, expired/stale leases, actual ffmpeg packaging, cache reservations, pinned readers, and eviction/regeneration. Python tests cover fidelity rejection and refusal to infer outside Kaggle. `./scripts/check.sh tts-contracts` tests Swift timing contracts and actual WKWebView extraction on macOS.
 
 Public HTTPS signup, catalogue, preparation, isolation, and storage smoke checks passed. The updated iOS app passes a normal unsigned generic-simulator build, including Glur Metal shader compilation, after the Apple Metal Toolchain became available. No dependency workaround remains in the checkout. Physical iPhone layout/playback verification and a signed device build remain required.
 

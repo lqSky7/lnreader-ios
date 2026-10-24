@@ -3,7 +3,7 @@
 // Some sources (Comick, several Madara sites) gate every page behind a
 // `cf_clearance` cookie that only a real browser can earn. We load the
 // challenged URL in an off-screen WKWebView, wait for the challenge to clear,
-// and hand the cookies back to the HTTP client. See plan §3.2.
+// and hand the cookies back to the HTTP client.
 
 import Foundation
 import WebKit

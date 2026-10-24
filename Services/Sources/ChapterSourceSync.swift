@@ -2,7 +2,7 @@
 //
 // One implementation for both kinds: the merge only looks at URLs, names and
 // numbers, so a manga with 1,200 chapters and a novel with 30 take the same
-// path. See docs/MANGA_SUPPORT_PLAN.md §8.
+// path.
 
 import Foundation
 import SwiftData

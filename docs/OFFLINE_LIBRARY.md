@@ -76,21 +76,24 @@ files must fit within a 128 MB export budget).
 
 ## Verification
 
-`scripts/check-offline-library.sh` runs without a Simulator and covers encrypted round
+`./scripts/check.sh offline` runs without a Simulator and covers encrypted round
 trip, wrong key and tampered ciphertext, unsafe paths, library/category/chapter/history/
 tracker restoration, repeat merges preserving newer state, offline manifests and missing
 files, and automatic versus manual update policy. Existing schema and page-pipeline
 checks cover queue relationships, deletion direction, cache, loader, and reading progress.
 
-Device checks are still required for the new screens, Files export/import and Keychain
-behavior, airplane-mode reading, task expiration, continued-processing progress, and
-scheduled refresh/notifications. This host currently has no installed Simulator runtime;
-the paired iPhone is unavailable. A Simulator SDK build checks compilation only.
+**None of this has been exercised on a device as of 2026-10-25.** Device checks are still
+required for the download screens, Files export/import and Keychain recovery, airplane-mode
+reading for both kinds, queue cancellation and recovery after relaunch, task expiration,
+continued-processing progress, and scheduled refresh and notifications. The reader and library
+paths these features feed into are device-verified, so a failure here belongs to the feature
+rather than the reader.
 
 ## Importing a .tachibk backup
 
-`Services/Backup/MihonBackup.swift` reads the gzipped protobuf those apps write (field numbers in
-`docs/MANGA_SUPPORT_PLAN.md` §6.1) with a small hand-written wire reader; there is no protobuf dependency.
+`Services/Backup/MihonBackup.swift` reads the gzipped protobuf those apps write with a small
+hand-written wire reader — the field numbers in that file are the spec — so there is no protobuf
+dependency.
 It restores titles, categories, chapters (read, bookmark, last page, scanlator, upload and fetch dates),
 history and trackers. App preferences, extension repos and source preferences are ignored.
 
@@ -105,5 +108,5 @@ history and trackers. App preferences, extension repos and source preferences ar
 - **Novels.** The plan reserves fields 5000+ for LNReader's own novel data. Nothing writes them yet, so
   nothing reads them.
 
-`scripts/check-mihon-backup.sh` builds a backup in the test, gzips it and restores it into an in-memory
+`./scripts/check.sh mihon-backup` builds a backup in the test, gzips it and restores it into an in-memory
 store; set `TACHIBK_SAMPLE=/path/to/file.tachibk` to run a real export too.

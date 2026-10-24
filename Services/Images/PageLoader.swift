@@ -2,7 +2,6 @@
 //
 // Swift owns all image I/O: the source only produces URLs (and occasionally
 // headers), which is what keeps a JS extension from ever touching image bytes.
-// See docs/MANGA_SUPPORT_PLAN.md §4.
 
 import Foundation
 

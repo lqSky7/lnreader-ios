@@ -7,7 +7,7 @@ import Foundation
 /// Two implementations are planned: `LNPluginSource` (the existing
 /// JavaScriptCore runtime) and `MihonSource` (transpiled Kotlin extensions).
 /// A hand-written `BuiltinSource` for a handful of high-traffic sites fits here
-/// too — see plan §3.5.
+/// too — see the built-in sources section of docs/MANGA_SUPPORT_PLAN.md.
 protocol CatalogSource: Identifiable, Sendable {
 
     /// `"ln:<pluginId>"` or `"mihon:<extensionId>"`. Persisted, so stable.

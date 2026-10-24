@@ -2,8 +2,7 @@
 //
 // v1 (the pre-rewrite app) had no `VersionedSchema`, novel-only model names and
 // a denormalized `ReadingHistory`. v2 starts a fresh, kind-aware store in its
-// own file (`LNReader-v2.store`) so it never has to read the old one. See
-// docs/MANGA_SUPPORT_PLAN.md §2.
+// own file (`LNReader-v2.store`) so it never has to read the old one.
 //
 // The models live inside this enum on purpose: the pre-rewrite `Novel`,
 // `Chapter` and `Category` types are still compiled into the app while the UI

@@ -1,5 +1,12 @@
 # Reader and Browse UI audit
 
+> **Historical record, 2026-10-22.** Every defect in the corrected table below has been fixed
+> and the branch it audited (`feat/v2-rewrite-manga`) is merged into `main`. Only the
+> remaining findings are still live; they are tracked as open issues in
+> [V2_PROGRESS.md](V2_PROGRESS.md). Do not treat the scores as current. Since then a device
+> pass settled the right-edge dismissal finding (the swipe does not advance a page); Dynamic
+> Type and the blur still have no device evidence.
+
 Updated: 2026-10-22. Scope: the Browse, manga reader, chapter
 directory, image-view, and Glur dependency changes on `feat/v2-rewrite-manga`.
 
@@ -11,7 +18,8 @@ or devices, so there is no new rendered-screen, gesture, haptic, or performance 
 
 The structure uses native navigation stacks, lists, tabs, sheets, SF Symbols, and glass
 materials. It is not ready for a full conformance sign-off: the custom reader dismissal
-gesture needs device testing, and GlurBackdrop uses private system API.
+gesture needs device testing *(settled later — see the banner)*, and GlurBackdrop uses private
+system API.
 
 ## Provisional health score after fixes
 
@@ -70,11 +78,13 @@ right edge can advance a page before dismissal. Local width measurement is corre
 but recognizer arbitration needs a device test in both reading directions. Suggested
 action: `$impeccable harden` for reader gesture ownership.
 
+**Settled 2026-10-25:** the device pass showed the edge swipe does not advance a page.
+
 ## Verification
 
 - iOS Simulator SDK build: **passed**, including the shared chapter directory changes.
-- `scripts/check-v2-page-pipeline.sh`: **passed** for cache, prefetch, loader, and progress.
-- `scripts/check-v2-scanlators.sh`: **passed** for priority, hide, dedup, and fallback rules.
+- `./scripts/check.sh page-pipeline`: **passed** for cache, prefetch, loader, and progress.
+- `./scripts/check.sh scanlators`: **passed** for priority, hide, dedup, and fallback rules.
 - `git diff --check`: checked for whitespace errors.
 - The scripts above do **not** exercise SwiftUI gestures, scroll-position binding,
   animation, haptic hardware, image appearance, or the new sheet presentation.

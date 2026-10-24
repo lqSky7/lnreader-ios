@@ -2,7 +2,7 @@
 //
 // Manga reading re-reads the same pages constantly: scrolling back, jumping
 // between chapters, reopening a book. The cache is keyed by the image URL, so
-// it serves the pager, the webtoon strip and downloads alike. See plan §4.
+// it serves the pager, the webtoon strip and downloads alike.
 
 import CryptoKit
 import Foundation
