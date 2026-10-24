@@ -43,7 +43,8 @@ struct LibraryView: View {
     /// sort has nothing to sort by, and showing it anyway reshuffles the grid
     /// the moment the counts arrive.
     @State private var hasLoadedCounts = false
-    @State private var showFilterSheet = false
+    @State private var showOptionsSheet = false
+    @State private var optionsTab: LibraryOptionsSheet.Tab = .sort
     /// Last computed page per kind, reused while the reader covers the library.
     @State private var pageCache = PageItemsCache()
 
@@ -90,12 +91,19 @@ struct LibraryView: View {
             .navigationTitle("Library")
             .searchable(text: $searchText, prompt: "Search library")
             .toolbar { libraryToolbar }
-            .sheet(isPresented: $showFilterSheet) {
-                LibraryFilterSheet(
+            .sheet(isPresented: $showOptionsSheet) {
+                LibraryOptionsSheet(
+                    tab: $optionsTab,
                     filter: activeFilterBinding,
-                    scopeName: selectedCategory?.name ?? "All"
+                    sort: activeSortBinding,
+                    displayMode: displayModeBinding,
+                    scopeName: selectedCategory?.name ?? "All",
+                    hasSortOverride: sortStore.hasOverride(for: selectedCategory?.name),
+                    hasDisplayOverride: displayStore.hasOverride(for: selectedCategory?.name),
+                    onResetSort: resetActiveSort,
+                    onResetDisplay: resetDisplayMode
                 )
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
             }
             .task(id: filterCountsKey) { await loadFilterCounts() }
             .onChange(of: scenePhase) { _, phase in
@@ -180,15 +188,8 @@ struct LibraryView: View {
             }
         } else {
             LibraryToolbar(
-                sort: activeSortBinding,
-                displayMode: displayModeBinding,
-                hasDisplayOverride: displayStore.hasOverride(for: selectedCategory?.name),
-                onResetDisplay: resetDisplayMode,
-                hasSortOverride: sortStore.hasOverride(for: selectedCategory?.name),
-                scopeName: selectedCategory?.name ?? "All",
-                onResetSort: resetActiveSort,
-                activeFilterCount: activeFilter.activeCount,
-                onShowFilters: { showFilterSheet = true },
+                isCustomised: activeFilter.activeCount > 0,
+                onShowOptions: { showOptionsSheet = true },
                 onImport: { showFileImporter = true }
             )
         }
