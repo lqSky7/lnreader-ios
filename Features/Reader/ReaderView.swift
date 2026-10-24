@@ -310,7 +310,9 @@ struct ReaderView: View {
             wordSpacing: $wordSpacing,
             grainIntensity: $grainIntensity
         )
-        .presentationDetents([.large])
+        // Medium only, like the manga reader's settings: scrolling must not
+        // pull the sheet to full height.
+        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(28)
     }

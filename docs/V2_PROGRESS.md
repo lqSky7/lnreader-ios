@@ -412,6 +412,10 @@ which is fragile once re-signed.
 
 ## Decisions worth remembering
 
+- **Invariant: behave consistently.** The same kind of surface must act the same way across
+  the app. Reader settings (novel and manga) are a half-height sheet with a single `.medium`
+  detent; scrolling never grows it. Change one, change the other.
+
 - **`Entry.lastReadAt` is a cached column.** The library sorts by "recently read" and a
   predicate cannot walk chapters → history.
 - **`Chapter.isDownloaded` is computed**, not stored, so it cannot drift from the queue.
