@@ -235,7 +235,10 @@ struct LibraryView: View {
                 .padding(.horizontal)
             }
 
-            if items.isEmpty {
+            if items.isEmpty, activeSort.needsChapterCounts, !hasLoadedCounts {
+                // The sort is waiting on its counts; that is not an empty library.
+                ProgressView().padding(.top, 80)
+            } else if items.isEmpty {
                 emptyPage(kind)
             } else {
                 libraryContent(items)
@@ -474,11 +477,21 @@ struct LibraryView: View {
     private func loadFilterCounts() async {
         guard needsChapterCounts else { return }
         let container = modelContext.container
-        var loaded: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
-        for novel in novels {
-            if Task.isCancelled { return }
-            loaded[novel.persistentModelID] = await LibraryChapterCounts.shared.counts(for: novel, container: container, extras: needsChapterDates ? .dates : [])
+        let extras: LibraryChapterCounts.Extras = needsChapterDates ? .dates : []
+        // The queries run on background contexts; asking for all of them at once
+        // lets them overlap instead of queueing one book behind another.
+        let loaded = await withTaskGroup(of: (PersistentIdentifier, LibraryChapterCounts.Counts).self) { group in
+            for novel in novels {
+                let id = novel.persistentModelID
+                group.addTask { @MainActor in
+                    (id, await LibraryChapterCounts.shared.counts(for: novel, container: container, extras: extras))
+                }
+            }
+            var out: [PersistentIdentifier: LibraryChapterCounts.Counts] = [:]
+            for await (id, counts) in group { out[id] = counts }
+            return out
         }
+        if Task.isCancelled { return }
         filterCounts = loaded
         hasLoadedCounts = true
     }
