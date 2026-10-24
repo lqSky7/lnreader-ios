@@ -55,6 +55,10 @@ struct MangaReaderView: View {
     @State private var errorMessage: String?
     @State private var chrome: ReaderChromeState = .control
     @State private var showChapterSheet = false
+    /// Set when stepping back a chapter so it opens on its last page.
+    @State private var landOnLastPage = false
+    /// Pending hand-off into the next chapter from the webtoon's end card.
+    @State private var webtoonAdvance: Task<Void, Never>?
     @State private var isDismissing = false
     @State private var scanlatorSettings: ScanlatorSettings
 
@@ -172,9 +176,20 @@ struct MangaReaderView: View {
 
     private var pager: some View {
         TabView(selection: $currentIndex) {
+            // Edge cards sit just outside the page range (-1 and pages.count)
+            // so every existing page index keeps its meaning. Landing on one
+            // opens the neighbouring chapter (`handlePageChange`).
+            if hasChapter(offset: -1) {
+                ChapterTransitionCard(direction: .previous, title: neighbourName(-1))
+                    .tag(-1)
+            }
             ForEach(pages.indices, id: \.self) { index in
                 MangaPageView(page: pages[index], sourceKey: sourceKey, loader: loader)
                     .tag(index)
+            }
+            if hasChapter(offset: 1) {
+                ChapterTransitionCard(direction: .next, title: neighbourName(1))
+                    .tag(pages.count)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -198,6 +213,11 @@ struct MangaReaderView: View {
                         MangaPageView(page: pages[index], sourceKey: sourceKey, loader: loader)
                             .id(index)
                     }
+                    if hasChapter(offset: 1) {
+                        ChapterTransitionCard(direction: .next, title: neighbourName(1))
+                            .frame(height: max(readerSize.height * 0.5, 240))
+                            .id(pages.count)
+                    }
                 }
                 .scrollTargetLayout()
                 .background(WebtoonScrollBridge(controller: scroller))
@@ -207,6 +227,22 @@ struct MangaReaderView: View {
                 guard !isRestoringPosition, let top = visible.min(),
                       pages.indices.contains(top), top != currentIndex else { return }
                 currentIndex = top
+            }
+            // The end card must be fully on screen and stay there a moment, so a
+            // fling past the last page does not skip a chapter by accident.
+            .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.95) { visible in
+                if visible.contains(pages.count) {
+                    guard webtoonAdvance == nil else { return }
+                    webtoonAdvance = Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(700))
+                        guard !Task.isCancelled else { return }
+                        webtoonAdvance = nil
+                        await moveChapter(by: 1)
+                    }
+                } else {
+                    webtoonAdvance?.cancel()
+                    webtoonAdvance = nil
+                }
             }
             .onAppear {
                 webtoonProxy = proxy
@@ -488,6 +524,10 @@ struct MangaReaderView: View {
     /// Resume a chapter that was left part-read, otherwise start at the top.
     private func resumeIndex(pageCount: Int) -> Int {
         guard pageCount > 0 else { return 0 }
+        if landOnLastPage {
+            landOnLastPage = false
+            return pageCount - 1
+        }
         guard let storedChapter, !storedChapter.read else { return 0 }
         return min(max(storedChapter.lastPageRead, 0), pageCount - 1)
     }
@@ -495,6 +535,17 @@ struct MangaReaderView: View {
     // MARK: - Progress
 
     private func handlePageChange(_ index: Int) {
+        if !isLoading, mode != .webtoon {
+            if index == pages.count, hasChapter(offset: 1) {
+                Task { await moveChapter(by: 1) }
+                return
+            }
+            if index == -1, hasChapter(offset: -1) {
+                landOnLastPage = true
+                Task { await moveChapter(by: -1) }
+                return
+            }
+        }
         guard !isLoading, pages.indices.contains(index) else { return }
 
         if let storedChapter {
@@ -590,6 +641,12 @@ struct MangaReaderView: View {
         return navigableChapters.indices.contains(target)
     }
 
+    private func neighbourName(_ offset: Int) -> String {
+        guard let current = navigableChapters.firstIndex(where: { $0.url == chapterURL }),
+              navigableChapters.indices.contains(current + offset) else { return "" }
+        return navigableChapters[current + offset].name
+    }
+
     // MARK: - Interaction
 
     private func seekPage(_ index: Int) {
@@ -622,7 +679,9 @@ struct MangaReaderView: View {
 
     private func turnPage(forward: Bool) {
         let target = currentIndex + (forward ? 1 : -1)
-        guard pages.indices.contains(target) else { return }
+        let edgeCard = (target == pages.count && hasChapter(offset: 1))
+            || (target == -1 && hasChapter(offset: -1))
+        guard pages.indices.contains(target) || edgeCard else { return }
         currentIndex = target
     }
 
@@ -726,6 +785,34 @@ struct MangaReaderView: View {
         chapterName = next.name
         currentIndex = 0
         await loadChapter()
+    }
+}
+
+/// The card between two chapters: what just ended and what comes next.
+private struct ChapterTransitionCard: View {
+    enum Direction { case previous, next }
+    let direction: Direction
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: direction == .next ? "chevron.down.circle" : "chevron.up.circle")
+                .font(.system(size: 34, weight: .light))
+            Text(direction == .next ? "Next chapter" : "Previous chapter")
+                .font(.footnote.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(.white.opacity(0.6))
+            Text(title)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+            ProgressView().tint(.white).padding(.top, 6)
+        }
+        .foregroundStyle(.white)
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .accessibilityElement(children: .combine)
     }
 }
 
