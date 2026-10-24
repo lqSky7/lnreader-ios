@@ -31,6 +31,8 @@ struct WebtoonStrip: UIViewControllerRepresentable {
     let loader: PageLoader
     /// Page of the first segment to open on. Only read when the strip is built.
     let startIndex: Int
+    /// Page width as a share of the screen; the rest is still margin.
+    let widthFraction: CGFloat
     let controller: WebtoonScrollController
     /// The page at the top of the screen changed: its chapter and index in it.
     let onPageChange: (String, Int) -> Void
@@ -55,6 +57,7 @@ struct WebtoonStrip: UIViewControllerRepresentable {
         vc.onPageChange = onPageChange
         vc.onEndCard = onEndCard
         vc.onTap = onTap
+        vc.setWidthFraction(widthFraction)
         vc.update(segments: segments)
     }
 }
@@ -88,6 +91,7 @@ final class WebtoonViewController: UIViewController,
     private var lastReported: Int
     private var endCardSegment: String?
     private var lastWidth: CGFloat = 0
+    private var widthFraction: CGFloat = 1
     private var pendingRatios: Set<Int> = []
     private var flushScheduled = false
     private var observer: NSObjectProtocol?
@@ -217,6 +221,9 @@ final class WebtoonViewController: UIViewController,
             let cell = collectionView.dequeueReusableCell(
                 withReuseIdentifier: WebtoonPageCell.reuseID, for: indexPath) as! WebtoonPageCell
             if let loader {
+                // Decoded for the full screen width whatever the strip width:
+                // the cache keeps one bitmap per page, and widening the strip
+                // again must not stretch one decoded for a narrower strip.
                 cell.show(
                     page: page,
                     sourceKey: sourceKey,
@@ -259,8 +266,44 @@ final class WebtoonViewController: UIViewController,
         layout collectionViewLayout: UICollectionViewLayout,
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
-        let width = max(collectionView.bounds.width, 1)
+        let width = max(pageWidth, 1)
         return CGSize(width: width, height: height(forItem: indexPath.item, width: width))
+    }
+
+    /// The strip's width in whole device pixels, so its edges never blur.
+    private var pageWidth: CGFloat {
+        let scale = max(traitCollection.displayScale, 1)
+        return (collectionView.bounds.width * widthFraction * scale).rounded() / scale
+    }
+
+    /// Centre the strip between equal margins. The collection view itself stays
+    /// full width, so a drag or tap in the margin still scrolls.
+    private func applyMargins() {
+        let side = max(0, (collectionView.bounds.width - pageWidth) / 2)
+        layout.sectionInset = UIEdgeInsets(top: 0, left: side, bottom: 0, right: side)
+    }
+
+    /// Narrow or widen the strip, keeping the same spot of the same page at
+    /// the top of the screen.
+    func setWidthFraction(_ fraction: CGFloat) {
+        guard fraction != widthFraction else { return }
+        guard isViewLoaded, collectionView.bounds.width > 0, itemCount > 0 else {
+            widthFraction = fraction
+            return
+        }
+        let top = collectionView.contentOffset.y
+        let anchor = collectionView.indexPathForItem(at: CGPoint(x: collectionView.bounds.midX, y: top + 0.5))
+        let progress = anchor.flatMap { layout.layoutAttributesForItem(at: $0)?.frame }
+            .map { ($0.height > 0 ? (top - $0.minY) / $0.height : 0) } ?? 0
+
+        widthFraction = fraction
+        applyMargins()
+        layout.invalidateLayout()
+        collectionView.layoutIfNeeded()
+
+        guard let anchor, let frame = layout.layoutAttributesForItem(at: anchor)?.frame else { return }
+        let target = min(max(frame.minY + progress * frame.height, 0), maxOffsetY)
+        collectionView.setContentOffset(CGPoint(x: 0, y: target), animated: false)
     }
 
     /// A page's real aspect ratio just became known. Resize its slot; if the
@@ -278,7 +321,7 @@ final class WebtoonViewController: UIViewController,
         flushScheduled = false
         let indices = pendingRatios
         pendingRatios = []
-        let width = collectionView.bounds.width
+        let width = pageWidth
         guard width > 0 else { return }
 
         let top = collectionView.contentOffset.y
@@ -307,6 +350,7 @@ final class WebtoonViewController: UIViewController,
         guard width > 0 else { return }
         if lastWidth != width {
             lastWidth = width
+            applyMargins()
             layout.invalidateLayout()
         }
         if !didRestore, itemCount > 0 {

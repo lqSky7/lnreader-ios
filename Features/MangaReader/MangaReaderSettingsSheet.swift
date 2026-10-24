@@ -15,6 +15,7 @@ struct MangaReaderSettingsSheet: View {
             Form {
                 layoutSection
                 tapSection
+                stripSection
                 volumeSection
                 autoScrollSection
                 holdSection
@@ -87,6 +88,29 @@ struct MangaReaderSettingsSheet: View {
 
     // MARK: - Input
 
+    private var stripSection: some View {
+        Section {
+            VStack(alignment: .leading) {
+                HStack {
+                    Text("Width")
+                    Spacer()
+                    Text("\(Int((controls.stripWidth * 100).rounded()))%")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(value: $controls.stripWidth, in: MangaControlSettings.stripWidthRange, step: 0.05)
+            }
+            Picker("Momentum", selection: $controls.momentum) {
+                ForEach(WebtoonMomentum.allCases) { Text($0.displayName).tag($0) }
+            }
+        } header: {
+            Text("Webtoon strip")
+        } footer: {
+            Text("A narrower strip leaves still margins on both sides, so less of what you see is moving. "
+                + "Momentum is how far the strip glides after a flick.")
+        }
+    }
+
     private var volumeSection: some View {
         Section {
             Toggle("Volume keys turn pages", isOn: $controls.volumeKeys)
@@ -106,15 +130,21 @@ struct MangaReaderSettingsSheet: View {
 
     private var autoScrollSection: some View {
         Section {
+            Picker("Style", selection: $controls.autoScrollStyle) {
+                ForEach(AutoScrollStyle.allCases) { Text($0.displayName).tag($0) }
+            }
             speedSlider(
-                "Speed",
+                controls.autoScrollStyle == .stepped ? "Pace" : "Speed",
                 value: $controls.autoScrollSpeed,
                 range: MangaControlSettings.autoSpeedRange
             )
         } header: {
             Text("Auto scroll")
         } footer: {
-            Text("Webtoon mode. Start it from the reader's options menu; touching the screen pauses it.")
+            Text("Webtoon mode. Start it from the reader's options menu; touching the screen pauses it."
+                + (controls.autoScrollStyle == .stepped
+                    ? " The strip stays still while you read, then moves a screen, keeping the same average pace."
+                    : ""))
         }
     }
 

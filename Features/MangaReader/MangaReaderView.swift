@@ -240,6 +240,7 @@ struct MangaReaderView: View {
             sourceKey: sourceKey,
             loader: loader,
             startIndex: currentIndex,
+            widthFraction: CGFloat(inputSettings.stripWidth),
             controller: scroller,
             onPageChange: { chapter, index in pageScrolled(in: chapter, to: index) },
             // The divider is fully on screen only once the last page has been read
@@ -682,6 +683,8 @@ struct MangaReaderView: View {
 
     private func configureScroller() {
         scroller.autoSpeed = inputSettings.autoScrollSpeed
+        scroller.autoStyle = inputSettings.autoScrollStyle
+        scroller.momentum = inputSettings.momentum
         scroller.hold = inputSettings.hold
         scroller.isHoldEnabled = inputSettings.holdScrollEnabled
         scroller.onScrollActivity = { scheduleChromeHide() }

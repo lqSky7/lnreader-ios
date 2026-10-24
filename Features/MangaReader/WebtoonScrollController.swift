@@ -22,6 +22,16 @@ final class WebtoonScrollController {
     // MARK: Configuration (set by the reader)
 
     @ObservationIgnored var autoSpeed: Double = 60
+    @ObservationIgnored var autoStyle: AutoScrollStyle = .stepped {
+        didSet {
+            guard autoStyle != oldValue else { return }
+            rest = 0
+            updateLink()
+        }
+    }
+    @ObservationIgnored var momentum: WebtoonMomentum = .medium {
+        didSet { applyMomentum() }
+    }
     @ObservationIgnored var hold = HoldScrollConfig()
     @ObservationIgnored var isHoldEnabled = true {
         didSet { holdRecognizer.isEnabled = isHoldEnabled }
@@ -48,6 +58,11 @@ final class WebtoonScrollController {
     @ObservationIgnored private weak var scrollView: UIScrollView?
     @ObservationIgnored private var link: CADisplayLink?
     @ObservationIgnored private var lastTimestamp: CFTimeInterval = 0
+    /// The crawl's true position. The scroll view is only ever set to whole
+    /// pixels, so a slow crawl accumulates here between them.
+    @ObservationIgnored private var exactOffset: Double?
+    /// Seconds stepped auto scroll has rested since it last moved.
+    @ObservationIgnored private var rest: Double = 0
     @ObservationIgnored private var holdStartY: CGFloat = 0
     @ObservationIgnored private var lastHoldEnd = Date.distantPast
     @ObservationIgnored private var hapticTracker: HoldHapticTracker?
@@ -72,7 +87,12 @@ final class WebtoonScrollController {
         scrollView?.removeGestureRecognizer(holdRecognizer)
         scrollView = view
         view.addGestureRecognizer(holdRecognizer)
+        applyMomentum()
         updateLink()
+    }
+
+    private func applyMomentum() {
+        scrollView?.decelerationRate = UIScrollView.DecelerationRate(rawValue: CGFloat(momentum.decelerationRate))
     }
 
     func detach() {
@@ -87,6 +107,7 @@ final class WebtoonScrollController {
     func startAuto() {
         guard scrollView != nil, !isAutoScrolling else { return }
         isAutoScrolling = true
+        rest = 0
         Haptics.shared.scrollEngaged()
         updateLink()
     }
@@ -105,11 +126,10 @@ final class WebtoonScrollController {
     // MARK: - Paging by a screenful
 
     /// Scroll roughly one screen, for the volume keys.
-    func scrollScreen(forward: Bool, fraction: CGFloat = 0.85) {
+    func scrollScreen(forward: Bool, fraction: CGFloat = ScrollStep.screenful) {
         guard let view = scrollView else { return }
-        let inset = view.adjustedContentInset
-        let minY = -inset.top
-        let maxY = max(minY, view.contentSize.height - view.bounds.height + inset.bottom)
+        let minY = -view.adjustedContentInset.top
+        let maxY = maxOffset(view)
         let delta = view.bounds.height * fraction * (forward ? 1 : -1)
         let target = min(max(view.contentOffset.y + delta, minY), maxY)
         view.setContentOffset(CGPoint(x: view.contentOffset.x, y: target), animated: true)
@@ -161,45 +181,88 @@ final class WebtoonScrollController {
         if needed, link == nil {
             let displayLink = CADisplayLink(target: proxy, selector: #selector(Proxy.frame(_:)))
             lastTimestamp = 0
+            exactOffset = nil
             displayLink.add(to: .main, forMode: .common)
             link = displayLink
         } else if !needed, let existing = link {
             existing.invalidate()
             link = nil
         }
+        link?.preferredFrameRateRange = isCrawling
+            // A crawl at the screen's full rate, as smooth as a finger's drag.
+            // Without this the link stays at 60 Hz on a 120 Hz screen and the
+            // strip visibly steps.
+            ? CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            // Stepped auto scroll only counts time between screenfuls.
+            : CAFrameRateRange(minimum: 10, maximum: 30, preferred: 15)
+    }
+
+    /// Something moves the strip every frame, as opposed to stepping it.
+    private var isCrawling: Bool {
+        holdSpeed != nil || (isAutoScrolling && autoStyle == .continuous)
     }
 
     fileprivate func tick(_ displayLink: CADisplayLink) {
         guard let view = scrollView else { return stopAll() }
         let dt = lastTimestamp == 0 ? 0 : displayLink.timestamp - lastTimestamp
         lastTimestamp = displayLink.timestamp
+        let readerMoving = view.isTracking || view.isDragging || view.isDecelerating
 
         let speed: Double
         if let holdSpeed {
             speed = holdSpeed
-        } else if isAutoScrolling, !view.isTracking, !view.isDragging, !view.isDecelerating {
+        } else if isAutoScrolling, autoStyle == .stepped {
+            return stepTick(view, dt: dt, readerMoving: readerMoving)
+        } else if isAutoScrolling, !readerMoving {
             // The reader's own finger always wins: auto scroll waits for the
             // drag and its momentum to finish, then carries on.
             speed = autoSpeed
         } else {
+            exactOffset = nil
             return
         }
 
-        let inset = view.adjustedContentInset
-        let maxY = max(-inset.top, view.contentSize.height - view.bounds.height + inset.bottom)
+        let scale = Double(view.traitCollection.displayScale)
+        let shown = Double(view.contentOffset.y)
+        // Carry on from the exact position unless something else moved the
+        // strip since the last frame (a drag, a jump).
+        let start = exactOffset.flatMap { abs($0 - shown) <= 1 / max(scale, 1) ? $0 : nil } ?? shown
         let step = ScrollStep.advance(
-            offset: Double(view.contentOffset.y),
+            offset: start,
             speed: speed,
             dt: dt,
-            maxOffset: Double(maxY)
+            maxOffset: Double(maxOffset(view))
         )
-        view.contentOffset.y = CGFloat(step.offset)
+        exactOffset = step.offset
+        view.contentOffset.y = CGFloat(ScrollStep.pixelAligned(step.offset, scale: scale))
         onScrollActivity?()
 
         if step.reachedEnd, holdSpeed == nil, isAutoScrolling {
             stopAuto()
             onReachedEnd?()
         }
+    }
+
+    /// Stepped auto scroll: rest long enough to keep the set pace, then move a
+    /// screenful. Moving the strip by hand restarts the rest, so the reader
+    /// always gets a full screen's reading time after letting go.
+    private func stepTick(_ view: UIScrollView, dt: Double, readerMoving: Bool) {
+        guard !readerMoving else { rest = 0; return }
+        rest += min(dt, ScrollStep.maxFrameGap)
+        let distance = Double(view.bounds.height) * ScrollStep.screenful
+        guard rest >= ScrollStep.restInterval(distance: distance, speed: autoSpeed) else { return }
+        rest = 0
+        if view.contentOffset.y >= maxOffset(view) - 1 {
+            stopAuto()
+            onReachedEnd?()
+        } else {
+            scrollScreen(forward: true)
+        }
+    }
+
+    private func maxOffset(_ view: UIScrollView) -> CGFloat {
+        let inset = view.adjustedContentInset
+        return max(-inset.top, view.contentSize.height - view.bounds.height + inset.bottom)
     }
 
     private func stopAll() {

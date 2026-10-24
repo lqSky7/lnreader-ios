@@ -186,11 +186,76 @@ struct HoldHapticTracker {
     }
 }
 
+/// How auto scroll moves the strip.
+enum AutoScrollStyle: String, Codable, CaseIterable, Identifiable {
+    /// A steady crawl at the set speed. The eyes chase moving art the whole time.
+    case continuous
+    /// The strip rests while you read, then moves a screenful at once, at the
+    /// same average pace as the crawl.
+    case stepped
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .continuous: "Continuous"
+        case .stepped: "A screen at a time"
+        }
+    }
+}
+
+/// How long the strip keeps gliding after a flick.
+enum WebtoonMomentum: String, Codable, CaseIterable, Identifiable {
+    /// UIKit's default: a flick glides a long way.
+    case long
+    case medium
+    /// UIKit's fast rate: the strip settles almost as the finger lifts.
+    case short
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .long: "Long"
+        case .medium: "Medium"
+        case .short: "Short"
+        }
+    }
+
+    /// `UIScrollView.decelerationRate`: the share of velocity kept per
+    /// millisecond. A glide's length goes with `1 / (1 - rate)`, so medium
+    /// travels a third as far as long.
+    var decelerationRate: Double {
+        switch self {
+        case .long: 0.998
+        case .medium: 0.994
+        case .short: 0.99
+        }
+    }
+}
+
 enum ScrollStep {
 
     /// Longest frame gap that counts as continuous motion. After a stall (the
     /// app was suspended, a sheet was up) a raw gap would jump the page.
     static let maxFrameGap = 0.1
+
+    /// How far one stepped auto scroll, a tap or a volume key moves, as a share
+    /// of the screen. The rest stays on screen so the eye keeps its place.
+    static let screenful = 0.85
+
+    /// Seconds stepped auto scroll rests before moving `distance` points, so it
+    /// keeps the average pace of a crawl at `speed` points per second.
+    static func restInterval(distance: Double, speed: Double) -> Double {
+        distance / max(speed, 1)
+    }
+
+    /// `offset` rounded to whole device pixels. A strip resting between pixels
+    /// is resampled every frame, which shimmers as it crawls.
+    static func pixelAligned(_ offset: Double, scale: Double) -> Double {
+        let scale = max(scale, 1)
+        return (offset * scale).rounded() / scale
+    }
 
     /// Advance `offset` by `speed` points per second over `dt` seconds, never
     /// past `maxOffset`. `reachedEnd` is true on the step that arrives there.
@@ -252,10 +317,16 @@ struct MangaControlSettings: Equatable {
     var volumeKeysInverted = false
     /// Points per second for auto scroll.
     var autoScrollSpeed: Double = 60
+    var autoScrollStyle: AutoScrollStyle = .stepped
     var hold = HoldScrollConfig()
     var holdScrollEnabled = true
+    /// Webtoon page width as a share of the screen. Below 1 the strip is framed
+    /// by still margins, so less of the field of view moves.
+    var stripWidth: Double = 1
+    var momentum: WebtoonMomentum = .medium
 
     static let autoSpeedRange = 10.0...600.0
+    static let stripWidthRange = 0.6...1.0
 
     static let storageKey = "manga.controls"
 
@@ -276,8 +347,11 @@ struct MangaControlSettings: Equatable {
         var volumeKeys: Bool?
         var volumeKeysInverted: Bool?
         var autoScrollSpeed: Double?
+        var autoScrollStyle: AutoScrollStyle?
         var hold: HoldScrollConfig?
         var holdScrollEnabled: Bool?
+        var stripWidth: Double?
+        var momentum: WebtoonMomentum?
     }
 }
 
@@ -290,8 +364,13 @@ extension MangaControlSettings: RawRepresentable {
         volumeKeys = payload.volumeKeys ?? defaults.volumeKeys
         volumeKeysInverted = payload.volumeKeysInverted ?? defaults.volumeKeysInverted
         autoScrollSpeed = payload.autoScrollSpeed ?? defaults.autoScrollSpeed
+        autoScrollStyle = payload.autoScrollStyle ?? defaults.autoScrollStyle
         hold = payload.hold ?? defaults.hold
         holdScrollEnabled = payload.holdScrollEnabled ?? defaults.holdScrollEnabled
+        stripWidth = payload.stripWidth.map {
+            min(max($0, Self.stripWidthRange.lowerBound), Self.stripWidthRange.upperBound)
+        } ?? defaults.stripWidth
+        momentum = payload.momentum ?? defaults.momentum
     }
 
     var rawValue: String {
@@ -299,10 +378,18 @@ extension MangaControlSettings: RawRepresentable {
             volumeKeys: volumeKeys,
             volumeKeysInverted: volumeKeysInverted,
             autoScrollSpeed: autoScrollSpeed,
+            autoScrollStyle: autoScrollStyle,
             hold: hold,
-            holdScrollEnabled: holdScrollEnabled
+            holdScrollEnabled: holdScrollEnabled,
+            stripWidth: stripWidth,
+            momentum: momentum
         )
-        guard let data = try? JSONEncoder().encode(payload),
+        // Sorted, so the same settings are always the same string: `==` on a
+        // `RawRepresentable` can compare raw values, and unsorted keys come
+        // out in a different order each time.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let data = try? encoder.encode(payload),
               let string = String(data: data, encoding: .utf8) else { return "{}" }
         return string
     }

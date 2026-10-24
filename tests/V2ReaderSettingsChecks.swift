@@ -208,6 +208,15 @@ struct V2ReaderSettingsChecks {
         precondition(short.offset == 0 && short.reachedEnd, "content shorter than the screen never scrolls")
         let idle = ScrollStep.advance(offset: 10, speed: 0, dt: 0.016, maxOffset: 100)
         precondition(idle.offset == 10 && !idle.reachedEnd, "zero speed does not move")
+
+        precondition(ScrollStep.restInterval(distance: 600, speed: 60) == 10,
+                     "stepped auto scroll rests as long as a crawl would take to cover the screenful")
+        precondition(ScrollStep.restInterval(distance: 600, speed: 0) == 600, "zero speed does not divide by zero")
+        precondition(ScrollStep.pixelAligned(10.2, scale: 3) == 31.0 / 3, "rounds to the nearest of three pixels a point")
+        precondition(ScrollStep.pixelAligned(10.2, scale: 0) == 10, "a missing scale counts as one")
+        precondition(WebtoonMomentum.long.decelerationRate > WebtoonMomentum.medium.decelerationRate
+                     && WebtoonMomentum.medium.decelerationRate > WebtoonMomentum.short.decelerationRate,
+                     "longer momentum keeps more velocity")
     }
 
     private static func checkHoldHaptics() {
@@ -268,5 +277,15 @@ struct V2ReaderSettingsChecks {
         let partialHold = MangaControlSettings(rawValue: #"{"hold":{"baseSpeed":90}}"#)
         precondition(partialHold?.hold.baseSpeed == 90 && partialHold?.hold.maxSpeed == 1500,
                      "a partial hold block keeps defaults for the rest")
+
+        var webtoon = MangaControlSettings()
+        webtoon.autoScrollStyle = .continuous
+        webtoon.stripWidth = 0.75
+        webtoon.momentum = .short
+        precondition(MangaControlSettings(rawValue: webtoon.rawValue) == webtoon, "webtoon settings round trip")
+        precondition(old?.autoScrollStyle == .stepped && old?.stripWidth == 1 && old?.momentum == .medium,
+                     "settings saved before the webtoon options get their defaults")
+        precondition(MangaControlSettings(rawValue: #"{"stripWidth":0.1}"#)?.stripWidth == 0.6,
+                     "a stored strip width is clamped to the slider's range")
     }
 }
