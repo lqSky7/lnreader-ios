@@ -168,25 +168,23 @@ struct ReaderSettings: View {
                     themesGrid
                     
                     Toggle("Paper texture", isOn: Binding(get: { localGrainIntensity > 0 }, set: { localGrainIntensity = $0 ? 10 : 0 }))
-                        .tint(AppTheme.controlFill)
                     if localGrainIntensity > 0 {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("GRAIN INTENSITY")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                             
                             HStack(spacing: 12) {
                                 Image(systemName: "circle.dotted")
                                     .font(.system(size: 15))
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                     .frame(width: 24)
                                 
                                 Slider(value: $localGrainIntensity, in: 0...100, step: 5)
-                                    .tint(.primary)
                                 
                                 Text("\(Int(localGrainIntensity))%")
                                     .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                     .frame(width: 42, alignment: .trailing)
                             }
                         }
@@ -288,7 +286,7 @@ struct ReaderSettings: View {
             .frame(height: 44)
             .background(Color.secondary.opacity(0.18))
             .cornerRadius(22)
-            .foregroundColor(.primary)
+            .foregroundStyle(.primary)
         }
         .buttonStyle(.plain)
         .padding(.vertical, 4)
@@ -299,9 +297,8 @@ struct ReaderSettings: View {
             Text("Customize")
                 .font(.system(size: 15, weight: .semibold))
             Spacer()
-            Toggle("", isOn: $isCustomizing.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.controlFill)
+            Toggle("", isOn: $isCustomizing.animation(AppMotion.gentle(reduceMotion: reduceMotion)))
                 .labelsHidden()
-                .tint(.green)
         }
         .padding(.vertical, 4)
     }
@@ -312,20 +309,19 @@ struct ReaderSettings: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("LINE SPACING")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 
                 HStack(spacing: 12) {
                     Image(systemName: "arrow.up.and.down.text.horizontal")
                         .font(.system(size: 15))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 24)
                     
                     Slider(value: $localLineHeight, in: 1.0...2.5, step: 0.05)
-                        .tint(.primary)
                     
                     Text(String(format: "%.2f", localLineHeight))
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 42, alignment: .trailing)
                 }
             }
@@ -337,20 +333,19 @@ struct ReaderSettings: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("CHARACTER SPACING")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 
                 HStack(spacing: 12) {
                     Image(systemName: "arrow.left.and.right")
                         .font(.system(size: 15))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 24)
                     
                     Slider(value: $localCharacterSpacing, in: -5...30, step: 1)
-                        .tint(.primary)
                     
                     Text("\(Int(localCharacterSpacing))%")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 42, alignment: .trailing)
                 }
             }
@@ -362,20 +357,19 @@ struct ReaderSettings: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("WORD SPACING")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 
                 HStack(spacing: 12) {
                     Image(systemName: "text.alignleft")
                         .font(.system(size: 15))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 24)
                     
                     Slider(value: $localWordSpacing, in: 0...50, step: 2)
-                        .tint(.primary)
                     
                     Text("\(Int(localWordSpacing))%")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 42, alignment: .trailing)
                 }
             }
@@ -387,23 +381,22 @@ struct ReaderSettings: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("MARGINS")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 
                 HStack(spacing: 12) {
                     Image(systemName: "square")
                         .font(.system(size: 15))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 24)
                     
                     Slider(value: $localMargins, in: 0...100, step: 5)
-                        .tint(.primary)
                         .onChange(of: localMargins) { _, newValue in
                             localHorizontalPadding = (newValue / 100.0) * 48.0
                         }
                     
                     Text("\(Int(localMargins))%")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .frame(width: 42, alignment: .trailing)
                 }
             }
@@ -425,7 +418,6 @@ struct ReaderSettings: View {
                 Text("Font Size: \(Int(localFontSize))px")
                     .font(Typography.caption)
                 Slider(value: $localFontSize, in: 12...32, step: 1)
-                    .tint(.primary)
             }
         }
     }
@@ -436,12 +428,11 @@ struct ReaderSettings: View {
                 Text("Vertical Padding: \(Int(localVerticalPadding))px")
                     .font(Typography.caption)
                 Slider(value: $localVerticalPadding, in: 0...80, step: 4)
-                    .tint(.primary)
             }
             
-            Toggle("Bionic Reading", isOn: $localBionicReading).tint(AppTheme.controlFill)
-            Toggle("Justify Text", isOn: $justifyText).tint(AppTheme.controlFill)
-            Toggle("Keep Screen On", isOn: $keepScreenOn).tint(AppTheme.controlFill)
+            Toggle("Bionic Reading", isOn: $localBionicReading)
+            Toggle("Justify Text", isOn: $justifyText)
+            Toggle("Keep Screen On", isOn: $keepScreenOn)
             
             ColorPicker("Custom Background", selection: customBgColorBinding)
             ColorPicker("Custom Text Color", selection: customTextColorBinding)
@@ -453,7 +444,7 @@ struct ReaderSettings: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Show active Focus mode (moon/work/sleep) near the top of the reader area.")
                     .font(.system(size: 13))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 
                 Picker("Active Focus Display", selection: $localFocusOverride) {
                     Text("Off (Disabled)").tag("none")
@@ -471,15 +462,15 @@ struct ReaderSettings: View {
                             focusManager.requestAuthorization()
                         }
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(.primary)
                     } else if authStatus == 1 { // denied
                         Text("Access to Focus status has been denied. You can enable it in iOS Settings > Privacy & Security > Focus.")
                             .font(.system(size: 12))
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                     } else if authStatus == 2 { // authorized
                         Text("Focus status authorized. Active Focus: \(focusManager.isFocused ? focusManager.currentFocusType.displayName : "None")")
                             .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -489,14 +480,14 @@ struct ReaderSettings: View {
     private var lineFocusSection: some View {
         Section("Line Focus") {
             VStack(alignment: .leading, spacing: 12) {
-                Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(AppMotion.gentle(reduceMotion: reduceMotion))).tint(AppTheme.controlFill)
+                Toggle("Line Focus Mode", isOn: $localLineFocusEnabled.animation(AppMotion.gentle(reduceMotion: reduceMotion)))
                 
                 if localLineFocusEnabled {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Focused Lines")
                                 .font(Typography.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                             Picker("Focused Lines", selection: $localLineFocusLines) {
                                 Text("1 Line").tag(1)
                                 Text("2 Lines").tag(2)
@@ -508,7 +499,7 @@ struct ReaderSettings: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Background Dulling")
                                 .font(Typography.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                             Picker("Background Dulling", selection: $localLineFocusDulling) {
                                 Text("Low").tag("low")
                                 Text("Medium").tag("mid")
@@ -580,7 +571,7 @@ struct ReaderSettings: View {
             .padding(.horizontal, localHorizontalPadding)
             .padding(.vertical, localVerticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundColor(resolvedLocalTextColor)
+            .foregroundStyle(resolvedLocalTextColor)
             .background(
                 resolvedLocalBackgroundColor
                     .overlay {
@@ -726,11 +717,11 @@ struct ThemePickerCard: View {
             VStack(spacing: 4) {
                 Text("Aa")
                     .font(.system(size: 28, weight: preset.isBold ? .bold : .regular, design: preset.isSerif ? .serif : .default))
-                    .foregroundColor(preset.text.isEmpty ? .primary : (Color(hex: preset.text) ?? .primary))
+                    .foregroundStyle(preset.text.isEmpty ? .primary : (Color(hex: preset.text) ?? .primary))
                 
                 Text(preset.name)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(preset.text.isEmpty ? .secondary : (Color(hex: preset.text) ?? .secondary))
+                    .foregroundStyle(preset.text.isEmpty ? .secondary : (Color(hex: preset.text) ?? .secondary))
                     .opacity(preset.text.isEmpty ? 1.0 : 0.8)
             }
             .frame(maxWidth: .infinity)
@@ -748,7 +739,7 @@ struct ThemePickerCard: View {
                     if preset.isPremium {
                         Text("*")
                             .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(preset.text.isEmpty ? .secondary : (Color(hex: preset.text) ?? .secondary))
+                            .foregroundStyle(preset.text.isEmpty ? .secondary : (Color(hex: preset.text) ?? .secondary))
                             .opacity(0.6)
                             .padding([.top, .trailing], 8)
                     }

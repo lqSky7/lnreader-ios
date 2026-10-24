@@ -39,9 +39,6 @@ struct LibraryOptionsSheet: View {
                 case .display: displayList
                 }
             }
-            // The accent is white in dark mode; the app's control tint keeps
-            // checkmarks, arrows and switches legible.
-            .tint(AppTheme.controlFill)
             .navigationTitle(scopeName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

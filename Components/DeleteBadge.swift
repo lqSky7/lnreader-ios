@@ -10,7 +10,7 @@ struct DeleteBadge: View {
         Button(action: action) {
             Image(systemName: "minus.circle.fill")
                 .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(.red)
+                .foregroundStyle(.red)
                 .background(
                     Circle()
                         .fill(Color.white)

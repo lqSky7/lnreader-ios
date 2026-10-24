@@ -56,7 +56,7 @@ struct ReaderToolbar: View {
                     Text(chapterName)
                         .lineLimit(1)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(.primary)
                         .padding(.horizontal, 20)
                         .frame(height: 46)
                 }

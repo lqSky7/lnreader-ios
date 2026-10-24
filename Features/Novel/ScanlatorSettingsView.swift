@@ -32,7 +32,6 @@ struct ScanlatorSettingsView: View {
             List {
                 Section {
                     Toggle("Priority scanlator", isOn: priorityBinding)
-                        .tint(AppTheme.controlFill)
                 } footer: {
                     Text(isPriorityOn
                         ? "Chapters with the same number are merged, keeping the scanlator highest in this list. Drag to reorder."
@@ -97,7 +96,6 @@ struct ScanlatorSettingsView: View {
 
             Toggle("Show \(displayName(name))", isOn: visibleBinding(name))
                 .labelsHidden()
-                .tint(AppTheme.controlFill)
         }
     }
 

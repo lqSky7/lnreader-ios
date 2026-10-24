@@ -90,7 +90,6 @@ struct TTSPlaybackControls: View {
                 in: 0...safeRangeUpper,
                 onEditingChanged: handleScrubEditing
             )
-            .tint(.primary)
             .disabled(safeDuration <= 0)
             .accessibilityLabel("Playback progress")
             .accessibilityValue("\(formatTime(displayedTime)) of \(formatTime(safeDuration))")

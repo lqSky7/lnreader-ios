@@ -42,7 +42,7 @@ struct NarrationVoicePicker: View {
                             TTSVoiceChip(voiceId: voice.id, name: voice.name)
                             Text(voice.description).font(.caption).foregroundStyle(.secondary)
                             Text(voice.isCustom ? "Your voice · English narration" : "LNReader voice design · English narration").font(.caption2).foregroundStyle(.secondary)
-                            if let error = voice.preview?.error { Text(error).font(.caption2).foregroundStyle(.orange) }
+                            if let error = voice.preview?.error { Text(error).font(.caption2).foregroundStyle(AppTheme.warning) }
                         }
                         Spacer()
                     }.frame(minHeight: 48)
@@ -224,7 +224,7 @@ struct BookAudioDownloadsView: View {
                             HStack { ProgressView(); Text(preparationProgress).font(.caption); Spacer(); Button("Stop") { preparationTask?.cancel() } }
                         }
                         if let message = error ?? library.errorMessage ?? (library.engineState?.needsAttention == true ? library.engineState?.message : nil) {
-                            Label(message, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange)
+                            Label(message, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(AppTheme.warning)
                         }
                     }
                 }
@@ -267,7 +267,7 @@ struct BookAudioDownloadsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
-                        Toggle("Wi-Fi downloads only", isOn: $wifiOnly).tint(AppTheme.controlFill)
+                        Toggle("Wi-Fi downloads only", isOn: $wifiOnly)
                         Picker("Prepare with", selection: $computeProvider) {
                             Text("Kaggle").tag("kaggle")
                             Text("Colab").tag("colab")
@@ -317,7 +317,7 @@ struct BookAudioDownloadsView: View {
                     Task { await library.deleteMany(ids) }
                 }
             } message: { Text("Chapter text stays on this phone. You can prepare the voices again later.") }
-        }.tint(.primary)
+        }
     }
     private var activeVoice: String {
         let preferred = library.selectedVoice(bookId: bookId, chapterId: initialChapter ?? "")
@@ -483,10 +483,10 @@ struct BookAudioDownloadsView: View {
                     Button { downloadChapter(chapter) } label: { Image(systemName: "arrow.down.circle").font(.title2).frame(width: 44, height: 44) }.disabled(preparing).accessibilityLabel("Download \(chapter.title)")
                 }
             }.buttonStyle(.borderless)
-            if let primary, ["waiting", "downloading"].contains(primary.state) { ProgressView(value: primary.progress).tint(.primary) }
+            if let primary, ["waiting", "downloading"].contains(primary.state) { ProgressView(value: primary.progress) }
             if let primary, primary.state == "failed" || primary.state == "paused" {
                 HStack(alignment: .top) {
-                    Text(primary.error ?? "Preparation is paused.").font(.caption).foregroundStyle(.orange).lineLimit(2)
+                    Text(primary.error ?? "Preparation is paused.").font(.caption).foregroundStyle(AppTheme.warning).lineLimit(2)
                     Spacer()
                     Button("Retry") { Task { await library.retry(primary.id) } }.font(.caption.weight(.semibold)).buttonStyle(.borderless)
                 }
@@ -495,7 +495,7 @@ struct BookAudioDownloadsView: View {
         .swipeActions {
             if let primary {
                 Button("Delete", systemImage: "trash", role: .destructive) { deleteTarget = primary }
-                if ["failed", "paused"].contains(primary.state) { Button("Retry", systemImage: "arrow.clockwise") { Task { await library.retry(primary.id) } }.tint(.primary) }
+                if ["failed", "paused"].contains(primary.state) { Button("Retry", systemImage: "arrow.clockwise") { Task { await library.retry(primary.id) } }.tint(Color(.systemGray)) }
             }
         }
     }
@@ -818,10 +818,10 @@ struct TTSChapterAudioDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(chapter.title)
                     .font(.title3.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .lineLimit(3)
-                Text(bookTitle).font(.footnote).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
-                Text(summaryLine).font(.footnote).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                Text(bookTitle).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                Text(summaryLine).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -834,7 +834,7 @@ struct TTSChapterAudioDetailView: View {
                     Text(statusText(record)).font(.subheadline.weight(.semibold))
                     Spacer()
                     Text("\(Int((min(max(record.progress, 0), 1) * 100).rounded()))%")
-                        .font(.subheadline.monospacedDigit()).foregroundStyle(.white.opacity(0.7))
+                        .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
                 }
                 ProgressView(value: min(max(record.progress, 0), 1))
                     .tint(.white)
@@ -845,7 +845,7 @@ struct TTSChapterAudioDetailView: View {
                 }
                 if let message = record.error {
                     Label(message, systemImage: record.state == "waiting" ? "arrow.clockwise" : "exclamationmark.circle")
-                        .font(.caption).foregroundStyle(.white.opacity(0.75))
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -864,11 +864,11 @@ struct TTSChapterAudioDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("From the chapter")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.secondary)
                     .textCase(.uppercase)
                 Text(text)
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(.primary)
                     .lineSpacing(4)
                     .lineLimit(6)
             }
@@ -877,7 +877,7 @@ struct TTSChapterAudioDetailView: View {
 
     private var voicesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Voices").font(.footnote.weight(.semibold)).foregroundStyle(.white.opacity(0.55))
+            Text("Voices").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
             ForEach(records) { record in voiceCard(record) }
         }
     }
@@ -896,14 +896,14 @@ struct TTSChapterAudioDetailView: View {
                     }
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: record.bytesExpected, countStyle: .file))
-                        .font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.6))
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
-                Text(statusText(record)).font(.caption).foregroundStyle(.white.opacity(0.65))
+                Text(statusText(record)).font(.caption).foregroundStyle(.secondary)
                 if !record.isAvailable, record.state != "failed", record.state != "paused" {
                     ProgressView(value: min(max(record.progress, 0), 1)).tint(.white)
                 }
                 if let message = record.error, record.state != "waiting" {
-                    Text(message).font(.caption).foregroundStyle(.white.opacity(0.75)).lineLimit(3)
+                    Text(message).font(.caption).foregroundStyle(AppTheme.warning).lineLimit(3)
                 }
                 HStack(spacing: 8) {
                     if canPlay(record) {
@@ -919,7 +919,7 @@ struct TTSChapterAudioDetailView: View {
                         Image(systemName: "trash").frame(width: 40, height: 34)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.secondary)
                     .accessibilityLabel("Delete \(voiceName(record))")
                 }
             }
@@ -931,7 +931,7 @@ struct TTSChapterAudioDetailView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("No audio yet").font(.subheadline.weight(.semibold))
                 Text("Prepare this chapter in a voice to listen offline.")
-                    .font(.caption).foregroundStyle(.white.opacity(0.65))
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -941,7 +941,7 @@ struct TTSChapterAudioDetailView: View {
             Label("Download another voice", systemImage: "waveform.badge.plus")
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 48)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .background(.white.opacity(0.10), in: .capsule)
                 .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 1))
         }
@@ -954,7 +954,7 @@ struct TTSChapterAudioDetailView: View {
         content()
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(.white)
+            .foregroundStyle(.primary)
             .background(.ultraThinMaterial, in: .rect(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -964,8 +964,8 @@ struct TTSChapterAudioDetailView: View {
 
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption2).foregroundStyle(.white.opacity(0.5))
-            Text(value).font(.caption.monospacedDigit().weight(.medium)).foregroundStyle(.white.opacity(0.9))
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(value).font(.caption.monospacedDigit().weight(.medium)).foregroundStyle(.primary)
         }
     }
 

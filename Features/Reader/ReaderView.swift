@@ -828,7 +828,7 @@ struct ReaderFocusIndicator: View {
                                 ))
                         }
                     }
-                    .foregroundColor(.white.opacity(0.75))
+                    .foregroundStyle(.white.opacity(0.75))
                     .padding(.horizontal, showLabel ? 12 : 8)
                     .padding(.vertical, 6)
                     .glassEffect(.regular.interactive(), in: .capsule)
@@ -843,7 +843,7 @@ struct ReaderFocusIndicator: View {
                         } label: {
                             Text("Change Focus")
                                 .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundStyle(.white.opacity(0.8))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .glassEffect(.regular.interactive(), in: .capsule)

@@ -84,8 +84,8 @@ struct NovelFireCommentsView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Toggle("Hide spoilers", isOn: $hideSpoilers).tint(AppTheme.controlFill)
-                        Toggle("With replies", isOn: $onlyReplies).tint(AppTheme.controlFill)
+                        Toggle("Hide spoilers", isOn: $hideSpoilers)
+                        Toggle("With replies", isOn: $onlyReplies)
                         Divider()
                         Button { showLoginSheet = true } label: { Label("Sign in to \(site.displayName)", systemImage: "person.crop.circle") }
                     } label: {

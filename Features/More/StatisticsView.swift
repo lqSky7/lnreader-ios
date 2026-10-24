@@ -175,7 +175,7 @@ struct StatisticsView: View {
         var body: some View {
             content
                 .padding()
-                .background(Color(UIColor.systemGray6))
+                .background(AppTheme.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
         }
@@ -264,7 +264,7 @@ struct StatisticsView: View {
                     .chartYAxis {
                         AxisMarks(values: .automatic(desiredCount: 3)) { _ in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                .foregroundStyle(Color.gray.opacity(0.2))
+                                .foregroundStyle(AppTheme.hairline)
                             AxisValueLabel()
                                 .foregroundStyle(.secondary)
                                 .font(.caption2)
@@ -415,7 +415,7 @@ struct StatisticsView: View {
                                 GeometryReader { geometry in
                                     ZStack(alignment: .leading) {
                                         RoundedRectangle(cornerRadius: 4)
-                                            .fill(Color.gray.opacity(0.15))
+                                            .fill(.quaternary)
                                             .frame(height: 10)
                                         
                                         let maxVal = maxCategoryNovelCount
@@ -577,7 +577,7 @@ struct StatisticsView: View {
                                 GeometryReader { geometry in
                                     ZStack(alignment: .leading) {
                                         RoundedRectangle(cornerRadius: 4)
-                                            .fill(Color.gray.opacity(0.15))
+                                            .fill(.quaternary)
                                             .frame(height: 10)
                                         
                                         let maxVal = maxSourceNovelCount

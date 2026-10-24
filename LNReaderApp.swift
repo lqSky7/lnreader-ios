@@ -38,7 +38,7 @@ struct LNReaderApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .tint(AppTheme.accent)
+                .toggleStyle(AppToggleStyle())
                 .environment(pluginManager)
                 .environment(libraryManager)
                 .environment(syncManager)

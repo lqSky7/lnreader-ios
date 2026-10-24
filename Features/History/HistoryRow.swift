@@ -120,7 +120,7 @@ private struct RunToggle: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
-                Capsule().fill(isExpanded ? AnyShapeStyle(AppTheme.controlFill) : AnyShapeStyle(.quaternary))
+                Capsule().fill(isExpanded ? AnyShapeStyle(AppTheme.primaryFill) : AnyShapeStyle(.quaternary))
             )
             // The pill is small; the tap target is not.
             .frame(minWidth: 44, minHeight: 44)

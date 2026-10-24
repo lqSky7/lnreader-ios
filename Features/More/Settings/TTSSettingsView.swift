@@ -26,7 +26,7 @@ struct TTSSettingsView: View {
                                     Text(record.rendition.title).font(.caption)
                                     Text("\(library.voices.first { $0.id == record.rendition.voiceId }?.name ?? record.manifest?.voiceName ?? record.rendition.voiceId) · \(record.isAvailable ? "Available offline" : record.state)").font(.caption).foregroundStyle(.secondary)
                                 }
-                                if let message = record.error { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange).accessibilityLabel(message) }
+                                if let message = record.error { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(AppTheme.warning).accessibilityLabel(message) }
                                 Spacer()
                                 Button(role: .destructive) { Task { await library.delete(record.id) } } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
                             }
