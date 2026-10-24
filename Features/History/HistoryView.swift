@@ -11,6 +11,9 @@ struct HistoryView: View {
     @Query(sort: \History.lastRead, order: .reverse)
     private var history: [History]
 
+    /// Changes when the History tab is tapped again; opens the most recent chapter.
+    var resumeTrigger = 0
+
     @State private var searchText = ""
     @State private var path = NavigationPath()
 
@@ -59,6 +62,7 @@ struct HistoryView: View {
                 NovelDetailView(entry: entry)
             }
             .navigationTitle("History")
+            .onChange(of: resumeTrigger) { resumeLatest() }
             .searchable(text: $searchText, prompt: "Search history")
             .toolbar {
                 if !history.isEmpty {
@@ -106,6 +110,18 @@ struct HistoryView: View {
     }
 
     // MARK: - Actions
+
+    private func resumeLatest() {
+        guard path.isEmpty, readerRouter.request == nil,
+              let chapter = history.first(where: { $0.chapter != nil })?.chapter else { return }
+        readerRouter.open(
+            sourceKey: chapter.entry?.sourceKey ?? "",
+            entryURL: chapter.entry?.url,
+            kind: chapter.entry?.kind ?? .novel,
+            chapterURL: chapter.url,
+            chapterName: chapter.name
+        )
+    }
 
     private func deleteEntries(_ offsets: IndexSet, from entries: [History]) {
         for index in offsets {

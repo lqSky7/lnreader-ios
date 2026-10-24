@@ -16,9 +16,17 @@ struct ContentView: View {
     @AppStorage("general.autoUpdateOnLaunch") private var autoUpdateOnLaunch = false
     @State private var selectedTab: AppTab = .library
     @State private var readerRouter = ReaderRouter()
+    /// Bumped when the History tab is tapped while already showing; resumes the top entry.
+    @State private var historyResume = 0
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: Binding(
+            get: { selectedTab },
+            set: { tab in
+                if tab == .history, selectedTab == .history { historyResume += 1 }
+                selectedTab = tab
+            }
+        )) {
             Tab(AppTab.library.title, systemImage: AppTab.library.icon, value: .library) {
                 LibraryView()
             }
@@ -28,7 +36,7 @@ struct ContentView: View {
             }
 
             Tab(AppTab.history.title, systemImage: AppTab.history.icon, value: .history) {
-                HistoryView()
+                HistoryView(resumeTrigger: historyResume)
             }
 
             Tab(AppTab.browse.title, systemImage: AppTab.browse.icon, value: .browse) {
