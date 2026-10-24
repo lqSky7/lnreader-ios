@@ -153,6 +153,9 @@ struct NovelGridCell: View {
     /// Counts come from a cached `fetchCount`, never from walking the entry's
     /// chapter array — see `LibraryChapterCounts`.
     @State private var counts: LibraryChapterCounts.Counts?
+    /// Reserved text heights, so a row of covers stays level at any text size.
+    @ScaledMetric(relativeTo: .footnote) private var titleHeight: CGFloat = 36
+    @ScaledMetric(relativeTo: .caption2) private var authorHeight: CGFloat = 14
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -184,14 +187,14 @@ struct NovelGridCell: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .foregroundStyle(.primary)
-                        .frame(height: 36, alignment: .topLeading)
+                        .frame(height: titleHeight, alignment: .topLeading)
 
                     if displayMode == .comfortable {
                         Text(novel.displayAuthor ?? "")
                             .font(Typography.small)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .frame(height: 14, alignment: .topLeading)
+                            .frame(height: authorHeight, alignment: .topLeading)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

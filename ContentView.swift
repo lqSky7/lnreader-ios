@@ -144,11 +144,11 @@ enum AppTab: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .library: "books.vertical.fill"
-        case .updates: "bell.badge"
-        case .history: "clock.fill"
-        case .browse: "safari.fill"
-        case .more: "ellipsis.circle.fill"
+        case .library: "books.vertical"
+        case .updates: "bell"
+        case .history: "clock"
+        case .browse: "safari"
+        case .more: "ellipsis"
         }
     }
 }

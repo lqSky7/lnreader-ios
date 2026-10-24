@@ -343,7 +343,7 @@ struct BookAudioDownloadsView: View {
                         .textInputAutocapitalization(.never)
                         .submitLabel(.search)
                     Button { closeSearch() } label: {
-                        Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.secondary)
+                        Image(systemName: "xmark").font(.footnote.bold()).foregroundStyle(.secondary)
                             .frame(width: 32, height: 46)
                     }
                     .buttonStyle(.plain)
@@ -372,7 +372,7 @@ struct BookAudioDownloadsView: View {
 
                 Button { openSearch() } label: {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.callout.weight(.semibold))
                         .frame(width: 46, height: 46)
                 }
                 .buttonStyle(.plain)

@@ -102,26 +102,27 @@ struct NovelHeaderView: View {
             // Glass action buttons
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 12) {
+                    // Primary action: a solid white glass capsule over the dark hero.
                     Button(action: onContinueReading) {
                         Label(hasStartedReading ? "Continue" : "Start Reading", systemImage: "book.fill")
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .foregroundStyle(.black)
-                            .background(.white, in: .capsule)
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.glassProminent)
+                    .tint(.white)
+                    .foregroundStyle(.black)
+                    .controlSize(.large)
+                    .buttonBorderShape(.capsule)
                     .disabled(!canStartReading)
-                    .opacity(canStartReading ? 1 : 0.45)
                     .glassEffectID("continue", in: namespace)
                     .bookTransitionSource("continue", in: transitionNamespace)
 
+                    // Secondary action: plain glass, so the two are not equals.
                     Button(action: onToggleLibrary) {
                         HStack(spacing: 6) {
                             if isAddingToLibrary {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .tint(.black)
+                                ProgressView().controlSize(.small)
                             } else {
                                 Image(systemName: inLibrary ? "checkmark.circle.fill" : "plus.circle")
                             }
@@ -129,11 +130,12 @@ struct NovelHeaderView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .foregroundStyle(.black)
-                        .background(.white, in: .capsule)
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.glass)
+                    .foregroundStyle(.white)
+                    .controlSize(.large)
+                    .buttonBorderShape(.capsule)
                     .disabled(isAddingToLibrary)
                     .glassEffectID("library", in: namespace)
                 }

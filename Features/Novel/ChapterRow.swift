@@ -38,7 +38,7 @@ struct ChapterRow: View {
             HStack(spacing: 12) {
                 if isSelecting {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20))
+                        .font(.title3)
                         .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                         .frame(width: 8)
                         .padding(.trailing, 6)
@@ -88,12 +88,12 @@ struct ChapterRow: View {
                     if chapter.bookmarked {
                         Image(systemName: "bookmark.fill")
                             .foregroundStyle(.primary)
-                            .font(Typography.small)
+                            .font(Typography.caption)
                     }
                     if chapter.downloaded {
                         Image(systemName: "arrow.down.circle.fill")
                             .foregroundStyle(.secondary)
-                            .font(Typography.small)
+                            .font(Typography.caption)
                     }
                 }
             }
@@ -119,6 +119,7 @@ struct ChapterRow: View {
             }
         )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityValue(chapter.unread ? "Unread" : "Read")
     }
 }
 
@@ -234,7 +235,7 @@ struct ChapterSelectionBar: View {
 
     private func barLabel(_ title: String, _ icon: String) -> some View {
         VStack(spacing: 3) {
-            Image(systemName: icon).font(.system(size: 19))
+            Image(systemName: icon).font(.title3)
             Text(title).font(.caption2)
         }
         .frame(maxWidth: .infinity, minHeight: 44)

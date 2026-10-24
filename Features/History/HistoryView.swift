@@ -16,11 +16,14 @@ struct HistoryView: View {
 
     @State private var searchText = ""
     @State private var path = NavigationPath()
+    @State private var showClearConfirmation = false
 
     var body: some View {
         NavigationStack(path: $path) {
             Group {
-                if filteredHistory.isEmpty {
+                if filteredHistory.isEmpty, !searchText.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                } else if filteredHistory.isEmpty {
                     EmptyStateView(
                         icon: "clock",
                         title: "No Reading History",
@@ -66,9 +69,21 @@ struct HistoryView: View {
             .searchable(text: $searchText, prompt: "Search history")
             .toolbar {
                 if !history.isEmpty {
-                    ToolbarItem(placement: .destructiveAction) {
-                        Button("Clear All", role: .destructive) {
-                            clearAllHistory()
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(role: .destructive) {
+                            showClearConfirmation = true
+                        } label: {
+                            Label("Clear History", systemImage: "trash")
+                        }
+                        .confirmationDialog(
+                            "Clear all reading history?",
+                            isPresented: $showClearConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Clear History", role: .destructive, action: clearAllHistory)
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("This removes every entry from History. Your reading progress is kept.")
                         }
                     }
                 }
@@ -77,16 +92,6 @@ struct HistoryView: View {
     }
 
     // MARK: - Filtering & Grouping
-
-    /// One formatter for the whole screen. `Date.formatted` builds a format
-    /// style per call, and grouping by the fully formatted string put every row
-    /// in a section of its own.
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
 
     private var filteredHistory: [History] {
         if searchText.isEmpty { return history }
@@ -105,7 +110,7 @@ struct HistoryView: View {
             buckets[calendar.startOfDay(for: item.lastRead), default: []].append(item)
         }
         return buckets.keys.sorted(by: >).map { day in
-            (Self.dayFormatter.string(from: day), buckets[day] ?? [])
+            (day.daySectionTitle, buckets[day] ?? [])
         }
     }
 

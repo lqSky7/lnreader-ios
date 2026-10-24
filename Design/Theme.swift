@@ -98,23 +98,26 @@ extension Color {
 /// information hierarchy — from large titles down to small captions.
 enum Typography {
 
+    // Every token is a text style, so the scale follows the user's Dynamic Type
+    // setting. The point sizes in the comments are the default (Large) sizes.
+
     /// Extra-large heading — 28pt bold rounded.
-    static let largeTitle: Font = .system(size: 28, weight: .bold, design: .rounded)
+    static let largeTitle: Font = .system(.title, design: .rounded, weight: .bold)
 
     /// Section heading — 22pt semibold rounded.
-    static let title: Font = .system(size: 22, weight: .semibold, design: .rounded)
+    static let title: Font = .system(.title2, design: .rounded, weight: .semibold)
 
     /// Row / card heading — 17pt semibold.
-    static let headline: Font = .system(size: 17, weight: .semibold)
+    static let headline: Font = .headline
 
     /// Body text — 15pt regular.
-    static let body: Font = .system(size: 15)
+    static let body: Font = .subheadline
 
     /// Captions and metadata — 13pt medium.
-    static let caption: Font = .system(size: 13, weight: .medium)
+    static let caption: Font = .footnote.weight(.medium)
 
     /// Smallest text — 11pt regular.
-    static let small: Font = .system(size: 11)
+    static let small: Font = .caption2
 }
 
 // MARK: - Hex Color Helper

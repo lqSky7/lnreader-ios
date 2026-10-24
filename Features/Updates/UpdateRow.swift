@@ -50,5 +50,7 @@ struct UpdateRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(chapter.read ? "Read" : "Unread")
     }
 }

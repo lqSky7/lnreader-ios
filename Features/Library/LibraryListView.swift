@@ -137,7 +137,7 @@ struct LibraryListRow: View {
             if isEditing {
                 Button(action: onDelete) {
                     Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 22))
+                        .font(.title2)
                         .foregroundColor(.red)
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())

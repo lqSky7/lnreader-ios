@@ -30,7 +30,7 @@ struct AboutView: View {
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: "book.fill")
-                .font(.system(size: 28, weight: .semibold))
+                .font(.title.weight(.semibold))
                 .foregroundStyle(.primary)
                 .frame(width: 48, height: 48)
                 .background(AppTheme.surface, in: .circle)

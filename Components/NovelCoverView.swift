@@ -36,7 +36,7 @@ struct NovelCoverView: View {
                 }
             }
             .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
     private var placeholderView: some View {

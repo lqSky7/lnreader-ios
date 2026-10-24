@@ -15,7 +15,7 @@ struct LibraryToolbar: ToolbarContent {
             Button(action: onShowOptions) {
                 // The accent is plain white in dark mode, so tinting the icon
                 // cannot show "on". A dot does, in any colour scheme.
-                Image(systemName: "line.3.horizontal.decrease.circle")
+                Image(systemName: "line.3.horizontal.decrease")
                     .overlay(alignment: .topTrailing) {
                         if isCustomised {
                             Circle()
@@ -34,7 +34,7 @@ struct LibraryToolbar: ToolbarContent {
                     Label("Import EPUB", systemImage: "square.and.arrow.down")
                 }
             } label: {
-                Label("More", systemImage: "ellipsis.circle")
+                Label("More", systemImage: "ellipsis")
             }
         }
     }

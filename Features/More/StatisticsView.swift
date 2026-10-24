@@ -187,7 +187,7 @@ struct StatisticsView: View {
         CardContainer {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.headline)
                     .foregroundStyle(color)
 
                 Text(value)
@@ -609,7 +609,7 @@ struct StatisticsView: View {
     private func noDataView(message: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: "chart.pie")
-                .font(.system(size: 24))
+                .font(.title2)
                 .foregroundStyle(.secondary)
             Text(message)
                 .font(Typography.caption)

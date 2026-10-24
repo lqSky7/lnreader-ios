@@ -98,7 +98,7 @@ struct AuthView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: "person.crop.circle.badge.checkmark")
-                .font(.system(size: 42, weight: .semibold))
+                .font(.largeTitle.weight(.semibold))
                 .foregroundStyle(.primary)
 
             Text("Sync your reader")
@@ -146,12 +146,12 @@ struct AuthView: View {
     private func customField(placeholder: String, text: Binding<String>, icon: String, keyboardType: UIKeyboardType = .default) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 20))
+                .font(.title3)
                 .foregroundStyle(.secondary)
                 .frame(width: 24)
             
             TextField("", text: text, prompt: Text(placeholder).foregroundStyle(.secondary.opacity(0.5)))
-                .font(.system(size: 18, weight: .medium))
+                .font(.headline.weight(.medium))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(keyboardType)
@@ -164,12 +164,12 @@ struct AuthView: View {
     private func customSecureField(placeholder: String, text: Binding<String>, icon: String) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 20))
+                .font(.title3)
                 .foregroundStyle(.secondary)
                 .frame(width: 24)
             
             SecureField("", text: text, prompt: Text(placeholder).foregroundStyle(.secondary.opacity(0.5)))
-                .font(.system(size: 18, weight: .medium))
+                .font(.headline.weight(.medium))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
         }

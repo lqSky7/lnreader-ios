@@ -144,8 +144,13 @@ struct CategoryTabView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
         }
-        .glassEffect(.regular, in: .capsule)
+        // A tinted glass pill reads as selected in any colour scheme; weight and
+        // colour alone were too subtle against the other pills.
+        .glassEffect(
+            isSelected ? .regular.tint(Color.primary.opacity(0.28)).interactive() : .regular.interactive(),
+            in: .capsule)
         .contentShape(.capsule)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4).onEnded { _ in
                 guard let onLongPress else { return }

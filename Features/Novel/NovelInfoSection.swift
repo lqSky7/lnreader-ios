@@ -39,7 +39,7 @@ struct NovelInfoSection: View {
                                 .font(Typography.small)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .glassEffect(.regular, in: .capsule)
+                                .background(.quaternary, in: .capsule)
                         }
                     }
                 }
@@ -82,7 +82,7 @@ struct MetadataItem: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(Typography.small)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Text(value)
                     .font(Typography.caption)
                     .lineLimit(1)
