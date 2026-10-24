@@ -427,6 +427,14 @@ which is fragile once re-signed.
   never competes with scrolling or paging) and ignore it while a sheet is open. The manga
   reader also keeps its leftward swipe from the right edge. New full-screen surfaces that hide
   the back button must add it.
+- **Chapter lists select by holding.** Hold a row to start selecting; tap rows to toggle, hold
+  another row to take everything between it and the last pick. `ChapterSelection` (in
+  `ChapterRow.swift`) is owned by the screen (`NovelDetailView`, `ChapterDirectoryView`) so
+  `ChapterSelectionBar` pins to the screen: Read, Unread, Download, and a More menu (select all
+  below, select all, invert, mark previous as read, bookmark, delete download, chapter audio).
+  Rows have no context menu any more, since it shared the long press; its two actions moved
+  into the bar. Only library entries select: a browse result has no stored chapters to change.
+  The reader's chapter picker (`onSelect`) does not select. Device check pending.
 - **Settings screens use `.settingsScreen(_:)`** (`Design/Theme.swift`): large sentence-case
   title plus the `AppTheme.controlFill` tint, applied once to the Form. Do not tint toggles
   one by one, and do not title-case labels ("Reader settings", "Sort order").

@@ -49,6 +49,8 @@ struct NovelDetailView: View {
     /// a chip, a search keystroke, or a scroll tick re-rendered the screen.
     @State private var orderedChapters: [ChapterDisplay] = []
     @State private var showAudioDownloads = false
+    /// Hold-to-select state for the chapter list; the bar pins to this screen.
+    @State private var chapterSelection = ChapterSelection()
     /// True while the entry is being written to the library.
     @State private var isAddingToLibrary = false
     /// Scanlator priority for this entry, loaded from its own defaults key.
@@ -132,6 +134,7 @@ struct NovelDetailView: View {
                         scanlatorSettings: scanlatorSettings,
                         sourceKey: sourceKey,
                         isLoading: isLoading,
+                        selection: localEntry == nil ? nil : chapterSelection,
                         selectedRange: $selectedRange,
                         selectedFilter: $selectedFilter,
                         searchText: $chapterSearch
@@ -143,6 +146,14 @@ struct NovelDetailView: View {
                 hideKeyboard()
             }
         )
+        .safeAreaInset(edge: .bottom) {
+            if chapterSelection.isActive {
+                ChapterSelectionBar(
+                    selection: chapterSelection, entry: localEntry,
+                    ordered: pagedChapters, allChapters: allChapters, sourceKey: sourceKey)
+            }
+        }
+        .onDisappear { chapterSelection.end() }
         .toolbar(removing: .title)
         .toolbar {
             // Audio is generated from chapter text, which manga don't have.

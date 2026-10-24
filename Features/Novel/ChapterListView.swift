@@ -20,6 +20,8 @@ struct ChapterListView: View {
     /// The chapter list is still being fetched. Without this the screen said
     /// "No chapters yet" while the request was in flight.
     var isLoading: Bool = false
+    /// Hold-to-select state, owned by the screen so its action bar can pin.
+    var selection: ChapterSelection? = nil
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
@@ -106,7 +108,8 @@ struct ChapterListView: View {
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(chapters) { chapter in
-                        ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey)
+                        ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey,
+                                   selection: selection, orderedPaths: { chapters.map(\.path) })
                             .padding(.horizontal, 12)
                         if chapter.id != chapters.last?.id { Divider().padding(.leading, 34) }
                     }
@@ -266,6 +269,7 @@ struct ChapterDirectoryView: View {
     @State private var initialized = false
     @State private var scrollTarget: String?
     @State private var scrollRequest = UUID()
+    @State private var selection = ChapterSelection()
     @FocusState private var jumpFocused: Bool
     private let pageSize = 50
 
@@ -330,15 +334,11 @@ struct ChapterDirectoryView: View {
                                         else if chapter.bookmarked { Image(systemName: "bookmark.fill").foregroundStyle(.secondary) }
                                     }.frame(minHeight: 44).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
-                            } else { ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey) }
-                        }.id(chapter.path)
-                        .contextMenu {
-                            if let saved = entry?.chapters.first(where: { $0.url == chapter.path }), entry?.isLocal == false {
-                                Button(chapter.downloaded ? "Downloaded" : "Download chapter", systemImage: "arrow.down.circle") {
-                                    ChapterDownloadManager.shared.enqueue([saved])
-                                }.disabled(chapter.downloaded)
+                            } else {
+                                ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey,
+                                           selection: entry == nil ? nil : selection, orderedPaths: { filtered.map(\.path) })
                             }
-                        }
+                        }.id(chapter.path)
                     }
                     if visible.isEmpty { ContentUnavailableView("No chapters", systemImage: "text.magnifyingglass", description: Text("Try another number, title, or filter.")) }
                 } header: { Text(search.isEmpty ? "Chapters \(pageLabel)" : "\(filtered.count) results") }
@@ -358,7 +358,10 @@ struct ChapterDirectoryView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { if let onClose { onClose() } else { dismiss() } } }
             }
             .safeAreaInset(edge: .bottom) {
-                if search.isEmpty && pageCount > 1 {
+                if selection.isActive {
+                    ChapterSelectionBar(selection: selection, entry: entry, ordered: filtered,
+                                        allChapters: chapters, sourceKey: sourceKey)
+                } else if search.isEmpty && pageCount > 1 {
                     HStack {
                         Button { page = max(0, currentPage - 1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.disabled(currentPage == 0).accessibilityLabel("Previous 50 chapters")
                         Spacer()
