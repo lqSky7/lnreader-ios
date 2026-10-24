@@ -14,26 +14,15 @@ struct GlassCard<Content: View>: View {
     var body: some View {
         content()
             .padding()
-            .background(glassBackground)
-            .overlay(glassStroke)
-            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .glassEffect(glass, in: .rect(cornerRadius: cornerRadius))
     }
 
-    private var glassBackground: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill((tint ?? .clear).opacity(0.18))
-            )
-    }
-
-    private var glassStroke: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .strokeBorder(.white.opacity(interactive ? 0.3 : 0.18), lineWidth: 1)
+    private var glass: Glass {
+        var glass = Glass.regular
+        if let tint { glass = glass.tint(tint.opacity(0.18)) }
+        return interactive ? glass.interactive() : glass
     }
 }
-
 #Preview {
     VStack(spacing: 16) {
         GlassCard {

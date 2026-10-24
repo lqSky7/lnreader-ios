@@ -156,6 +156,7 @@
 		EDF44ACAF399D5B540D6B1BF /* PagePrefetchPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1F6219C00A36C989425F4DD /* PagePrefetchPlan.swift */; };
 		EEDF92E541FC7528E7BEAA2B /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D010962F3B606729E91A2B /* StatisticsView.swift */; };
 		EF87EBF5591600D44C522066 /* ContentKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0D537E48B9B64370920C66 /* ContentKind.swift */; };
+		A1B2C3D4E5F600112233AA01 /* GlassControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600112233AA02 /* GlassControls.swift */; };
 		EFAD3576C145DEDFF32B3D98 /* GlassOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */; };
 		F058C4831CC3F14C9B5EDC9B /* Glur in Frameworks */ = {isa = PBXBuildFile; productRef = 0D468E064E87EA8FE7747702 /* Glur */; };
 		F284113DD4D3BBD22FA26560 /* TTSSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */; };
@@ -328,6 +329,7 @@
 		F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderRouter.swift; sourceTree = "<group>"; };
 		FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireCommentsService.swift; sourceTree = "<group>"; };
 		FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSSettingsView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F600112233AA02 /* GlassControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassControls.swift; sourceTree = "<group>"; };
 		FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassOverlay.swift; sourceTree = "<group>"; };
 		FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsView.swift; sourceTree = "<group>"; };
 		59C2348B0AD69E92A13FEE75 /* WebtoonStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebtoonStrip.swift; sourceTree = "<group>"; };
@@ -357,6 +359,7 @@
 			isa = PBXGroup;
 			children = (
 				9D2FA6695A9361D47858CC38 /* FlexibleHeader.swift */,
+				A1B2C3D4E5F600112233AA02 /* GlassControls.swift */,
 				FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */,
 				7DB09D701D00140674D1ADF4 /* WiggleModifier.swift */,
 			);
@@ -860,6 +863,7 @@
 				EBE9076B7945ECE6BF481FFE /* Haptics.swift in Sources */,
 				0D61A49ED5F1D91D3A515A14 /* GeneralSettingsView.swift in Sources */,
 				75995F2F5AE6494AC92E1C43 /* GlassCard.swift in Sources */,
+				A1B2C3D4E5F600112233AA01 /* GlassControls.swift in Sources */,
 				EFAD3576C145DEDFF32B3D98 /* GlassOverlay.swift in Sources */,
 				C859B7F21605A326EEC1CC1B /* GlobalSearchView.swift in Sources */,
 				7BF5C5BE164E42B9EA245AFE /* HTMLParser.swift in Sources */,

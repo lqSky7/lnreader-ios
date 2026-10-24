@@ -10,28 +10,23 @@ struct GlobalSearchView: View {
     @State private var isSearching = false
 
     var body: some View {
-        ScrollView {
-            if results.isEmpty && !isSearching {
-                EmptyStateView(
-                    icon: "magnifyingglass",
-                    title: "Global Search",
-                    subtitle: "Search across all installed sources at once."
-                )
-                .padding(.top, 100)
-            }
-
-            LazyVStack(alignment: .leading, spacing: 24) {
-                ForEach(results) { result in
-                    if !result.entries.isEmpty {
-                        SourceResultSection(result: result)
-                    }
+        List {
+            ForEach(results) { result in
+                if !result.entries.isEmpty {
+                    SourceResultSection(result: result)
                 }
             }
-            .padding(.horizontal)
-
-            if isSearching {
+        }
+        .listStyle(.plain)
+        .overlay {
+            if results.isEmpty && !isSearching {
+                ContentUnavailableView(
+                    "Global Search",
+                    systemImage: "magnifyingglass",
+                    description: Text("Search across all installed sources at once.")
+                )
+            } else if isSearching && results.isEmpty {
                 LoadingView(message: "Searching \(sourceManager.novelSources.count) sources...")
-                    .padding()
             }
         }
         .navigationTitle("Global Search")
@@ -95,12 +90,9 @@ struct SourceResultSection: View {
     let result: SourceSearchResult
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(result.sourceName)
-                .font(Typography.title)
-
+        Section(result.sourceName) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                LazyHStack(spacing: 12) {
                     ForEach(result.entries.prefix(10)) { entry in
                         NavigationLink {
                             NovelDetailView(sourceEntry: entry)
@@ -124,7 +116,10 @@ struct SourceResultSection: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, 16)
             }
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
         }
     }
 }

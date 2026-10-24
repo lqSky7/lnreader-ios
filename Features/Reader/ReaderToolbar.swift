@@ -19,7 +19,6 @@ struct ReaderToolbar: View {
 
     @Namespace private var topNamespace
     @Namespace private var bottomNamespace
-    @State private var backButtonHeight: CGFloat = 44
     @AppStorage("tts.enabled") private var ttsEnabled = true
 
     var body: some View {
@@ -34,62 +33,27 @@ struct ReaderToolbar: View {
 
     private var topBar: some View {
         GlassEffectContainer {
-            ZStack(alignment: .center) {
-                // Left-aligned Back Button
+            ZStack {
                 HStack {
-                    Button(action: onDismiss) {
-                        Image(systemName: "chevron.left")
-                            .font(.title3.weight(.medium))
-                            .frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.glass)
-                    .glassEffectID("back", in: topNamespace)
-                    #if os(macOS)
-                        .tint(.clear)
-                    #endif
+                    GlassIconButton(symbol: "chevron.left", label: "Close reader", action: onDismiss)
+                        .glassEffectID("back", in: topNamespace)
                     Spacer()
                 }
                 .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .leading)), removal: .opacity))
 
-                // Centered Chapter Name Pill
-                Button(action: onChapterClick) {
+                GlassPillButton(action: onChapterClick) {
                     Text(chapterName)
+                        .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 20)
-                        .frame(height: 46)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .capsule)
                 .glassEffectID("title", in: topNamespace)
                 .padding(.horizontal, 60)
+                .accessibilityLabel("Chapters: \(chapterName)")
                 .transition(.asymmetric(insertion: .opacity.combined(with: .scale), removal: .opacity))
 
-                // Right-aligned TTS Button
                 HStack {
                     Spacer()
-                    
-                    if ttsEnabled {
-                        if isPreparingTTS {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(width: 44, height: 44)
-                                .glassEffect(.regular, in: .circle)
-                                .glassEffectID("tts-trigger", in: topNamespace)
-                        } else {
-                            Button(action: onTTSStart) {
-                                Image(systemName: isListening ? "stop.fill" : "waveform")
-                                    .font(.title2.weight(.bold))
-                            }
-                            .buttonStyle(.glass)
-                            .accessibilityLabel(isListening ? "Stop listening" : "Listen to chapter")
-                            .glassEffectID("tts-trigger", in: topNamespace)
-                            #if os(macOS)
-                                .tint(.clear)
-                            #endif
-                        }
-                    }
+                    if ttsEnabled { ttsButton }
                 }
             }
         }
@@ -97,81 +61,47 @@ struct ReaderToolbar: View {
         .padding(.top, 8)
     }
 
+    @ViewBuilder private var ttsButton: some View {
+        if isPreparingTTS {
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular, in: .circle)
+                .glassEffectID("tts-trigger", in: topNamespace)
+        } else {
+            GlassIconButton(
+                symbol: isListening ? "stop.fill" : "waveform",
+                label: isListening ? "Stop listening" : "Listen to chapter",
+                action: onTTSStart
+            )
+            .glassEffectID("tts-trigger", in: topNamespace)
+        }
+    }
+
     // MARK: - Bottom Bar
 
     private var bottomBar: some View {
         GlassEffectContainer {
-            HStack {
-                Button(action: onSettings) {
-                    Image(systemName: "textformat.size")
-                        .font(.system(size: 16, weight: .medium))
-                        .frame(width: 46, height: 46)
-                        .contentShape(Circle())
+            HStack(spacing: 8) {
+                GlassIconButton(symbol: "textformat.size", label: "Reader settings", action: onSettings)
+                    .glassEffectID("settings", in: bottomNamespace)
+                if let onComments {
+                    GlassIconButton(symbol: "bubble.left.and.bubble.right", label: "Comments", action: onComments)
+                        .glassEffectID("comments", in: bottomNamespace)
                 }
-                .buttonStyle(InteractivePlainButtonStyle())
-                .glassEffect(.regular.interactive(), in: .circle)
-                .glassEffectID("settings", in: bottomNamespace)
-                
-                if let onComments = onComments {
-                    Button(action: onComments) {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.system(size: 16, weight: .medium))
-                            .frame(width: 46, height: 46)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(InteractivePlainButtonStyle())
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .glassEffectID("comments", in: bottomNamespace)
-                    .padding(.leading, 8)
-                }
-                
                 Spacer()
-                
-                HStack(spacing: 0) {
-                    Button(action: onPreviousChapter) {
-                        Image(systemName: "chevron.left")
-                            .font(.title3.weight(.semibold))
-                            .frame(width: 46, height: 46)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasPrevious)
-                    .opacity(hasPrevious ? 1.0 : 0.4)
-                    
-                    Divider()
-                        .frame(height: 24)
-                        .background(Color.white.opacity(0.2))
-                    
-                    Button(action: onNextChapter) {
-                        Image(systemName: "chevron.right")
-                            .font(.title3.weight(.semibold))
-                            .frame(width: 46, height: 46)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasNext)
-                    .opacity(hasNext ? 1.0 : 0.4)
-                }
-                .glassEffect(.regular.interactive(), in: .capsule)
+                GlassStepper(
+                    backLabel: "Previous chapter",
+                    forwardLabel: "Next chapter",
+                    canGoBack: hasPrevious,
+                    canGoForward: hasNext,
+                    back: onPreviousChapter,
+                    forward: onNextChapter
+                )
                 .glassEffectID("nav-group", in: bottomNamespace)
             }
-            #if os(macOS)
-                .tint(.clear)
-            #endif
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
-    }
-}
-
-// MARK: - Interactive plain button style for unified elements
-
-struct InteractivePlainButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1.0)
-            .opacity(configuration.isPressed ? 0.75 : 1.0)
-            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }

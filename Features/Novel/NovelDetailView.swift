@@ -102,13 +102,14 @@ struct NovelDetailView: View {
                 )
 
                 if isLoading && localEntry == nil {
-                    LoadingView(message: "Loading entry details...")
+                    ProgressView("Loading entry details…")
+                        .frame(maxWidth: .infinity)
                         .frame(height: 200)
                 } else if let error = errorMessage {
-                    EmptyStateView(
-                        icon: "exclamationmark.triangle",
-                        title: "Error",
-                        subtitle: error
+                    ContentUnavailableView(
+                        "Error",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(error)
                     )
                 } else {
                     NovelInfoSection(
@@ -153,29 +154,24 @@ struct NovelDetailView: View {
                 hideKeyboard()
             }
         )
-        .safeAreaInset(edge: .bottom) {
-            if chapterSelection.isActive {
-                ChapterSelectionBar(
-                    selection: chapterSelection, entry: localEntry,
-                    ordered: pagedChapters, allChapters: allChapters, sourceKey: sourceKey)
-            }
-        }
+        .chapterSelectionToolbar(
+            selection: chapterSelection, entry: localEntry,
+            ordered: pagedChapters, allChapters: allChapters, sourceKey: sourceKey)
         .onDisappear { chapterSelection.end() }
         .toolbar(removing: .title)
         .toolbar {
             if let localEntry, localEntry.inLibrary {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showTracker = true } label: {
-                        Image(systemName: localEntry.tracks.isEmpty ? "chart.bar" : "chart.bar.fill").frame(width: 44, height: 44)
+                        Label("Tracking", systemImage: localEntry.tracks.isEmpty ? "chart.bar" : "chart.bar.fill")
                     }
-                    .accessibilityLabel("Tracking")
                 }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
             // Audio is generated from chapter text, which manga don't have.
             if !isManga {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAudioDownloads = true } label: { Image(systemName: "headphones.circle").frame(width: 44, height: 44) }
-                        .accessibilityLabel("Manage chapter audio downloads")
+                    Button { showAudioDownloads = true } label: { Label("Manage chapter audio downloads", systemImage: "headphones.circle") }
                 }
             }
         }
@@ -233,20 +229,23 @@ struct NovelDetailView: View {
         if let localEntry, localEntry.inLibrary {
             let track = tracking.aniListTrack(for: localEntry)
             Button { showTracker = true } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: track == nil ? "chart.bar" : "chart.bar.fill")
-                        .frame(width: 24)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(track == nil ? "Track on AniList" : "AniList")
-                            .font(Typography.headline)
-                        Text(trackingSummary(track))
-                            .font(Typography.small)
-                            .foregroundStyle(.secondary)
+                HStack {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(track == nil ? "Track on AniList" : "AniList")
+                                .font(Typography.headline)
+                            Text(trackingSummary(track))
+                                .font(Typography.small)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: track == nil ? "chart.bar" : "chart.bar.fill")
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 12)
@@ -285,6 +284,7 @@ struct NovelDetailView: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                 }
+                .buttonStyle(.borderless)
                 .disabled(isRefetching)
             }
         }

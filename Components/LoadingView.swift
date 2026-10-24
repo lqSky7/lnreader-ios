@@ -8,17 +8,13 @@ struct LoadingView: View {
     var message: String? = nil
 
     var body: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-                .tint(.secondary)
-
+        ProgressView {
             if let message {
                 Text(message)
                     .font(Typography.caption)
-                    .foregroundStyle(.secondary)
             }
         }
+        .controlSize(.large)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

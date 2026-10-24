@@ -47,6 +47,62 @@ struct ChapterListView: View {
         return "\(first.position + 1)–\(last.position + 1) of \(totalCount)"
     }
 
+    private var headerButtons: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                searchButton
+                filterMenu
+                if let scanlatorSettings { scanlatorButton(scanlatorSettings) }
+            }
+        }
+    }
+
+    private var searchButton: some View {
+        Button {
+            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
+                showSearchField.toggle()
+                if !showSearchField { searchText = "" }
+            }
+            searchFocused = showSearchField
+        } label: {
+            Image(systemName: showSearchField ? "xmark" : "magnifyingglass")
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel(showSearchField ? "Close chapter search" : "Search chapters")
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Picker("Order", selection: $ascending) {
+                Label("Newest first", systemImage: "arrow.down").tag(false)
+                Label("Oldest first", systemImage: "arrow.up").tag(true)
+            }
+            Picker("Filter chapters", selection: $selectedFilter) {
+                ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
+            }
+        } label: {
+            Image(systemName: selectedFilter != .all ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel("Sort and filter chapters")
+    }
+
+    private func scanlatorButton(_ settings: ScanlatorSettings) -> some View {
+        Button {
+            showScanlators = true
+        } label: {
+            Image(systemName: settings.hasActiveRules ? "person.2.fill" : "person.2")
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel("Scanlator priority")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
@@ -56,54 +112,17 @@ struct ChapterListView: View {
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button {
-                    withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
-                        showSearchField.toggle()
-                        if !showSearchField { searchText = "" }
-                    }
-                    searchFocused = showSearchField
-                } label: {
-                    Image(systemName: showSearchField ? "xmark" : "magnifyingglass").frame(width: 40, height: 40)
-                }.buttonStyle(.glass).accessibilityLabel(showSearchField ? "Close chapter search" : "Search chapters")
-                Menu {
-                    Picker("Order", selection: $ascending) {
-                        Label("Newest first", systemImage: "arrow.down").tag(false)
-                        Label("Oldest first", systemImage: "arrow.up").tag(true)
-                    }
-                    Picker("Filter chapters", selection: $selectedFilter) {
-                        ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease")
-                        .frame(width: 40, height: 40)
-                        .overlay(alignment: .topTrailing) {
-                            if selectedFilter != .all {
-                                Circle().fill(AppTheme.primaryFill).frame(width: 9, height: 9).offset(x: -6, y: 6)
-                            }
-                        }
-                }.buttonStyle(.glass).accessibilityLabel("Sort and filter chapters")
-
-                if let scanlatorSettings {
-                    Button {
-                        showScanlators = true
-                    } label: {
-                        Image(systemName: scanlatorSettings.hasActiveRules ? "person.2.fill" : "person.2")
-                            .frame(width: 40, height: 40)
-                    }
-                    .buttonStyle(.glass)
-                    .accessibilityLabel("Scanlator priority")
-                }
+                headerButtons
             }
             .padding(.top, 8)
 
             if showSearchField {
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("Chapter name or number", text: $searchText)
-                        .textFieldStyle(.plain).autocorrectionDisabled().focused($searchFocused)
-                }
-                .padding(12).background(.quaternary, in: .rect(cornerRadius: 14))
-                .transition(.opacity.combined(with: .offset(y: -4)))
+                TextField("Chapter name or number", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .focused($searchFocused)
+                    .transition(.opacity.combined(with: .offset(y: -4)))
             }
 
             if !isFiltered && !showsAllChapters {
@@ -115,14 +134,9 @@ struct ChapterListView: View {
             }
 
             if chapters.isEmpty && isLoading {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Loading chapters…")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 88)
-                .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
+                ProgressView("Loading chapters…")
+                    .frame(maxWidth: .infinity, minHeight: 88)
+                    .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
             } else if chapters.isEmpty {
                 ContentUnavailableView(isFiltered ? "No matching chapters" : "No chapters yet", systemImage: "text.magnifyingglass")
             } else {
@@ -130,22 +144,21 @@ struct ChapterListView: View {
                     ForEach(chapters) { chapter in
                         ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey,
                                    selection: selection, orderedPaths: { chapters.map(\.path) })
-                            .padding(.horizontal, 12)
-                        if chapter.id != chapters.last?.id { Divider().padding(.leading, 34) }
+                        if chapter.id != chapters.last?.id { Divider().padding(.leading, 50) }
                     }
                 }
                 .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
+                .clipShape(.rect(cornerRadius: 18))
             }
 
             if !showsAllChapters {
                 Button { showDirectory = true } label: {
-                    HStack {
-                        Label(isFiltered && filteredCount > chapters.count ? "See all \(filteredCount) results" : "All \(totalCount) chapters", systemImage: "list.bullet.rectangle")
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
-                    }.font(.subheadline.weight(.medium)).padding(.vertical, 12)
-                    .contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                    Label(isFiltered && filteredCount > chapters.count ? "See all \(filteredCount) results" : "All \(totalCount) chapters", systemImage: "list.bullet.rectangle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
             }
         }
         .padding(.horizontal)
@@ -320,6 +333,24 @@ struct ChapterDirectoryView: View {
         let ends = [items[range.lowerBound].position, items[range.upperBound - 1].position]
         return "\(ends.min()! + 1)–\(ends.max()! + 1)"
     }
+    private var showsPager: Bool { !selection.isActive && search.isEmpty && pageCount > 1 }
+
+    @ToolbarContentBuilder private var pagerItems: some ToolbarContent {
+        ToolbarItemGroup(placement: .bottomBar) {
+            Button { page = max(0, currentPage - 1) } label: { Label("Previous 50 chapters", systemImage: "chevron.left").labelStyle(.iconOnly) }
+                .disabled(currentPage == 0)
+            Spacer()
+            Menu {
+                ForEach(0..<pageCount, id: \.self) { index in
+                    Button(label(for: index)) { page = index }
+                }
+            } label: { Label("\(pageLabel) · \(currentPage + 1)/\(pageCount)", systemImage: "rectangle.split.3x1").font(.subheadline.monospacedDigit()) }
+            Spacer()
+            Button { page = min(pageCount - 1, currentPage + 1) } label: { Label("Next 50 chapters", systemImage: "chevron.right").labelStyle(.iconOnly) }
+                .disabled(currentPage + 1 >= pageCount)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
@@ -332,15 +363,14 @@ struct ChapterDirectoryView: View {
                             Text("\(chapters.count) chapters").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button { goToCurrent() } label: { Image(systemName: "location.fill").frame(width: 44, height: 44) }
-                            .accessibilityLabel("Go to current chapter")
+                        Button { goToCurrent() } label: { Label("Go to current chapter", systemImage: "location.fill").labelStyle(.iconOnly) }
+                            .buttonStyle(.borderless)
                     }
                     HStack {
-                        Image(systemName: "number").foregroundStyle(.secondary)
-                        TextField("Jump to chapter", text: $jumpNumber).keyboardType(.numberPad).focused($jumpFocused)
-                        Button("Go", action: jump).disabled(jumpNumber.isEmpty)
+                        Label { TextField("Jump to chapter", text: $jumpNumber).keyboardType(.numberPad).focused($jumpFocused) } icon: { Image(systemName: "number") }
+                        Button("Go", action: jump).buttonStyle(.borderless).disabled(jumpNumber.isEmpty)
                     }
-                    if let jumpError { Text(jumpError).font(.caption).foregroundStyle(.red) }
+                    if let jumpError { Text(jumpError).font(.caption).foregroundStyle(AppTheme.destructive) }
                 }
                 Section {
                     ForEach(visible) { chapter in
@@ -358,6 +388,7 @@ struct ChapterDirectoryView: View {
                             } else {
                                 ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey,
                                            selection: entry == nil ? nil : selection, orderedPaths: { filtered.map(\.path) })
+                                    .listRowInsets(EdgeInsets())
                             }
                         }.id(chapter.path)
                     }
@@ -374,28 +405,15 @@ struct ChapterDirectoryView: View {
                         Picker("Filter", selection: Binding(get: { selectedFilter }, set: { selectedFilter = $0; page = 0 })) {
                             ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
                         }
-                    } label: { Image(systemName: "line.3.horizontal.decrease").overlay(alignment: .topTrailing) { if selectedFilter != .all { Circle().fill(AppTheme.primaryFill).frame(width: 8, height: 8).offset(x: 3, y: -3) } } }.accessibilityLabel("Filter chapters")
+                    } label: { Label("Filter chapters", systemImage: selectedFilter != .all ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease") }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { if let onClose { onClose() } else { dismiss() } } }
             }
-            .safeAreaInset(edge: .bottom) {
-                if selection.isActive {
-                    ChapterSelectionBar(selection: selection, entry: entry, ordered: filtered,
-                                        allChapters: chapters, sourceKey: sourceKey)
-                } else if search.isEmpty && pageCount > 1 {
-                    HStack {
-                        Button { page = max(0, currentPage - 1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.disabled(currentPage == 0).accessibilityLabel("Previous 50 chapters")
-                        Spacer()
-                        Menu {
-                            ForEach(0..<pageCount, id: \.self) { index in
-                                Button(label(for: index)) { page = index }
-                            }
-                        } label: { Label("\(pageLabel) · \(currentPage + 1)/\(pageCount)", systemImage: "rectangle.split.3x1").font(.subheadline.monospacedDigit()) }
-                        Spacer()
-                        Button { page = min(pageCount - 1, currentPage + 1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }.disabled(currentPage + 1 >= pageCount).accessibilityLabel("Next 50 chapters")
-                    }.padding(.horizontal).padding(.vertical, 4).background(.bar)
-                }
-            }
+            .toolbar { if showsPager { pagerItems } }
+            .toolbar(showsPager || selection.isActive ? .visible : .hidden, for: .bottomBar)
+            .chapterSelectionToolbar(
+                selection: selection, entry: entry, ordered: filtered,
+                allChapters: chapters, sourceKey: sourceKey)
             .onChange(of: chapters) { _, _ in if !initialized && !chapters.isEmpty { if initialSearch.isEmpty && initialFilter == .all { goToCurrent() }; initialized = true } }
             .onAppear { if !initialized && !chapters.isEmpty { if initialSearch.isEmpty && initialFilter == .all { goToCurrent() }; initialized = true } }
             .onChange(of: scrollRequest) { _, request in

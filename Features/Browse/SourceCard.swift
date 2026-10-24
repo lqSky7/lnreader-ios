@@ -55,13 +55,9 @@ struct SourceCard: View {
     private var getControl: some View {
         if isInstalling {
             ProgressView()
-                .frame(minWidth: 64, minHeight: 44)
+                .controlSize(.regular)
         } else {
-            Button(action: action) {
-                Text("Get")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 6)
-            }
+            Button("Get", action: action)
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
             .controlSize(.regular)

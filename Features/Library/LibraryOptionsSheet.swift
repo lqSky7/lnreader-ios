@@ -66,30 +66,21 @@ struct LibraryOptionsSheet: View {
                 filterRow("Completed", systemImage: "checkmark.seal", state: $filter.completed)
                 filterRow("Tracked", systemImage: "chart.bar", state: $filter.tracked)
             } footer: {
-                Text("Filters apply to \(scopeName) only. Tap to require, tap again to exclude.")
+                Text("Filters apply to \(scopeName) only. Only keeps books that match, Hide removes them.")
             }
         }
     }
 
+    /// A tri-state filter as a menu picker: any, only these, or none of these.
     private func filterRow(_ title: String, systemImage: String, state: Binding<TriState>) -> some View {
-        Button {
-            state.wrappedValue = state.wrappedValue.next
+        Picker(selection: state) {
+            Text("Any").tag(TriState.off)
+            Text("Only").tag(TriState.include)
+            Text("Hide").tag(TriState.exclude)
         } label: {
-            HStack {
-                Label(title, systemImage: systemImage)
-                    .foregroundStyle(.primary)
-                Spacer()
-                switch state.wrappedValue {
-                case .off:
-                    Image(systemName: "circle").foregroundStyle(.tertiary)
-                case .include:
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint)
-                case .exclude:
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                }
-            }
+            Label(title, systemImage: systemImage)
         }
-        .accessibilityValue(state.wrappedValue.rawValue)
+        .pickerStyle(.menu)
     }
 
     // MARK: - Sort
@@ -171,21 +162,13 @@ struct LibraryOptionsSheet: View {
     private var displayList: some View {
         List {
             Section {
-                ForEach(DisplayMode.allCases) { mode in
-                    Button {
-                        displayMode = mode
-                    } label: {
-                        HStack {
-                            Label(mode.displayName, systemImage: mode.iconName)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if displayMode == mode {
-                                Image(systemName: "checkmark").foregroundStyle(.tint)
-                            }
-                        }
+                Picker("Layout", selection: $displayMode) {
+                    ForEach(DisplayMode.allCases) { mode in
+                        Label(mode.displayName, systemImage: mode.iconName).tag(mode)
                     }
-                    .accessibilityAddTraits(displayMode == mode ? .isSelected : [])
                 }
+                .pickerStyle(.inline)
+                .labelsHidden()
             }
             if displayMode != .list {
                 Section {
@@ -193,6 +176,7 @@ struct LibraryOptionsSheet: View {
                         Text("Auto").tag(LibraryGridColumns.automatic)
                         ForEach(LibraryGridColumns.range, id: \.self) { Text("\($0)").tag($0) }
                     }
+                    .pickerStyle(.menu)
                 } footer: {
                     Text("Applies to every category. Auto fits as many covers as the screen allows.")
                 }

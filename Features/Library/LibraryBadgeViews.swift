@@ -34,7 +34,7 @@ struct TextBadge: View {
     var body: some View {
         HStack(spacing: 3) {
             if let systemImage {
-                Image(systemName: systemImage).font(.system(size: 9, weight: .bold))
+                Image(systemName: systemImage).imageScale(.small)
             }
             Text(text)
         }

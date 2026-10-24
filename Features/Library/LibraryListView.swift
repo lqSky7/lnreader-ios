@@ -133,14 +133,7 @@ struct LibraryListRow: View {
     var body: some View {
         HStack(spacing: 12) {
             if isEditing {
-                Button(action: onDelete) {
-                    Image(systemName: "minus.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.red)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
+                DeleteBadge(action: onDelete)
                 .transition(.move(edge: .leading).combined(with: .opacity))
                 .zIndex(10)
             }
@@ -151,7 +144,7 @@ struct LibraryListRow: View {
             )
             .frame(width: 60, height: 86)
             .bookTransitionSource(novel.persistentModelID, in: transitionNamespace)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(.rect(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(novel.displayTitle)

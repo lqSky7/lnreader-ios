@@ -202,10 +202,10 @@ struct ReaderView: View {
             if isLoading {
                 LoadingView(message: "Loading chapter...")
             } else if let error = errorMessage {
-                EmptyStateView(
-                    icon: "exclamationmark.triangle",
-                    title: "Error",
-                    subtitle: error
+                ContentUnavailableView(
+                    "Couldn't load chapter",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(error)
                 )
             } else {
                 ReaderContent(
@@ -778,6 +778,7 @@ struct ReaderFocusIndicator: View {
     @ObservedObject var focusManager = FocusModeManager.shared
     @State private var showLabel = false
     @State private var labelTimer: Timer? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let activeType = focusManager.currentFocusType
@@ -785,63 +786,47 @@ struct ReaderFocusIndicator: View {
             VStack(spacing: 8) {
                 Button {
                     // Show label temporarily on tap
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
                         showLabel = true
                     }
                     // Start timer to hide label
                     labelTimer?.invalidate()
                     labelTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
-                        withAnimation(.easeInOut(duration: 0.5)) {
+                        withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
                             showLabel = false
                         }
                     }
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: activeType.iconName)
-                            .font(.system(size: 11, weight: .bold))
-                        
-                        if showLabel {
-                            Text(activeType.displayName)
-                                .font(.system(size: 11, weight: .bold))
-                                .transition(.asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                    removal: .opacity
-                                ))
-                        }
+                    if showLabel {
+                        Label(activeType.displayName, systemImage: activeType.iconName)
+                    } else {
+                        Label(activeType.displayName, systemImage: activeType.iconName)
+                            .labelStyle(.iconOnly)
                     }
-                    .foregroundStyle(.white.opacity(0.75))
-                    .padding(.horizontal, showLabel ? 12 : 8)
-                    .padding(.vertical, 6)
-                    .glassEffect(.regular.interactive(), in: .capsule)
                 }
-                .buttonStyle(.plain)
-                
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .font(.caption2.weight(.bold))
+                .accessibilityLabel("Focus mode: \(activeType.displayName)")
+
                 // If label is shown, offer a small manual override selector
                 if showLabel {
-                    HStack(spacing: 12) {
-                        Button {
-                            cycleOverride()
-                        } label: {
-                            Text("Change Focus")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.8))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .glassEffect(.regular.interactive(), in: .capsule)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    Button("Change Focus") { cycleOverride() }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
             }
         }
     }
-    
+
     private func cycleOverride() {
         let options = ["auto", "dnd", "work", "sleep", "none"]
         if let index = options.firstIndex(of: focusManager.overrideType) {
             let nextIndex = (index + 1) % options.count
-            withAnimation {
+            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
                 focusManager.overrideType = options[nextIndex]
                 focusManager.updateFocusStatus()
             }

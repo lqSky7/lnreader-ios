@@ -1,5 +1,5 @@
 // MoreView.swift
-// Settings hub with quick stats and navigation using a monochrome Bento Grid and systemGray6 cards.
+// Settings hub: profile and sync, then grouped navigation rows in a native inset list.
 
 import PhotosUI
 import SwiftData
@@ -10,7 +10,6 @@ struct MoreView: View {
     @Environment(SyncManager.self) private var syncManager
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<Entry> { $0.inLibrary }) private var libraryNovels: [Entry]
-    @Query private var chapters: [Chapter]
     @Query private var profiles: [UserProfile]
 
     @State private var showingEditProfile = false
@@ -22,40 +21,12 @@ struct MoreView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    profileHeaderCard
-
-                    VStack(spacing: 0) {
-                        NavigationLink { OfflineLibraryView() } label: {
-                            Label("Downloads", systemImage: "arrow.down.circle")
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
-                        }
-                        Divider().padding(.vertical, 12)
-                        NavigationLink { LibraryUpdateSettingsView() } label: {
-                            Label("Library updates", systemImage: "arrow.triangle.2.circlepath")
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
-                        }
-                        Divider().padding(.vertical, 12)
-                        NavigationLink { TrackingSettingsView() } label: {
-                            Label("Tracking", systemImage: "chart.bar")
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
-                        }
-                        Divider().padding(.vertical, 12)
-                        NavigationLink { LibraryBackupView() } label: {
-                            Label("Backup & restore", systemImage: "externaldrive")
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-                    .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 20))
-                    .padding(.horizontal)
-                    
-                    // Bento grid layout for settings (systemGray6 background, monochrome icons)
-                    bentoSettingsGrid
-                }
-                .padding(.vertical)
+            List {
+                profileSection
+                syncSection
+                libraryManagementSection
+                settingsSection
+                infoSection
             }
             .navigationTitle("More")
             .sheet(isPresented: $showingEditProfile) {
@@ -78,376 +49,177 @@ struct MoreView: View {
         }
     }
 
-    private var profileHeaderCard: some View {
-        VStack(spacing: 16) {
+    // MARK: - Profile
+
+    private var profileSection: some View {
+        Section {
             HStack(spacing: 16) {
-                // Circular PFP on the left
-                if let data = userProfile.avatarData, let uiImage = UIImage(data: data) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 64, height: 64)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(AppTheme.hairline, lineWidth: 1))
-                } else {
-                    ZStack {
-                        AppTheme.surface
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(width: 64, height: 64)
-                    .clipShape(Circle())
-                }
-                
-                // Name and details
+                avatar
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(userProfile.name)
                         .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.primary)
-                    
-                    if let currentUser = syncManager.currentUser {
-                        Text((currentUser.displayUsername ?? currentUser.username)!)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Local Profile")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(accountSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
-                
-                // Pencil edit button
+
                 Button {
                     Haptics.shared.impact(.light)
                     showingEditProfile = true
                 } label: {
-                    Image(systemName: "pencil.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "pencil")
                 }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel("Edit profile")
             }
-            
-            Divider()
-            
-            // Sync status and actions row
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    if let error = syncManager.lastError {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    } else if let message = syncManager.lastMessage {
-                        Label(message, systemImage: "info.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if syncManager.currentUser == nil {
-                        Label("Cloud sync offline", systemImage: "cloud.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Label("Cloud synced", systemImage: "icloud.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+        }
+    }
+
+    private var accountSubtitle: String {
+        if let currentUser = syncManager.currentUser {
+            return currentUser.displayUsername ?? currentUser.username ?? "Signed in"
+        }
+        return "Local Profile"
+    }
+
+    @ViewBuilder
+    private var avatar: some View {
+        if let data = userProfile.avatarData, let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 64, height: 64)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(AppTheme.hairline, lineWidth: 1))
+        } else {
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
+                .foregroundStyle(.secondary)
+                .frame(width: 64, height: 64)
+        }
+    }
+
+    // MARK: - Sync
+
+    private var syncSection: some View {
+        Section("Cloud sync") {
+            syncStatus
+
+            if syncManager.currentUser == nil {
+                Button("Login") {
+                    showingAuth = true
                 }
-                
-                Spacer()
-                
-                if syncManager.currentUser == nil {
-                    Button("Login") {
-                        showingAuth = true
+                .primaryActionStyle()
+            } else {
+                Button {
+                    Task {
+                        await syncManager.push(
+                            profile: userProfile,
+                            entries: libraryNovels,
+                            sources: pluginManager.installedPluginsList
+                        )
                     }
-                    .primaryActionStyle()
-                    .controlSize(.small)
-                } else {
-                    HStack(spacing: 12) {
+                } label: {
+                    HStack {
+                        Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
                         if syncManager.isWorking {
+                            Spacer()
                             ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Button {
-                                Task {
-                                    await syncManager.push(
-                                        profile: userProfile,
-                                        entries: libraryNovels,
-                                        sources: pluginManager.installedPluginsList
-                                    )
-                                }
-                            } label: {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                            }
-                            .primaryActionStyle()
-                            .controlSize(.small)
                         }
-                        
-                        Button {
-                            Task { await syncManager.signOut() }
-                        } label: {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(syncManager.isWorking)
                     }
                 }
+                .disabled(syncManager.isWorking)
+
+                Button(role: .destructive) {
+                    Task { await syncManager.signOut() }
+                } label: {
+                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+                .disabled(syncManager.isWorking)
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(AppTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24)
-                .stroke(AppTheme.hairline, lineWidth: 1)
-        )
-        .padding(.horizontal)
     }
 
-    // MARK: - Bento Settings Grid
+    @ViewBuilder
+    private var syncStatus: some View {
+        if let error = syncManager.lastError {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(AppTheme.destructive)
+        } else if let message = syncManager.lastMessage {
+            Label(message, systemImage: "info.circle.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else if syncManager.currentUser == nil {
+            Label("Cloud sync offline", systemImage: "cloud.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else {
+            Label("Cloud synced", systemImage: "icloud.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
 
-    private var bentoSettingsGrid: some View {
-        VStack(spacing: 0) {
-            // Row 1: General | Reader
-            HStack(spacing: 0) {
-                NavigationLink {
-                    GeneralSettingsView()
-                } label: {
-                    BentoCell(alignment: .bottomLeading) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("General")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Text("Library & defaults")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(BentoCellButtonStyle())
-                .simultaneousGesture(TapGesture().onEnded {
-                    Haptics.shared.impact(.light)
-                })
-                
-                Rectangle()
-                    .fill(AppTheme.hairline)
-                    .frame(width: 0.5)
-                
-                NavigationLink {
-                    ReaderSettingsView()
-                } label: {
-                    BentoCell(alignment: .bottomLeading) {
-                        Image(systemName: "textformat.size")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Reader")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Text("Typography & layout")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(BentoCellButtonStyle())
-                .simultaneousGesture(TapGesture().onEnded {
-                    Haptics.shared.impact(.light)
-                })
-            }
-            .frame(height: 140)
-            
-            Rectangle()
-                .fill(AppTheme.hairline)
-                .frame(height: 0.5)
-            
-            // Row 2: TTS | Advanced
-            HStack(spacing: 0) {
-                NavigationLink {
-                    TTSSettingsView()
-                } label: {
-                    BentoCell(alignment: .bottomLeading) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("TTS")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Text("Voices & servers")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(BentoCellButtonStyle())
-                .simultaneousGesture(TapGesture().onEnded {
-                    Haptics.shared.impact(.light)
-                })
-                
-                Rectangle()
-                    .fill(AppTheme.hairline)
-                    .frame(width: 0.5)
-                
-                NavigationLink {
-                    AdvancedSettingsView()
-                } label: {
-                    BentoCell(alignment: .bottomLeading) {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Advanced")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Text("Diagnostics & cache")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(BentoCellButtonStyle())
-                .simultaneousGesture(TapGesture().onEnded {
-                    Haptics.shared.impact(.light)
-                })
-            }
-            .frame(height: 140)
-            
-            Rectangle()
-                .fill(AppTheme.hairline)
-                .frame(height: 0.5)
-            
-            // Row 3: Statistics (Full width)
-            NavigationLink {
-                StatisticsView()
-            } label: {
-                HStack(spacing: 16) {
-                    Image(systemName: "chart.bar.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                        .background(AppTheme.surface, in: .circle)
-                    
+    // MARK: - Navigation rows
+
+    private var libraryManagementSection: some View {
+        Section {
+            link("Downloads", symbol: "arrow.down.circle") { OfflineLibraryView() }
+            link("Library updates", symbol: "arrow.triangle.2.circlepath") { LibraryUpdateSettingsView() }
+            link("Tracking", symbol: "chart.bar") { TrackingSettingsView() }
+            link("Backup & restore", symbol: "externaldrive") { LibraryBackupView() }
+        }
+    }
+
+    private var settingsSection: some View {
+        Section("Settings") {
+            link("General", subtitle: "Library & defaults", symbol: "gearshape") { GeneralSettingsView() }
+            link("Reader", subtitle: "Typography & layout", symbol: "textformat.size") { ReaderSettingsView() }
+            link("TTS", subtitle: "Voices & servers", symbol: "waveform") { TTSSettingsView() }
+            link("Advanced", subtitle: "Diagnostics & cache", symbol: "slider.horizontal.3") { AdvancedSettingsView() }
+        }
+    }
+
+    private var infoSection: some View {
+        Section {
+            link("Statistics", subtitle: "Library and reading insights", symbol: "chart.bar.fill", haptic: .medium) { StatisticsView() }
+            link("About", subtitle: "App version and source code", symbol: "info.circle", haptic: .medium) { AboutView() }
+        }
+    }
+
+    private func link<Destination: View>(
+        _ title: String,
+        subtitle: String? = nil,
+        symbol: String,
+        haptic: Haptics.Weight = .light,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            Label {
+                if let subtitle {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Statistics")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                        Text("Library and reading insights")
+                        Text(title)
+                        Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                } else {
+                    Text(title)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .contentShape(Rectangle())
+            } icon: {
+                Image(systemName: symbol)
             }
-            .buttonStyle(BentoCellButtonStyle())
-            .simultaneousGesture(TapGesture().onEnded {
-                Haptics.shared.impact(.medium)
-            })
-            
-            Rectangle()
-                .fill(AppTheme.hairline)
-                .frame(height: 0.5)
-            
-            // Row 4: About (Full width)
-            NavigationLink {
-                AboutView()
-            } label: {
-                HStack(spacing: 16) {
-                    Image(systemName: "info.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                        .background(AppTheme.surface, in: .circle)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("About")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                        Text("App version and source code")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(BentoCellButtonStyle())
-            .simultaneousGesture(TapGesture().onEnded {
-                Haptics.shared.impact(.medium)
-            })
         }
-        .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(AppTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24)
-                .stroke(AppTheme.hairline, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 4)
-        .padding(.horizontal)
-    }
-}
-
-// MARK: - Bento Cell Component
-private struct BentoCell<IconContent: View, LabelContent: View>: View {
-    let alignment: Alignment
-    @ViewBuilder let icon: () -> IconContent
-    @ViewBuilder let label: () -> LabelContent
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            icon()
-            Spacer()
-            label()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
-        .contentShape(Rectangle())
-    }
-}
-
-// MARK: - Bento Cell Button Style
-private struct BentoCellButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                configuration.isPressed ? Color.white.opacity(0.04) : Color.clear
-            )
-            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+        .simultaneousGesture(TapGesture().onEnded {
+            Haptics.shared.impact(haptic)
+        })
     }
 }
 
@@ -483,8 +255,6 @@ struct ProfileEditSheet: View {
                             
                             PhotosPicker(selection: $selectedItem, matching: .images) {
                                 Text("Choose Photo")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.primary)
                             }
                             .onChange(of: selectedItem) { _, newItem in
                                 Task {

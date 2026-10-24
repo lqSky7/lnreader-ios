@@ -11,7 +11,7 @@ struct OfflineLibraryView: View {
     @AppStorage("downloads.wifiOnly") private var wifiOnly = true
     var body: some View {
         List {
-            Section("Download chapters") {
+            Section {
                 Picker("Title", selection: $selected) {
                     Text("Choose a library title").tag(nil as PersistentIdentifier?)
                     ForEach(entries.filter { $0.inLibrary && !$0.isLocal }) { entry in
@@ -23,13 +23,19 @@ struct OfflineLibraryView: View {
                     Button("Download all chapters") { downloads.enqueue(entry.chapters) }
                 }
                 Toggle("Wi-Fi only", isOn: $wifiOnly).onChange(of: wifiOnly) { _, _ in downloads.resume() }
-                Text("Novels save chapter text. Manga saves every page. Add a title to your library before downloading.")
-                    .font(.footnote).foregroundStyle(.secondary)
                 Button("Resume queue") { downloads.resume(); LibraryMaintenance.scheduleDownloads() }
-                if let message = downloads.message { Text(message).font(.footnote) }
+            } header: {
+                Text("Download chapters")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Novels save chapter text. Manga saves every page. Add a title to your library before downloading.")
+                    if let message = downloads.message { Text(message) }
+                }
             }
             Section("Queue and offline chapters") {
-                if queue.isEmpty { Text("No downloads yet").foregroundStyle(.secondary) }
+                if queue.isEmpty {
+                    ContentUnavailableView("No downloads yet", systemImage: "arrow.down.circle")
+                }
                 ForEach(queue) { item in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(item.chapter?.entry?.displayTitle ?? "Removed title").font(.caption).foregroundStyle(.secondary)
@@ -38,9 +44,9 @@ struct OfflineLibraryView: View {
                             Text(item.state.rawValue.capitalized).font(.caption)
                             Spacer()
                             if item.state == .queued || item.state == .downloading {
-                                Button("Pause") { downloads.pause(item) }
+                                Button("Pause") { downloads.pause(item) }.buttonStyle(.borderless)
                             } else if item.state != .completed {
-                                Button("Retry") { downloads.retry(item) }
+                                Button("Retry") { downloads.retry(item) }.buttonStyle(.borderless)
                             }
                         }
                         if item.state == .downloading { ProgressView(value: item.progress) }
@@ -71,7 +77,7 @@ struct LibraryUpdateSettingsView: View {
             Section("On launch") {
                 Toggle("Update library on launch", isOn: $autoUpdateOnLaunch)
             }
-            Section("Background refresh") {
+            Section {
                 Toggle("Check for new chapters", isOn: $enabled)
                 Stepper("Requested interval: \(Int(hours)) hours", value: $hours, in: 1...72, step: 1)
                 Toggle("Wi-Fi only", isOn: $wifiOnly)
@@ -79,9 +85,13 @@ struct LibraryUpdateSettingsView: View {
                 Toggle("Skip completed titles", isOn: $skipCompleted)
                 Toggle("Download new chapters", isOn: $autoDownload)
                 Toggle("Notify about new chapters", isOn: $notify)
-                Text("iOS chooses when background work runs. Low Power Mode and Background App Refresh settings can delay it.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                if !schedulingError.isEmpty { Text(schedulingError).font(.footnote).foregroundStyle(.secondary) }
+            } header: {
+                Text("Background refresh")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("iOS chooses when background work runs. Low Power Mode and Background App Refresh settings can delay it.")
+                    if !schedulingError.isEmpty { Text(schedulingError) }
+                }
             }
             Section("Per-title updates") {
                 ForEach(entries.filter { !$0.isLocal }) { entry in
@@ -125,26 +135,31 @@ struct LibraryBackupView: View {
     @State private var importsMihon = false
     var body: some View {
         Form {
-            Section("Encrypted backup") {
-                Text("Includes your library, categories, chapter reading state, history, settings, and imported local books. Downloaded chapter media and audio can be downloaded again.")
+            Section {
                 SecureField("Recovery key", text: $recoveryKey).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Button("Copy recovery key") { UIPasteboard.general.string = recoveryKey }
                     .disabled(recoveryKey.isEmpty)
-                Text("Keep this key separately from your backup. You need it to restore on another device.")
-                    .font(.footnote).foregroundStyle(.secondary)
                 Button("Export .lnbk backup") { export() }.disabled(busy || recoveryKey.isEmpty)
+            } header: {
+                Text("Encrypted backup")
+            } footer: {
+                Text("Includes your library, categories, chapter reading state, history, settings, and imported local books. Downloaded chapter media and audio can be downloaded again. Keep the recovery key separately from your backup. You need it to restore on another device.")
             }
-            Section("Restore and merge") {
+            Section {
                 SecureField("Recovery key from the backup device", text: $importKey)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
-                Text("Leave blank to use this device’s key. Existing title details and newer reading progress are kept.")
-                    .font(.footnote).foregroundStyle(.secondary)
                 Button("Choose .lnbk backup") { importsMihon = false; importing = true }.disabled(busy)
+            } header: {
+                Text("Restore and merge")
+            } footer: {
+                Text("Leave blank to use this device’s key. Existing title details and newer reading progress are kept.")
             }
-            Section("Import from another app") {
-                Text("Restores the manga library, categories, read chapters, history and trackers from a .tachibk backup made by Mihon, Tachiyomi, Yokai or Tachimanga. Titles already here keep their details and the further reading progress.")
-                    .font(.footnote).foregroundStyle(.secondary)
+            Section {
                 Button("Choose .tachibk backup") { importsMihon = true; importing = true }.disabled(busy)
+            } header: {
+                Text("Import from another app")
+            } footer: {
+                Text("Restores the manga library, categories, read chapters, history and trackers from a .tachibk backup made by Mihon, Tachiyomi, Yokai or Tachimanga. Titles already here keep their details and the further reading progress.")
             }
             if busy { ProgressView("Working…") }
             if let message { Section { Text(message) } }
