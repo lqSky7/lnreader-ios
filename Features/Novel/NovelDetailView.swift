@@ -13,6 +13,7 @@ struct NovelDetailView: View {
     @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(ReaderRouter.self) private var readerRouter
+    @Environment(TrackingManager.self) private var tracking
 
     /// Stored entry, when opened from the library or from a search hit that is
     /// already in the library.
@@ -125,6 +126,8 @@ struct NovelDetailView: View {
                         .padding(.horizontal)
                         .padding(.vertical, 16)
 
+                    trackingRow
+
                     fetchStatusRow
 
                     ChapterListView(
@@ -222,6 +225,47 @@ struct NovelDetailView: View {
     private var canRefetch: Bool { sourceManager.source(forKey: sourceKey) != nil }
 
     private var lastFetched: Date? { fetchedAt ?? localEntry?.lastUpdate }
+
+    /// The toolbar icon alone was easy to miss, so tracking also gets a labelled
+    /// row that summarises the AniList entry once there is one.
+    @ViewBuilder
+    private var trackingRow: some View {
+        if let localEntry, localEntry.inLibrary {
+            let track = tracking.aniListTrack(for: localEntry)
+            Button { showTracker = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: track == nil ? "chart.bar" : "chart.bar.fill")
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(track == nil ? "Track on AniList" : "AniList")
+                            .font(Typography.headline)
+                        Text(trackingSummary(track))
+                            .font(Typography.small)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Tracking")
+        }
+    }
+
+    private func trackingSummary(_ track: Track?) -> String {
+        guard let track else {
+            return tracking.isLoggedIn ? "Not tracked" : "Log in to sync your progress"
+        }
+        let status = (TrackStatus(rawValue: track.status) ?? .planning).title
+        let progress = track.totalChapters > 0
+            ? "\(Int(track.lastChapterRead)) / \(track.totalChapters)" : "\(Int(track.lastChapterRead))"
+        return "\(status) · \(progress) ch"
+    }
 
     private var fetchStatusRow: some View {
         HStack(spacing: 8) {
