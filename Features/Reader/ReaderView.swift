@@ -4,6 +4,7 @@
 import SwiftData
 import SwiftUI
 import WebKit
+import GlurBackdrop
 
 struct ReaderView: View {
     @Environment(SourceManager.self) private var sourceManager
@@ -45,6 +46,8 @@ struct ReaderView: View {
     @State private var isLoading = true
     @State private var chrome: ReaderChromeState = .control
     @State private var showSettings = false
+    /// Settings open full height; the reader can still pull them down to half.
+    @State private var settingsDetent: PresentationDetent = .large
     @State private var showChapterList = false
     @State private var startTTSWhenReady = false
     @State private var errorMessage: String?
@@ -242,16 +245,9 @@ struct ReaderView: View {
                 .opacity(ttsBridge.isReady ? 1 : 0)
             }
 
-            // Keep scrolled text clear of the toolbar without resizing the document.
-            VStack {
-                LinearGradient(stops: [.init(color: resolvedBackgroundColor, location: 0), .init(color: resolvedBackgroundColor, location: 0.88), .init(color: resolvedBackgroundColor.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 136)
-                Spacer()
-            }
-            .ignoresSafeArea()
-            .opacity(chrome.isControl ? 1 : 0)
-            .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: chrome)
-            .allowsHitTesting(false)
+            // The edge blur alone keeps text clear of the toolbar; the old
+            // solid gradient band across the top is gone.
+            chromeGlur
 
             // Reading and listening share the same top navigation.
             ReaderToolbar(
@@ -260,7 +256,10 @@ struct ReaderView: View {
                 hasNext: hasNextChapter,
                 isPreparingTTS: isPreparingTTS,
                 onDismiss: { dismiss() },
-                onSettings: { showSettings = true },
+                onSettings: {
+                    settingsDetent = .large
+                    showSettings = true
+                },
                 onTTSStart: { isCurrentSpeech ? stopTTSPlayback() : startTTSPlayback() },
                 onPreviousChapter: navigateToPreviousChapter,
                 onNextChapter: navigateToNextChapter,
@@ -295,6 +294,24 @@ struct ReaderView: View {
         }
     }
 
+    /// The manga reader's edge blur, shown with the controls: text melts into
+    /// the top and bottom of the screen instead of stopping at a hard line.
+    /// Same light radius as the manga reader; it never intercepts taps or
+    /// scrolls, and it fades out with the controls.
+    private var chromeGlur: some View {
+        VStack(spacing: 0) {
+            GlurView(radius: 4, direction: .up)
+                .frame(height: 140)
+            Spacer(minLength: 0)
+            GlurView(radius: 4, direction: .down)
+                .frame(height: 140)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .opacity(chrome.isControl ? 1 : 0)
+        .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: chrome)
+    }
+
     private var settingsSheet: some View {
         ReaderSettings(
             fontSize: $fontSize,
@@ -312,9 +329,9 @@ struct ReaderView: View {
             wordSpacing: $wordSpacing,
             grainIntensity: $grainIntensity
         )
-        // Medium only, like the manga reader's settings: scrolling must not
-        // pull the sheet to full height.
-        .presentationDetents([.medium])
+        // Full height by default, so every setting fits without scrolling;
+        // half height is one drag down, same as the manga reader's sheet.
+        .presentationDetents([.medium, .large], selection: $settingsDetent)
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(28)
     }

@@ -40,6 +40,8 @@ struct ReaderSettings: View {
     @AppStorage("reader.isCustomizing") private var isCustomizing: Bool = false
     @AppStorage("reader.justifyText") private var justifyText = true
     @AppStorage("reader.keepScreenOn") private var keepScreenOn = true
+    @AppStorage(Haptics.enabledKey) private var hapticsEnabled = true
+    @AppStorage(Haptics.scrollEnabledKey) private var scrollHaptics = true
     @ObservedObject private var focusManager = FocusModeManager.shared
 
     init(
@@ -225,6 +227,7 @@ struct ReaderSettings: View {
                 
                 lineFocusSection
                 focusSection
+                scrollingSection
             }
             .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: isCustomizing)
             .animation(AppMotion.gentle(reduceMotion: reduceMotion), value: localLineFocusEnabled)
@@ -517,6 +520,26 @@ struct ReaderSettings: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
+        }
+    }
+
+    private var scrollingSection: some View {
+        Section {
+            Toggle("Scroll haptics", isOn: $scrollHaptics)
+                .tint(AppTheme.controlFill)
+                .disabled(!hapticsEnabled)
+                .onChange(of: scrollHaptics) { _, on in
+                    // Switching it on plays one tick, so the feel is right there.
+                    if on { Haptics.shared.scroll(ScrollFeel.detent(speed: 800)) }
+                }
+        } header: {
+            Text("Scrolling")
+        } footer: {
+            Text(hapticsEnabled
+                ? "A soft swell as the page moves: rising as you read on, falling as you scroll "
+                    + "back, and stronger the faster you flick. The master switch and strength "
+                    + "live in Settings › General › Haptics."
+                : "All vibration is off in Settings › General › Haptics.")
         }
     }
 

@@ -285,13 +285,14 @@ struct MangaReaderView: View {
     // MARK: - Chrome
 
     /// Keep the image legible beneath the controls with a light edge blur.
+    /// Radius 4, down from 8: enough to soften the edge, not to fog the page.
     private var controls: some View {
         ZStack {
             VStack(spacing: 0) {
-                GlurView(radius: 8, direction: .up)
+                GlurView(radius: 4, direction: .up)
                     .frame(height: 140)
                 Spacer(minLength: 0)
-                GlurView(radius: 8, direction: .down)
+                GlurView(radius: 4, direction: .down)
                     .frame(height: 140)
             }
             .ignoresSafeArea()
