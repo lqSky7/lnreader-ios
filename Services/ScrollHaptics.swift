@@ -4,13 +4,21 @@
 // times and the row under the reading line, and `Haptics` plays what comes
 // back. The rules can then be checked headless (tests/HapticsChecks.swift).
 //
-// The feel being aimed at is a ratchet: a crisp, even tick every few points of
-// travel, so the whole scroll is felt, speeding up with the scroll and capped
-// at the fastest rate the Taptic Engine can separate. Chapter breaks get a cue
-// of their own, and running into either end of the content lands with a thud
-// as heavy as the scroll that hit it.
+// The feel being aimed at is a soft swell every few points of travel, after
+// the login button's rising haptic in Traverse: round rather than crisp,
+// rising as you read on and falling as you scroll back, and stronger the
+// faster the scroll. Ticks are capped at the fastest rate the Taptic Engine
+// can separate. Chapter breaks get a cue of their own, and running into either
+// end of the content lands with a thud as heavy as the scroll that hit it.
 
 import Foundation
+
+/// Which way the content is moving. `forward` is reading on (the offset grows);
+/// `backward` is scrolling back up.
+enum ScrollDirection: Equatable {
+    case forward
+    case backward
+}
 
 /// One haptic a scroll wants. Intensity and sharpness are Core Haptics values, 0...1.
 struct ScrollCue: Equatable {
@@ -26,6 +34,7 @@ struct ScrollCue: Equatable {
     var kind: Kind
     var intensity: Double
     var sharpness: Double
+    var direction: ScrollDirection = .forward
 }
 
 // MARK: - Speed
@@ -77,11 +86,17 @@ enum ScrollFeel {
         return min(max((log(max(speed, 1)) - low) / (high - low), 0), 1)
     }
 
-    /// Crisp and nearly even: a flick is only a little firmer than a drag, so
-    /// the ticks read as one steady texture rather than random knocks.
-    static func detent(speed: Double) -> ScrollCue {
+    /// Soft and swelling, not a hard click: sharpness stays low at every speed,
+    /// while intensity climbs steeply with speed so a flick is unmistakably
+    /// stronger than a drag. `direction` only chooses the envelope's shape.
+    static func detent(speed: Double, direction: ScrollDirection = .forward) -> ScrollCue {
         let t = level(speed)
-        return ScrollCue(kind: .detent, intensity: 0.55 + 0.15 * t, sharpness: 0.72 + 0.12 * t)
+        return ScrollCue(
+            kind: .detent,
+            intensity: 0.30 + 0.55 * t,
+            sharpness: 0.28 + 0.34 * t,
+            direction: direction
+        )
     }
 
     static func edge(speed: Double) -> ScrollCue {
@@ -118,7 +133,8 @@ struct ScrollDetents {
         guard let notch, notch != current, userDriven else { return nil }
         guard time - lastClick >= Self.minimumGap else { return nil }
         lastClick = time
-        return ScrollFeel.detent(speed: speed)
+        // Offset growing means reading on; shrinking means scrolling back.
+        return ScrollFeel.detent(speed: speed, direction: current > notch ? .forward : .backward)
     }
 
     /// Forget the position, so a rebuilt list does not tick for the jump.
