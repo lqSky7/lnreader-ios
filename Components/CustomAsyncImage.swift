@@ -1,6 +1,7 @@
 // CustomAsyncImage.swift
 // Custom AsyncImage component that bypasses default CFNetwork user-agent blocking.
 
+import CryptoKit
 import ImageIO
 import SwiftUI
 
@@ -107,6 +108,68 @@ final class ImageCache {
     }
 }
 
+/// On-disk cover store under `Caches/`, independent of server cache headers.
+///
+/// `URLCache` only keeps what the CDN's headers allow, and many sources send
+/// `no-store` or no validators, so an evicted cover was a full re-download.
+/// This keeps the downloaded bytes keyed by a hash of the URL; a hit costs one
+/// small file read and an off-main ImageIO decode.
+enum CoverDiskCache {
+    private static let maxAge: TimeInterval = 30 * 24 * 3600
+    private static let maxBytes = 300 * 1024 * 1024
+
+    private static let directory: URL = {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let dir = base.appendingPathComponent("Covers", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    private static let writes = NSLock()
+    private static var writeCount = 0
+
+    private static func file(for url: URL) -> URL {
+        let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
+        return directory.appendingPathComponent(digest.map { String(format: "%02x", $0) }.joined())
+    }
+
+    /// Stored bytes, and whether they are older than `maxAge`.
+    static func read(_ url: URL) -> (data: Data, isStale: Bool)? {
+        let path = file(for: url)
+        guard let data = try? Data(contentsOf: path), !data.isEmpty else { return nil }
+        let modified = (try? path.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        let stale = modified.map { Date().timeIntervalSince($0) > maxAge } ?? true
+        return (data, stale)
+    }
+
+    static func write(_ data: Data, for url: URL) {
+        try? data.write(to: file(for: url), options: .atomic)
+        let shouldTrim = writes.withLock { () -> Bool in
+            writeCount += 1
+            return writeCount % 50 == 0
+        }
+        if shouldTrim { trim() }
+    }
+
+    /// Drops the oldest files once the folder passes `maxBytes`.
+    private static func trim() {
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: keys) else { return }
+        var entries = files.compactMap { url -> (URL, Date, Int)? in
+            guard let v = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
+            return (url, v.contentModificationDate ?? .distantPast, v.fileSize ?? 0)
+        }
+        var total = entries.reduce(0) { $0 + $1.2 }
+        guard total > maxBytes else { return }
+        entries.sort { $0.1 < $1.1 }
+        for entry in entries where total > maxBytes * 3 / 4 {
+            try? FileManager.default.removeItem(at: entry.0)
+            total -= entry.2
+        }
+    }
+}
+
 /// Shared session with a real URLCache so covers survive restarts and
 /// revalidates with the CDN instead of re-downloading.
 private enum CoverNetwork {
@@ -136,6 +199,7 @@ struct CustomAsyncImage: View {
     ) {
         self.url = url
         self.content = { phase in AnyView(content(phase)) }
+        _phase = State(initialValue: Self.cachedPhase(for: url))
     }
 
     /// Initialize with separate success and placeholder closures.
@@ -153,6 +217,14 @@ struct CustomAsyncImage: View {
                 return AnyView(placeholder())
             }
         }
+        _phase = State(initialValue: Self.cachedPhase(for: url))
+    }
+
+    /// A memory hit is known at construction, so a cell that scrolls back into
+    /// view never renders the loading state first.
+    private static func cachedPhase(for url: URL?) -> AsyncImagePhase {
+        guard let url, let image = ImageCache.shared.object(forKey: url as NSURL) else { return .empty }
+        return .success(Image(platformImage: image))
     }
 
     var body: some View {
@@ -176,29 +248,37 @@ struct CustomAsyncImage: View {
 
         phase = .empty
 
-        if url.scheme == "local" || url.isFileURL {
-            do {
-                let fileURL: URL
-                if url.scheme == "local" {
-                    let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                    let pathComponent = (url.host ?? "").appending(url.path)
-                    fileURL = docDir.appendingPathComponent(pathComponent)
-                } else {
-                    fileURL = url
-                }
-                
-                let data = try Data(contentsOf: fileURL)
-                guard let image = CoverDecode.image(from: data) else {
-                    phase = .failure(URLError(.cannotDecodeContentData))
-                    return
-                }
-                ImageCache.store(image, for: url as NSURL)
-                phase = .success(Image(platformImage: image))
-            } catch {
+        do {
+            let key = url as NSURL
+            let image = try await ImageCache.dedupedDownload(for: key) { try await Self.fetch(url) }
+            ImageCache.store(image, for: key)
+            phase = .success(Image(platformImage: image))
+        } catch {
+            if url.scheme == "local" || url.isFileURL {
                 print("❌ [CustomAsyncImage] Failed to load local cover: \(error.localizedDescription) for URL \(url)")
-                phase = .failure(error)
             }
-            return
+            phase = .failure(error)
+        }
+    }
+
+    /// Runs inside the dedupe task, off the main actor: disk, then network.
+    private static func fetch(_ url: URL) async throws -> PlatformImage {
+        if url.scheme == "local" || url.isFileURL {
+            let fileURL: URL
+            if url.scheme == "local" {
+                let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                fileURL = docDir.appendingPathComponent((url.host ?? "").appending(url.path))
+            } else {
+                fileURL = url
+            }
+            let data = try Data(contentsOf: fileURL)
+            guard let image = CoverDecode.image(from: data) else { throw URLError(.cannotDecodeContentData) }
+            return image
+        }
+
+        let stored = CoverDiskCache.read(url)
+        if let stored, !stored.isStale, let image = CoverDecode.image(from: stored.data) {
+            return image
         }
 
         do {
@@ -208,26 +288,20 @@ struct CustomAsyncImage: View {
                 forHTTPHeaderField: "User-Agent"
             )
             request.timeoutInterval = 15
-            // Let URLCache serve stored covers without hitting the network.
             request.cachePolicy = .returnCacheDataElseLoad
 
-            let key = url as NSURL
-            let downloadedImage = try await ImageCache.dedupedDownload(for: key) {
-                let (data, response) = try await CoverNetwork.session.data(for: request)
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode),
-                      let image = CoverDecode.image(from: data) else {
-                    throw URLError(.badServerResponse)
-                }
-                return image
+            let (data, response) = try await CoverNetwork.session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode),
+                  let image = CoverDecode.image(from: data) else {
+                throw URLError(.badServerResponse)
             }
-
-            // Cache for future loads
-            ImageCache.store(downloadedImage, for: key)
-
-            phase = .success(Image(platformImage: downloadedImage))
+            CoverDiskCache.write(data, for: url)
+            return image
         } catch {
-            phase = .failure(error)
+            // An expired copy beats a blank cover when the network is down.
+            if let stored, let image = CoverDecode.image(from: stored.data) { return image }
+            throw error
         }
     }
 }
