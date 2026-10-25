@@ -1,8 +1,7 @@
 // SourceManager.swift - The registry of installed sources.
 //
-// Replaces `PluginManager` as the thing the UI talks to. `PluginManager` keeps
-// owning install/uninstall of LN plugins for now; this class owns the v2
-// `CatalogSource` view of them, and later the Mihon extension repos too.
+// Every source is compiled into the app (`NativeSources`), so there is nothing to install:
+// the registry is filled once at launch and the UI reads it.
 
 import Foundation
 import Observation
@@ -73,70 +72,12 @@ final class SourceManager {
         sources[key] as? any MangaSource
     }
 
-    // MARK: Extensions
+    // MARK: Native sources
 
-    /// Load every installed extension bundle into the registry.
-    ///
-    /// Idempotent: an already-registered key is left alone, so calling this
-    /// after an install only adds the new one.
-    func registerInstalledExtensions() {
-        for installed in ExtensionStore.installed() {
-            let key = SourceKey.make(kind: installed.kind, id: installed.pkg)
-            if sources[key] != nil { continue }
-
-            guard let bundle = ExtensionStore.bundle(for: installed.pkg) else { continue }
-
-            let manifest = ExtensionManifest(
-                pkg: installed.pkg,
-                name: installed.name,
-                lang: installed.lang,
-                versionId: installed.versionId,
-                iconURL: installed.iconURL,
-                iconAsset: installed.iconAsset,
-                bundlePath: "\(installed.pkg).js",
-                kind: installed.kind
-            )
-
-            do {
-                register(try JSBundleMangaSource(manifest: manifest, bundle: bundle))
-            } catch {
-                // A broken bundle must not stop the others from loading.
-                lastError = error
-                print("⚠️ Extension \(installed.pkg) failed to load: \(error.localizedDescription)")
-            }
+    /// Register every source compiled into the app. Idempotent.
+    func registerNativeSources() {
+        for source in NativeSources.all() where sources[source.key] == nil {
+            register(source)
         }
-    }
-
-    /// Uninstall an extension: remove its files and drop it from the registry.
-    func uninstallExtension(pkg: String, kind: ContentKind) {
-        ExtensionStore.uninstall(pkg)
-        unregister(key: SourceKey.make(kind: kind, id: pkg))
-    }
-
-    // MARK: Bridging the v1 plugin layer
-
-    /// Mirror the installed LN plugins into the registry.
-    ///
-    /// Existing adapters are reused so their parsed-plugin cache survives a
-    /// refresh. Called after `PluginManager.restoreInstalledPlugins()` and after
-    /// every install/uninstall.
-    func sync(with pluginManager: PluginManager) {
-        var updated: [String: any CatalogSource] = [:]
-
-        for (pluginID, plugin) in pluginManager.installedPlugins {
-            let key = "ln:\(pluginID)"
-            if let existing = sources[key] {
-                updated[key] = existing
-            } else {
-                updated[key] = LNPluginSource(plugin: plugin)
-            }
-        }
-
-        // Sources of other kinds (Mihon, built-in) are owned elsewhere; keep them.
-        for (key, source) in sources where source.kind != .novel {
-            updated[key] = source
-        }
-
-        sources = updated
     }
 }

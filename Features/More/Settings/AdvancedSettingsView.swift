@@ -4,35 +4,17 @@
 import SwiftUI
 
 struct AdvancedSettingsView: View {
-    @Environment(PluginManager.self) private var pluginManager
-
-    @State private var showClearPluginsDialog = false
     @State private var showResetReaderDialog = false
 
     var body: some View {
         Form {
             Section("Maintenance") {
-                Button("Clear plugin cache", role: .destructive) {
-                    showClearPluginsDialog = true
-                }
-
                 Button("Reset reader settings", role: .destructive) {
                     showResetReaderDialog = true
                 }
             }
         }
         .settingsScreen("Advanced")
-        .confirmationDialog(
-            "Clear plugin cache?",
-            isPresented: $showClearPluginsDialog,
-            titleVisibility: .visible
-        ) {
-            Button("Clear plugin cache", role: .destructive) {
-                clearPluginCache()
-            }
-        } message: {
-            Text("This removes downloaded plugin files. You can reinstall them later.")
-        }
         .confirmationDialog(
             "Reset reader settings?",
             isPresented: $showResetReaderDialog,
@@ -44,10 +26,6 @@ struct AdvancedSettingsView: View {
         } message: {
             Text("Font, line height, and padding will return to defaults.")
         }
-    }
-
-    private func clearPluginCache() {
-        pluginManager.clearAllPlugins()
     }
 
     private func resetReaderSettings() {

@@ -1,9 +1,8 @@
 // SourceDetailView.swift
 // Browse one source with search and pagination.
 //
-// Talks to the v2 source layer: the registry entry (`PluginListItem`) only
-// identifies which source to ask for, everything else goes through
-// `CatalogSource`.
+// Talks to the v2 source layer: the source key only identifies which source to ask for,
+// everything else goes through `CatalogSource`.
 
 import SwiftUI
 

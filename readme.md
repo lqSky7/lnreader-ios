@@ -4,8 +4,9 @@ A native iOS reader for light novels and manga. SwiftUI and SwiftData throughout
 reader for novels, a pager and webtoon viewer for manga, chapter downloads that work offline,
 AniList tracking, and on-device narration.
 
-Sources are JavaScript extension bundles run in JavaScriptCore, so a source can be fixed or
-added without rebuilding the app. MangaFire and AllManga ship inside the binary.
+Every source is native Swift, compiled into the app. Light novels: Novel Fire, Novel Phoenix,
+Ranobes, Free Web Novel. Manga: MangaFire, AllManga, Manhwa18, 4KHD, Omega Scans. Mihon,
+Yokai and Tachimanga `.tachibk` backups import onto them.
 
 This is not an App Store app. It is sideloaded or built from source with your own signing
 identity.
@@ -72,27 +73,22 @@ not dependable in this environment; `typecheck.sh`'s header explains what fails 
 Models/Schema/     SchemaV1 — entries, chapters, history, categories, tracks, download queue
 Models/Enums/      Library filters, sorts, badges, display modes
 Features/          Library, Novel, MangaReader, Reader, Browse, History, Updates, More, Tracking
-Services/          Sources, Network, Extensions, Images, Backup, downloads, TTS
+Services/          Sources (Native/ holds every site), Network, Images, Backup, downloads, TTS
 Design/            Theme, control styles, shared view modifiers
 Utilities/         Date parsing, HTML/XML, ZIP, gzip
 tests/             Headless checks; scripts/check.sh compiles and runs them
 docs/              Status ledger, performance numbers, feature notes
 ```
 
-## Sources and extensions
+## Sources
 
-- `Resources/mangafire.js` and `Resources/allmanga.js` are copies of
-  `lnreader-extensions/extensions/<id>/<id>.js`, registered on launch by
-  `Services/Extensions/BundledExtensions.swift`. That repository is the source of truth; raise
-  `versionId` here when the copy changes. It is **private for now**, so the copies in
-  `Resources/` are what you can read.
-- The bundle-facing API is in `Services/Extensions/ExtensionContract.swift` — `http`, `dom`
-  and `webview`. `webview.capture` hands an extension a real browser for sites whose chapter
-  data only exists after client-side code runs.
-- `ExtensionRepoService` can install and update extensions from a repository without a
-  rebuild, but its UI is on hold — the two bundled sources are what you get today.
-  Transpiling Mihon/Kotlin extensions to JS is designed and on hold as well; see
-  `docs/MANGA_SUPPORT_PLAN.md`.
+- Each site is a `CatalogSource` in `Services/Sources/Native/`, registered by `NativeSources.all()`.
+  Fixing a site means changing its Swift file and reinstalling the app.
+- `scripts/try-native.sh` runs the sources against their live sites (`SOURCES=mangafire,ranobes`
+  to pick some). It needs network access and is not part of `scripts/check.sh all`.
+- The manga sources are ports of [keiyoushi/extensions-source](https://github.com/keiyoushi/extensions-source);
+  the novel sources are ports of the LNReader plugins. Mihon source ids are computed in
+  `NativeSourceIDs`, so a backup lands on the right source.
 
 ## Docs
 
@@ -130,5 +126,4 @@ About, and what the source was.
 
 ## Related repositories
 
-- `lnreader-extensions` — the JS source bundles. Private for now.
 - `lnreader-backend` — the narration pipeline and account services.

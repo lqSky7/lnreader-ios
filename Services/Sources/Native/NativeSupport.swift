@@ -4,24 +4,8 @@
 // (one `HTTPClient` path, so rate limits, cookies and Cloudflare handling stay shared) and parse
 // with SwiftSoup or `Codable`.
 
-import CryptoKit
 import Foundation
 import SwiftSoup
-
-// MARK: - Mihon identity
-
-/// Mihon's source id, so a `.tachibk` backup from Mihon, Yokai or Tachimanga lands on the native port.
-///
-/// Upstream derives it as the first eight bytes (big endian) of `md5("<lowercased name>/<lang>/<versionId>")`
-/// with the sign bit cleared. A few sources pin an id by hand instead; pass it to `NativeSources` directly.
-enum MihonSourceID {
-
-    static func make(name: String, lang: String, versionId: Int = 1) -> Int64 {
-        let digest = Insecure.MD5.hash(data: Data("\(name.lowercased())/\(lang)/\(versionId)".utf8))
-        let value = digest.prefix(8).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
-        return Int64(bitPattern: value & 0x7FFF_FFFF_FFFF_FFFF)
-    }
-}
 
 // MARK: - Site access
 
@@ -151,10 +135,4 @@ enum NativeSources {
             MangaFireSource(), AllMangaSource(), Manhwa18Source(), FourKHDSource(), OmegaScansSource(),
         ]
     }
-
-    /// Mihon source ids a backup may carry, mapped to the `builtin:` key that replaces them.
-    static let mihonIDs: [Int64: String] = [:]
-
-    /// Keys older builds stored, mapped to the native key. Read by `LegacySourceMigration` only.
-    static let legacyKeys: [String: String] = [:]
 }

@@ -8,7 +8,6 @@ import SwiftUI
 /// Tab bar automatically adopts Liquid Glass when compiled with Xcode 26.
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(PluginManager.self) private var pluginManager
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(SyncManager.self) private var syncManager
     @Environment(SourceManager.self) private var sourceManager
@@ -18,6 +17,8 @@ struct ContentView: View {
     @State private var readerRouter = ReaderRouter()
     /// Bumped when the History tab is tapped while already showing; resumes the top entry.
     @State private var historyResume = 0
+    /// Outcome of `LegacySourceMigration`, shown once.
+    @State private var migrationSummary: String?
 
     var body: some View {
         TabView(selection: Binding(
@@ -79,15 +80,11 @@ struct ContentView: View {
         }
         .task {
             await syncManager.loadSession()
-            // v2 source registry mirrors the installed LN plugins, and refreshes
-            // whenever one is installed or removed.
-            pluginManager.onInstalledSourcesChanged = { sourceManager.sync(with: pluginManager) }
-            await pluginManager.restoreInstalledPlugins()
-            sourceManager.sync(with: pluginManager)
-            // Extensions: ship MangaFire with the binary, then load whatever is
-            // installed (bundled or from a repository).
-            BundledExtensions.installMissing()
-            sourceManager.registerInstalledExtensions()
+            // Remove with LegacySourceMigration once it has run.
+            if let summary = LegacySourceMigration.runIfNeeded(context: modelContext) {
+                migrationSummary = summary.text
+            }
+            sourceManager.registerNativeSources()
             ChapterDownloadManager.shared.configure(context: modelContext, sources: sourceManager)
             LibraryMaintenance.schedule()
             // The HTTP stack gets its Cloudflare solver before any source is browsed.
@@ -100,6 +97,14 @@ struct ContentView: View {
                 try? await Task.sleep(for: .seconds(2))
                 await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager, automatic: true)
             }
+        }
+        .alert(
+            "Sources updated",
+            isPresented: Binding(get: { migrationSummary != nil }, set: { if !$0 { migrationSummary = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(migrationSummary ?? "")
         }
     }
 }

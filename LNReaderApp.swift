@@ -16,7 +16,6 @@ struct LNReaderApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(TTSAudioAppDelegate.self) private var audioDelegate
     #endif
-    @State private var pluginManager = PluginManager()
     @State private var libraryManager = LibraryManager()
     @State private var syncManager = SyncManager()
     @State private var sourceManager = SourceManager()
@@ -39,7 +38,6 @@ struct LNReaderApp: App {
         WindowGroup {
             ContentView()
                 .toggleStyle(AppToggleStyle())
-                .environment(pluginManager)
                 .environment(libraryManager)
                 .environment(syncManager)
                 .environment(sourceManager)

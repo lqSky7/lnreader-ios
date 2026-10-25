@@ -13,8 +13,9 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
   means used on an iPhone. Downloads, update scheduling, backup/restore and narration have
   never run on a device. Do not report a feature as working from a typecheck alone, and do not
   edit the docs to say it is. [V2_PROGRESS]
-- **Some areas are on hold by the user's decision:** the extension repo UI, the Kotlin/JS
-  transpiler, v1 migration. Do not start them. [V2_PROGRESS]
+- **Some areas are on hold by the user's decision:** v1 migration. Do not start it. The JS
+  bridge, extension repos and Kotlin/JS transpiler were removed; do not bring them back.
+  [V2_PROGRESS]
 - `docs/UI_AUDIT.md` and `docs/TTS_REVAMP_PLAN.md` are historical records. Narration is
   Breeze TTS 2, not Qwen. [V2_PROGRESS]
 
@@ -98,7 +99,9 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 
 - Every source is a `CatalogSource` (`NovelSource` / `MangaSource`) in
   `Services/Sources/CatalogSource.swift`; `SourceManager` is the registry.
-- `JSExtensionHost` is synchronous by design: the JS thread blocks during `http.get` and
-  `webview.capture`. Do not make the bridge async.
-- Page images never go through JS; the source returns a `URLRequest` and Swift downloads.
+- Sources are native Swift in `Services/Sources/Native/`, keyed `builtin:<id>`. A new one is a
+  file there, an entry in `NativeSources.all()`, and (manga) its Mihon id in `NativeSourceIDs`.
+  `scripts/try-native.sh` runs it against the live site.
+- Entry and chapter urls are persisted, so a source keeps returning the shape it always did.
+- The source returns a `URLRequest` for each page image and Swift downloads it.
 - MangaFire's "token" is upstream code ported byte for byte, not a secret.

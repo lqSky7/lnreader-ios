@@ -1,14 +1,11 @@
-// WebViewCapture.swift - Lets an extension bundle borrow a real browser engine.
+// WebViewCapture.swift - Lets a native source borrow a real browser engine.
 //
-// Some sources (AllManga) hide their image list behind client-side code that
-// only a browser can run: the page boots a crypto handshake, then asks its API
-// for the chapter. Upstream Mihon extensions solve that with a WebView that
-// loads the site and listens for the payload. A JS bundle cannot hold a WebView,
-// so the host does it and hands back the first message the page posts.
-//
-// The bundle-facing surface is `webview.capture(options)` (see
-// ExtensionContract.prelude). It is synchronous like `http.get`: the JS thread
-// blocks on a semaphore while the web view works on the main actor.
+// Some sources (AllManga) hide their image list behind client-side code that only a browser can
+// run: the page boots a crypto handshake, then asks its API for the chapter. Upstream Mihon
+// extensions solve that with a WebView that loads the site and listens for the payload. A source
+// calls `WebViewCapture.capture(_:)`; the session loads the page on the main actor and hands back
+// the first message the page posts through `window.__lnrPost`. When the site asks a human to
+// verify, the web view is shown in a sheet so they can.
 
 import Foundation
 import WebKit
@@ -18,12 +15,12 @@ import UIKit
 import AppKit
 #endif
 
-/// What a bundle asks the web view to do. Decoded from the JSON the bundle passes.
-struct WebViewCaptureOptions: Decodable, Sendable {
+/// What a source asks the web view to do.
+struct WebViewCaptureOptions: Sendable {
     /// Document URL. Also the base URL when `html` is supplied.
     var url: String
-    /// Load this markup instead of fetching `url`, so the bundle controls what
-    /// the page starts from (cookies and headers the bundle already holds).
+    /// Load this markup instead of fetching `url`, so the source controls what
+    /// the page starts from (cookies and headers it already holds).
     var html: String?
     var userAgent: String?
     /// Run at document start, in every frame, before any page script.
@@ -40,8 +37,30 @@ struct WebViewCaptureOptions: Decodable, Sendable {
     /// Title for the sheet the user sees.
     var challengeTitle: String?
     /// Print the page's console output, script errors and failed requests to
-    /// stdout. For developing a bundle; never set in a shipped one.
+    /// stdout. For developing a source; never set in a shipped one.
     var debug: Bool?
+
+    init(
+        url: String,
+        html: String? = nil,
+        userAgent: String? = nil,
+        startScripts: [String]? = nil,
+        blockImages: Bool? = nil,
+        timeoutMs: Int? = nil,
+        challengeScript: String? = nil,
+        challengeTitle: String? = nil,
+        debug: Bool? = nil
+    ) {
+        self.url = url
+        self.html = html
+        self.userAgent = userAgent
+        self.startScripts = startScripts
+        self.blockImages = blockImages
+        self.timeoutMs = timeoutMs
+        self.challengeScript = challengeScript
+        self.challengeTitle = challengeTitle
+        self.debug = debug
+    }
 }
 
 enum WebViewCapture {
@@ -54,7 +73,7 @@ enum WebViewCapture {
 
         var errorDescription: String? {
             switch self {
-            case .badOptions: "webview.capture received unreadable options"
+            case .badOptions: "The page address was not valid"
             case .timedOut: "The page did not produce a result in time"
             case .blocked(let message): message
             case .navigation(let message): message
@@ -62,54 +81,15 @@ enum WebViewCapture {
         }
     }
 
-    /// Blocking entry for the JS thread. Always returns JSON: `{"message":…}`
-    /// on success, `{"error":…}` otherwise.
-    static func captureBlocking(optionsJSON: String) -> String {
-        guard let data = optionsJSON.data(using: .utf8),
-              let options = try? JSONDecoder().decode(WebViewCaptureOptions.self, from: data)
-        else {
-            return failure(CaptureError.badOptions.localizedDescription)
-        }
-
-        let timeout = Double(options.timeoutMs ?? 20_000) / 1000
-        let semaphore = DispatchSemaphore(value: 0)
-        let box = Box()
-
-        Task { @MainActor in
-            defer { semaphore.signal() }
+    /// Loads the page and returns the first string it posts through `window.__lnrPost`.
+    ///
+    /// Runs on the main actor; the caller may be anywhere. Throws `CaptureError` on timeout,
+    /// navigation failure, or a verification the user did not complete.
+    static func capture(_ options: WebViewCaptureOptions) async throws -> String {
+        try await Task { @MainActor in
             if options.debug == true { print("[webview] session starting") }
-            do {
-                let message = try await Session(options: options).run()
-                box.set(["message": message])
-            } catch {
-                box.set(["error": error.localizedDescription])
-            }
-        }
-
-        // Slack on top of the in-session timeout so the session reports first.
-        if semaphore.wait(timeout: .now() + timeout + Session.challengeAllowance + 10) == .timedOut {
-            return failure(CaptureError.timedOut.localizedDescription)
-        }
-        guard let result = box.get(),
-              JSONSerialization.isValidJSONObject(result),
-              let encoded = try? JSONSerialization.data(withJSONObject: result),
-              let string = String(data: encoded, encoding: .utf8)
-        else {
-            return failure("no result")
-        }
-        return string
-    }
-
-    private static func failure(_ message: String) -> String {
-        let escaped = message.replacingOccurrences(of: "\"", with: "'")
-        return "{\"error\":\"\(escaped)\"}"
-    }
-
-    private final class Box: @unchecked Sendable {
-        private let lock = NSLock()
-        private var value: [String: String]?
-        func set(_ new: [String: String]) { lock.lock(); value = new; lock.unlock() }
-        func get() -> [String: String]? { lock.lock(); defer { lock.unlock() }; return value }
+            return try await Session(options: options).run()
+        }.value
     }
 
     // MARK: - Session

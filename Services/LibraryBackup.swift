@@ -142,8 +142,9 @@ enum LibraryBackup {
         }
         let existing = try context.fetch(FetchDescriptor<Entry>())
         for book in snapshot.entries {
-            let found = existing.first { $0.sourceKey == book.sourceKey && $0.url == book.url }
-            let entry = found ?? Entry(kind: book.kind, sourceKey: book.sourceKey, url: book.url, title: book.title)
+            let sourceKey = SourceKey.canonical(book.sourceKey)
+            let found = existing.first { $0.sourceKey == sourceKey && $0.url == book.url }
+            let entry = found ?? Entry(kind: book.kind, sourceKey: sourceKey, url: book.url, title: book.title)
             if found == nil {
                 context.insert(entry); entry.author = book.author; entry.artist = book.artist; entry.summary = book.summary
                 entry.genres = book.genres; entry.status = book.status; entry.thumbnailURL = book.thumbnail

@@ -233,7 +233,7 @@ enum MihonBackup {
         var merged = 0
         var chapters = 0
         var categories = 0
-        /// Titles whose source is not one of the bundled extensions, by source name.
+        /// Titles whose source has no native port, by source name.
         var unmatchedSources: [String: Int] = [:]
         var skipped = 0
     }
@@ -243,7 +243,7 @@ enum MihonBackup {
         var matched = 0
         var unmatched: [String: Int] = [:]
         for manga in backup.manga {
-            if BundledExtensions.mihonSourceIDs[manga.source] != nil {
+            if NativeSourceIDs.mihon[manga.source] != nil {
                 matched += 1
             } else {
                 unmatched[backup.sourceNames[manga.source] ?? "Source \(manga.source)", default: 0] += 1
@@ -256,11 +256,8 @@ enum MihonBackup {
 
     /// `sourceKey` an imported title is stored under.
     static func sourceKey(forSource id: Int64) -> String {
-        if let pkg = BundledExtensions.mihonSourceIDs[id] {
-            return SourceKey.make(kind: .manga, id: pkg)
-        }
-        // Not installed: keep the Mihon id so it resolves when a matching
-        // extension arrives, and so the title is not silently lost.
+        if let key = NativeSourceIDs.mihon[id] { return key }
+        // No native port: keep the Mihon id so the title is not silently lost.
         return SourceKey.make(kind: .manga, id: String(id))
     }
 
@@ -312,7 +309,7 @@ enum MihonBackup {
                 continue
             }
             let key = sourceKey(forSource: manga.source)
-            if BundledExtensions.mihonSourceIDs[manga.source] == nil {
+            if NativeSourceIDs.mihon[manga.source] == nil {
                 summary.unmatchedSources[backup.sourceNames[manga.source] ?? "Source \(manga.source)", default: 0] += 1
             }
 

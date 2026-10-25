@@ -69,11 +69,9 @@ import UserNotifications
             if !downloadsOnly, !UserDefaults.standard.bool(forKey: "updates.backgroundEnabled") {
                 task.setTaskCompleted(success: true); return
             }
-            let plugins = PluginManager()
             await HTTPClient.shared.setCloudflareSolver(WebKitCloudflareSolver())
-            await plugins.restoreInstalledPlugins()
             let sources = SourceManager()
-            sources.sync(with: plugins); sources.registerInstalledExtensions()
+            sources.registerNativeSources()
             let context = ModelContext(container)
             let started = Date()
             if !downloadsOnly {
