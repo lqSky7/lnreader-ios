@@ -15,6 +15,8 @@ final class Manhwa18Source: MangaSource {
     let kind = ContentKind.manga
     let name = "Manhwa18"
     let lang = "en"
+    let iconAsset: String? = "Manhwa18Icon"
+    let isAdult = true
     let supportsLatest = true
 
     private let site = SiteClient(

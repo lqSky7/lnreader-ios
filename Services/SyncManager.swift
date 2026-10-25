@@ -228,9 +228,8 @@ final class SyncManager {
         }
 
         for remoteNovel in data.library {
-            // The wire format still uses the v1 `pluginId`; v2 stores the prefixed source key,
-            // mapped to the native source that replaced the plugin.
-            let sourceKey = SourceKey.canonical(SourceKey.make(kind: .novel, id: remoteNovel.pluginId))
+            // The wire format still calls the source id `pluginId`; v2 stores the prefixed source key.
+            let sourceKey = SourceKey.makeBuiltin(id: remoteNovel.pluginId)
             let path = remoteNovel.path
             let predicate = #Predicate<Entry> { $0.url == path && $0.sourceKey == sourceKey }
             let existing = try context.fetch(FetchDescriptor(predicate: predicate)).first

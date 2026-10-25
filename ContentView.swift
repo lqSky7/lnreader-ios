@@ -17,8 +17,6 @@ struct ContentView: View {
     @State private var readerRouter = ReaderRouter()
     /// Bumped when the History tab is tapped while already showing; resumes the top entry.
     @State private var historyResume = 0
-    /// Outcome of `LegacySourceMigration`, shown once.
-    @State private var migrationSummary: String?
 
     var body: some View {
         TabView(selection: Binding(
@@ -80,10 +78,6 @@ struct ContentView: View {
         }
         .task {
             await syncManager.loadSession()
-            // Remove with LegacySourceMigration once it has run.
-            if let summary = LegacySourceMigration.runIfNeeded(context: modelContext) {
-                migrationSummary = summary.text
-            }
             sourceManager.registerNativeSources()
             ChapterDownloadManager.shared.configure(context: modelContext, sources: sourceManager)
             LibraryMaintenance.schedule()
@@ -97,14 +91,6 @@ struct ContentView: View {
                 try? await Task.sleep(for: .seconds(2))
                 await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager, automatic: true)
             }
-        }
-        .alert(
-            "Sources updated",
-            isPresented: Binding(get: { migrationSummary != nil }, set: { if !$0 { migrationSummary = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(migrationSummary ?? "")
         }
     }
 }

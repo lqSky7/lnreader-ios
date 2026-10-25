@@ -5,7 +5,7 @@ reader for novels, a pager and webtoon viewer for manga, chapter downloads that 
 AniList tracking, and on-device narration.
 
 Every source is native Swift, compiled into the app. Light novels: Novel Fire, Novel Phoenix,
-Ranobes, Free Web Novel. Manga: MangaFire, AllManga, Manhwa18, 4KHD, Omega Scans. Mihon,
+Free Web Novel. Manga: MangaFire, AllManga, Manhwa18, 4KHD, Omega Scans. Mihon,
 Yokai and Tachimanga `.tachibk` backups import onto them.
 
 This is not an App Store app. It is sideloaded or built from source with your own signing
@@ -84,7 +84,7 @@ docs/              Status ledger, performance numbers, feature notes
 
 - Each site is a `CatalogSource` in `Services/Sources/Native/`, registered by `NativeSources.all()`.
   Fixing a site means changing its Swift file and reinstalling the app.
-- `scripts/try-native.sh` runs the sources against their live sites (`SOURCES=mangafire,ranobes`
+- `scripts/try-native.sh` runs the sources against their live sites (`SOURCES=mangafire,novelfire`
   to pick some). It needs network access and is not part of `scripts/check.sh all`.
 - The manga sources are ports of [keiyoushi/extensions-source](https://github.com/keiyoushi/extensions-source);
   the novel sources are ports of the LNReader plugins. Mihon source ids are computed in

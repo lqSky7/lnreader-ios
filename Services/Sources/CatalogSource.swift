@@ -22,6 +22,8 @@ protocol CatalogSource: Identifiable, Sendable {
     var iconAsset: String? { get }
     /// Whether the source has a distinct "latest" listing.
     var supportsLatest: Bool { get }
+    /// Whether the whole source is adult content; Browse marks it with an 18+ chip.
+    var isAdult: Bool { get }
 
     // MARK: Browsing
 
@@ -44,6 +46,7 @@ extension CatalogSource {
     var iconURL: String? { nil }
     var iconAsset: String? { nil }
     var supportsLatest: Bool { false }
+    var isAdult: Bool { false }
 
     func filters() async throws -> [SourceFilter] { [] }
 

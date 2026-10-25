@@ -39,7 +39,7 @@ compile_and_run_plain() {
 # The checks that take no arguments, in dependency order: the cheap layers
 # first, so a break in the foundation shows up before the expensive ones run.
 PLAIN_CHECKS="foundation schema chapter-sync page-pipeline scanlators \
-reader-settings haptics filters sorts categories badges offline mihon-backup source-migration tts-contracts"
+reader-settings haptics filters sorts categories badges offline mihon-backup tts-contracts"
 
 usage() {
   cat <<'USAGE'
@@ -50,7 +50,7 @@ all                run every check that takes no arguments
 <check>            run one check
 
 Checks: foundation schema chapter-sync page-pipeline scanlators reader-settings
-        haptics filters sorts categories badges offline mihon-backup source-migration tts-contracts
+        haptics filters sorts categories badges offline mihon-backup tts-contracts
         native-comments player
 
 Checks needing setup, not part of `all`:
@@ -166,7 +166,6 @@ run() {
         Models/UserProfile.swift \
         Services/Sources/SourceKey.swift \
         Services/Sources/SourceModels.swift \
-        Services/Sources/Native/NativeSourceIDs.swift \
         Services/LibraryBackup.swift \
         Services/OfflineChapters.swift \
         tests/OfflineLibraryChecks.swift
@@ -186,22 +185,6 @@ run() {
         Services/Backup/MihonBackup.swift \
         Utilities/Gzip.swift \
         tests/MihonBackupChecks.swift
-      ;;
-    source-migration)
-      compile_and_run source-migration \
-        Models/Schema/ContentKind.swift \
-        Models/Schema/EntryStatus.swift \
-        Models/Schema/UpdateStrategy.swift \
-        Models/Schema/DownloadState.swift \
-        Models/Schema/SchemaV1.swift \
-        Models/Schema/SchemaMigrationPlan.swift \
-        Models/UserProfile.swift \
-        Services/Sources/SourceKey.swift \
-        Services/Sources/Native/NativeSourceIDs.swift \
-        Services/Sources/SourceModels.swift \
-        Services/OfflineChapters.swift \
-        Services/Migration/LegacySourceMigration.swift \
-        tests/SourceMigrationChecks.swift
       ;;
     tts-contracts)
       compile_and_run_plain tts-contracts \

@@ -7,6 +7,7 @@ final class NovelFireSource: NovelSource {
     let kind = ContentKind.novel
     let name = "Novel Fire"
     let lang = "English"
+    let iconAsset: String? = "NovelFireIcon"
     let supportsLatest = true
 
     private let engine = NovelFireEngine(

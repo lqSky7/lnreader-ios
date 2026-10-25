@@ -131,7 +131,7 @@ enum NativeSources {
     /// The sources, in the order Browse lists them within a kind.
     static func all() -> [any CatalogSource] {
         [
-            NovelFireSource(), NovelPhoenixSource(), RanobesSource(), FreeWebNovelSource(),
+            NovelFireSource(), NovelPhoenixSource(), FreeWebNovelSource(),
             MangaFireSource(), AllMangaSource(), Manhwa18Source(), FourKHDSource(), OmegaScansSource(),
         ]
     }

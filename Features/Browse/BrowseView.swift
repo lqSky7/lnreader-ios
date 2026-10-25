@@ -156,9 +156,12 @@ struct BrowseView: View {
             SourceIconView(source: source, size: 44)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(source.name)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(source.name)
+                        .font(.body.weight(.medium))
+                        .lineLimit(1)
+                    if source.isAdult { adultChip }
+                }
                 Text(sourceSubtitle(source))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -166,6 +169,16 @@ struct BrowseView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private var adultChip: some View {
+        Text("18+")
+            .font(Typography.small.weight(.bold))
+            .foregroundStyle(AppTheme.destructive)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(AppTheme.destructive.opacity(0.15), in: Capsule())
+            .accessibilityLabel("Adult content")
     }
 
     private func sourceSubtitle(_ source: any CatalogSource) -> String {

@@ -186,7 +186,6 @@ struct MihonBackupChecks {
         expect(NativeSourceIDs.mihon[4_709_139_914_729_853_090] == "builtin:allmanga", "AllManga id")
         expect(MihonSourceID.make(name: "allanime", lang: "en") == 4_709_139_914_729_853_090, "AllManga id derives from allanime")
         expect(NativeSourceIDs.mihon.count == 5, "five native manga sources carry a Mihon id")
-        expect(SourceKey.canonical("ln:FWN.com") == "builtin:freewebnovel" && SourceKey.canonical("local") == "local", "legacy keys map")
 
         let context = ModelContext(container)
         let entries = try context.fetch(FetchDescriptor<Entry>())

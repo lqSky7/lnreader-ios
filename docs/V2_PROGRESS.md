@@ -27,8 +27,7 @@ backup/restore and narration are built but have never been exercised on a device
 | Novel read path | **Verified** | Library, detail, chapter list, web reader, history, updates, stats |
 | Manga read path | **Verified** | Pager + webtoon, cache, prefetch, progress; all reader gestures checked on device |
 | Source abstraction | **Built** | `CatalogSource` / `NovelSource` / `MangaSource`; `SourceManager` registry |
-| Native sources | **Built** | Light novels: Novel Fire, Novel Phoenix, Ranobes, Free Web Novel. Manga: MangaFire, AllManga, Manhwa18, 4KHD, Omega Scans (ported from keiyoushi). All pass `scripts/try-native.sh` against the live sites; none used on a device yet |
-| Source key migration | **Built** | `LegacySourceMigration` moves `ln:`/`mihon:` keys to `builtin:` once at launch; delete it after it has run on the owner's device. Headless check `source-migration` |
+| Native sources | **Built** | Light novels: Novel Fire, Novel Phoenix, Free Web Novel. Manga: MangaFire, AllManga, Manhwa18, 4KHD, Omega Scans (ported from keiyoushi). All pass `scripts/try-native.sh` against the live sites; none used on a device yet |
 | Chapter lists | **Built** | Number ordering, all-chapters for manga, scanlator priority |
 | Browse | **Built** | Split into Light Novels / Manga; native search, glass switcher |
 | Downloads | **Built** | Novel text and manga pages, durable queue, offline reader paths, pause/retry/remove, Wi-Fi and storage guards. Not exercised on a device |
@@ -220,7 +219,6 @@ Offline checks (no device, no network):
 | `check.sh chapter-sync` | Chapter parsing (40 Yokai cases), merge, delete guard |
 | `check.sh page-pipeline` | Cache LRU, loader dedupe, prefetch order, progress |
 | `check.sh scanlators` | Dedup/hide rules, hidden-winner fallback |
-| `check.sh source-migration` | The `ln:`/`mihon:` → `builtin:` key migration: entries, downloads, settings, clashes |
 | `scripts/try-native.sh` | Every native source against its live site (network; not part of `all`) |
 | `check.sh reader-settings` | Per-series reader settings: resolution, persistence, reset, make default |
 | `check.sh offline` | Backup encryption, rejection/merge rules, durable manifests, manual vs automatic update policy |

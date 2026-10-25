@@ -7,9 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CCE8190414892709E416C791 /* LegacySourceMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2B342AD7FBFC843EA6D71A /* LegacySourceMigration.swift */; };
 		3FD8ED1A52F11F14302BEC1C /* WebViewCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D7107F537AFC5915A42C0BC /* WebViewCapture.swift */; };
-		F31A6F8875CE97250717C7B5 /* RanobesSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFCE5054AB0655D9CB8AEBC /* RanobesSource.swift */; };
 		0E81C8622310F65C28D7D9B4 /* OmegaScansSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFC737D4CC39E892D03BD2F /* OmegaScansSource.swift */; };
 		6F29897283D90B2944E3D69B /* NovelPhoenixSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B5697954043B01F054A9A5 /* NovelPhoenixSource.swift */; };
 		E9B8AF41EECD1EE578EC3999 /* NovelFireSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC166F87E5D9E67432F6F298 /* NovelFireSource.swift */; };
@@ -175,9 +173,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		ED2B342AD7FBFC843EA6D71A /* LegacySourceMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySourceMigration.swift; sourceTree = "<group>"; };
 		8D7107F537AFC5915A42C0BC /* WebViewCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewCapture.swift; sourceTree = "<group>"; };
-		8EFCE5054AB0655D9CB8AEBC /* RanobesSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RanobesSource.swift; sourceTree = "<group>"; };
 		FCFC737D4CC39E892D03BD2F /* OmegaScansSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmegaScansSource.swift; sourceTree = "<group>"; };
 		E2B5697954043B01F054A9A5 /* NovelPhoenixSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelPhoenixSource.swift; sourceTree = "<group>"; };
 		BC166F87E5D9E67432F6F298 /* NovelFireSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireSource.swift; sourceTree = "<group>"; };
@@ -537,7 +533,6 @@
 		7191043716F4CF4E3B9A7046 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				77A417A7616F8103A5837B5E /* Migration */,
 				CA609549517104028BBED534 /* Tracking/TrackingManager.swift */,
 				EC1FF6B73F774BA6649459BC /* Tracking/AniListClient.swift */,
 				2134FC9B8F314414383E3D90 /* TTSAudioAppDelegate.swift */,
@@ -727,18 +722,9 @@
 				BC166F87E5D9E67432F6F298 /* NovelFireSource.swift */,
 				E2B5697954043B01F054A9A5 /* NovelPhoenixSource.swift */,
 				FCFC737D4CC39E892D03BD2F /* OmegaScansSource.swift */,
-				8EFCE5054AB0655D9CB8AEBC /* RanobesSource.swift */,
 				8D7107F537AFC5915A42C0BC /* WebViewCapture.swift */,
 			);
 			path = Native;
-			sourceTree = "<group>";
-		};
-		77A417A7616F8103A5837B5E /* Migration */ = {
-			isa = PBXGroup;
-			children = (
-				ED2B342AD7FBFC843EA6D71A /* LegacySourceMigration.swift */,
-			);
-			path = Migration;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -820,9 +806,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CCE8190414892709E416C791 /* LegacySourceMigration.swift in Sources */,
 				3FD8ED1A52F11F14302BEC1C /* WebViewCapture.swift in Sources */,
-				F31A6F8875CE97250717C7B5 /* RanobesSource.swift in Sources */,
 				0E81C8622310F65C28D7D9B4 /* OmegaScansSource.swift in Sources */,
 				6F29897283D90B2944E3D69B /* NovelPhoenixSource.swift in Sources */,
 				E9B8AF41EECD1EE578EC3999 /* NovelFireSource.swift in Sources */,

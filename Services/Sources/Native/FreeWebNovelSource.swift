@@ -10,6 +10,7 @@ final class FreeWebNovelSource: NovelSource {
     let kind = ContentKind.novel
     let name = "Free Web Novel"
     let lang = "English"
+    let iconAsset: String? = "FreeWebNovelIcon"
     let supportsLatest = true
 
     private let engine = FreeWebNovelEngine(.init(

@@ -15,6 +15,8 @@ final class FourKHDSource: MangaSource {
     let kind = ContentKind.manga
     let name = "4KHD"
     let lang = "all"
+    let iconAsset: String? = "FourKHDIcon"
+    let isAdult = true
     let supportsLatest = true
 
     private let site = SiteClient(

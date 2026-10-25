@@ -3,7 +3,7 @@
 # Needs network access; not part of the offline check suite.
 #
 #   scripts/try-native.sh                      every source
-#   SOURCES=mangafire,ranobes scripts/try-native.sh
+#   SOURCES=mangafire,novelfire scripts/try-native.sh
 #   QUERY=term                                 change the search term
 #   EXTRA="Path/One.swift Path/Two.swift"      app files a source needs beyond the defaults
 set -eu

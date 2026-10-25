@@ -18,6 +18,7 @@ final class AllMangaSource: MangaSource {
     let kind = ContentKind.manga
     let name = "AllManga"
     let lang = "en"
+    let iconAsset: String? = "AllMangaIcon"
     let supportsLatest = true
 
     private static let base = "https://mkissa.to"

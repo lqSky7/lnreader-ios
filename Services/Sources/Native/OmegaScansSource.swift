@@ -14,6 +14,8 @@ final class OmegaScansSource: MangaSource {
     let kind = ContentKind.manga
     let name = "Omega Scans"
     let lang = "en"
+    let iconAsset: String? = "OmegaScansIcon"
+    let isAdult = true
     let supportsLatest = true
 
     private let engine = HeanCmsEngine(
