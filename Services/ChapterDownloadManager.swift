@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import ImageIO
 import SwiftData
 import UIKit
 
@@ -14,6 +15,41 @@ final class ChapterDownloadManager {
     private var backgroundID: UIBackgroundTaskIdentifier = .invalid
     var isRunning = false
     var message: String?
+    /// Live per-page progress for the running item. Held in memory because every
+    /// `save()` re-runs every `@Query` in the app; a per-page save made the whole
+    /// UI stutter for as long as a manga chapter was downloading.
+    private(set) var liveProgress: [String: Double] = [:]
+    /// Every item's state keyed by chapter, so a chapter row reads its own state in
+    /// O(1) and updates the moment the queue changes, without a model lookup.
+    private(set) var states: [String: DownloadState] = [:]
+
+    static func key(sourceKey: String, entryURL: String, chapterURL: String) -> String {
+        "\(sourceKey)\u{1F}\(entryURL)\u{1F}\(chapterURL)"
+    }
+    private func key(_ item: DownloadItem) -> String? {
+        guard let chapter = item.chapter, let entry = chapter.entry else { return nil }
+        return Self.key(sourceKey: entry.sourceKey, entryURL: entry.url, chapterURL: chapter.url)
+    }
+    private func set(_ item: DownloadItem, _ state: DownloadState) {
+        item.state = state
+        if let key = key(item) { states[key] = state }
+    }
+
+    func progress(of item: DownloadItem) -> Double {
+        key(item).flatMap { liveProgress[$0] } ?? item.progress
+    }
+
+    func status(sourceKey: String, entryURL: String, chapterURL: String, downloaded: Bool) -> ChapterDownloadStatus {
+        let key = Self.key(sourceKey: sourceKey, entryURL: entryURL, chapterURL: chapterURL)
+        switch states[key] {
+        case .none: return downloaded ? .downloaded : .none
+        case .queued: return .queued
+        case .downloading: return .downloading(liveProgress[key] ?? 0)
+        case .paused: return .paused
+        case .failed: return .failed
+        case .completed: return .downloaded
+        }
+    }
 
     func configure(context: ModelContext, sources: SourceManager) {
         guard self.context == nil else { resume(); return }
@@ -26,11 +62,14 @@ final class ChapterDownloadManager {
         do {
             for item in try context.fetch(FetchDescriptor<DownloadItem>()) {
                 guard let chapter = item.chapter, let entry = chapter.entry else { context.delete(item); continue }
-                if item.state == .downloading { item.state = .queued }
+                if item.state == .downloading { set(item, .queued) }
                 if item.state == .completed,
                    OfflineChapters.manifest(sourceKey: entry.sourceKey, entryURL: entry.url, chapterURL: chapter.url) == nil {
-                    item.state = .failed; item.error = "Offline files are missing. Retry this download."
+                    set(item, .failed); item.error = "Offline files are missing. Retry this download."
                 }
+            }
+            for item in try context.fetch(FetchDescriptor<DownloadItem>()) {
+                if let key = key(item) { states[key] = item.state }
             }
             try context.save()
             resume()
@@ -39,17 +78,20 @@ final class ChapterDownloadManager {
     func enqueue(_ chapters: [Chapter], userInitiated: Bool = true) {
         guard let context else { return }
         do {
-            var order = (try context.fetch(FetchDescriptor<DownloadItem>())).map(\.order).max() ?? 0
+            var lastOrder = FetchDescriptor<DownloadItem>(sortBy: [SortDescriptor(\.order, order: .reverse)])
+            lastOrder.fetchLimit = 1
+            var order = (try context.fetch(lastOrder)).first?.order ?? 0
             for incoming in chapters.sorted(by: { $0.chapterNumber == $1.chapterNumber ? $0.sourceOrder < $1.sourceOrder : $0.chapterNumber < $1.chapterNumber }) {
                 guard let chapter = context.model(for: incoming.persistentModelID) as? Chapter,
                       chapter.entry?.isLocal == false else { continue }
                 if let item = chapter.downloadItem {
                     if item.state == .completed || item.state == .downloading { continue }
-                    item.state = .queued; item.error = nil
+                    set(item, .queued); item.error = nil
                 } else {
                     order += 1
                     let item = DownloadItem(chapter: chapter, order: order)
                     context.insert(item); chapter.downloadItem = item
+                    set(item, .queued)
                 }
             }
             try context.save()
@@ -60,7 +102,7 @@ final class ChapterDownloadManager {
         } catch { message = error.localizedDescription }
     }
     func pause(_ item: DownloadItem) {
-        item.state = .paused
+        set(item, .paused)
         if active == item.persistentModelID {
             let stopping = worker
             stopping?.cancel()
@@ -69,12 +111,12 @@ final class ChapterDownloadManager {
         persist()
     }
     func retry(_ item: DownloadItem) {
-        item.state = .queued; item.error = nil; persist(); resume()
+        set(item, .queued); item.error = nil; persist(); resume()
     }
     func remove(_ item: DownloadItem) {
         guard let context else { return }
         if active == item.persistentModelID {
-            item.state = .paused; worker?.cancel()
+            set(item, .paused); worker?.cancel()
             persist()
             let stopping = worker
             Task { [weak self] in
@@ -85,6 +127,7 @@ final class ChapterDownloadManager {
             return
         }
         do {
+            if let key = key(item) { states[key] = nil; liveProgress[key] = nil }
             if let chapter = item.chapter, let entry = chapter.entry {
                 let folder = OfflineChapters.folder(sourceKey: entry.sourceKey, entryURL: entry.url, chapterURL: chapter.url)
                 if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
@@ -117,18 +160,21 @@ final class ChapterDownloadManager {
                     let items = try context.fetch(FetchDescriptor<DownloadItem>(sortBy: [SortDescriptor(\.order)]))
                     guard let item = items.first(where: { $0.state == .queued }), let chapter = item.chapter,
                           let entry = chapter.entry else { break }
-                    active = item.persistentModelID; item.state = .downloading; item.error = nil
-                    try context.save()
+                    // No save here: `configure` requeues stale `.downloading` rows, and the
+                    // outcome below is saved. A save per chapter re-ran every `@Query`.
+                    active = item.persistentModelID; set(item, .downloading); item.error = nil
                     do {
                         try await download(chapter, entry: entry, item: item, sources: sources)
                         try Task.checkCancellation()
                         guard item.modelContext != nil else { continue }
-                        item.state = .completed; item.progress = 1
+                        set(item, .completed); item.progress = 1
+                        if let key = key(item) { liveProgress[key] = nil }
                     } catch {
                         guard item.modelContext != nil else { continue }
-                        if Task.isCancelled { if item.state == .downloading { item.state = .queued } }
-                        else { item.state = .failed; item.error = error.localizedDescription }
+                        if Task.isCancelled { if item.state == .downloading { set(item, .queued) } }
+                        else { set(item, .failed); item.error = error.localizedDescription }
                     }
+                    if item.modelContext != nil, let key = key(item) { liveProgress[key] = nil }
                     try context.save(); active = nil
                 }
             } catch { message = error.localizedDescription }
@@ -152,7 +198,8 @@ final class ChapterDownloadManager {
             let html = try await source.chapterHTML(sourceChapter)
             try Task.checkCancellation()
             guard !html.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
-            try Data(html.utf8).write(to: folder.appendingPathComponent("chapter.html"), options: .atomic)
+            let target = folder.appendingPathComponent("chapter.html")
+            try await Task.detached(priority: .utility) { try Data(html.utf8).write(to: target, options: .atomic) }.value
             files = ["chapter.html"]
         } else {
             guard let source = sources.mangaSource(forKey: entry.sourceKey) else { throw CocoaError(.fileNoSuchFile) }
@@ -167,10 +214,16 @@ final class ChapterDownloadManager {
                 let imagePage = SourcePage(index: index, url: url.absoluteString, headers: request.allHTTPHeaderFields ?? [:])
                 let data = try await loader.image(for: imagePage, sourceKey: entry.sourceKey)
                 guard item.modelContext != nil else { throw CancellationError() }
-                guard UIImage(data: data) != nil else { throw CocoaError(.fileReadCorruptFile) }
                 let name = String(format: "%06d.page", index)
-                try data.write(to: folder.appendingPathComponent(name), options: .atomic)
-                files.append(name); item.progress = Double(index + 1) / Double(pages.count); persist()
+                let target = folder.appendingPathComponent(name)
+                // Header check and file write off the main actor; neither needs a decode.
+                try await Task.detached(priority: .utility) {
+                    guard let probe = CGImageSourceCreateWithData(data as CFData, nil),
+                          CGImageSourceGetCount(probe) > 0 else { throw CocoaError(.fileReadCorruptFile) }
+                    try data.write(to: target, options: .atomic)
+                }.value
+                files.append(name)
+                if let key = key(item) { liveProgress[key] = Double(index + 1) / Double(pages.count) }
             }
         }
         try Task.checkCancellation()
@@ -181,4 +234,83 @@ final class ChapterDownloadManager {
         let free = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage ?? 0
         guard free > 200 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
     }
+
+    // MARK: Queue and per-title actions
+
+    /// Items still to do, in the order they will run.
+    private func pending() -> [DownloadItem] {
+        guard let context else { return [] }
+        let all = (try? context.fetch(FetchDescriptor<DownloadItem>(sortBy: [SortDescriptor(\.order)]))) ?? []
+        return all.filter { $0.state != .completed }
+    }
+
+    func storedItem(_ chapterURL: String, in entry: Entry) -> DownloadItem? {
+        entry.chapters.first { $0.url == chapterURL }?.downloadItem
+    }
+
+    func download(_ chapterURL: String, in entry: Entry) {
+        guard let chapter = entry.chapters.first(where: { $0.url == chapterURL }) else { return }
+        enqueue([chapter])
+    }
+
+    /// The next `count` unread chapters that are not already downloaded, oldest first;
+    /// `nil` means every unread one.
+    func enqueueUnread(_ count: Int?, in entry: Entry) {
+        let candidates = entry.chapters
+            .filter { !$0.read && !$0.isDownloaded }
+            .sorted { $0.chapterNumber == $1.chapterNumber ? $0.sourceOrder < $1.sourceOrder : $0.chapterNumber < $1.chapterNumber }
+        enqueue(count.map { Array(candidates.prefix($0)) } ?? candidates)
+    }
+
+    func deleteDownloads(in entry: Entry) {
+        for item in entry.chapters.compactMap(\.downloadItem) { remove(item) }
+    }
+
+    func pauseAll() {
+        for item in pending() where item.state == .queued || item.state == .downloading { pause(item) }
+    }
+    func resumeAll() {
+        for item in pending() where item.state == .paused || item.state == .failed { retry(item) }
+        resume()
+    }
+    func cancelAll() {
+        for item in pending() { remove(item) }
+    }
+    func clearAll() {
+        guard let context else { return }
+        for item in (try? context.fetch(FetchDescriptor<DownloadItem>())) ?? [] { remove(item) }
+    }
+
+    func moveToTop(_ item: DownloadItem) {
+        let first = pending().first?.order ?? item.order
+        item.order = first - 1
+        persist()
+    }
+
+    /// Reorder the pending queue as the list showed it. The same set of `order`
+    /// values is handed out again, so finished rows keep their place.
+    func move(_ items: [DownloadItem], from source: IndexSet, to destination: Int) {
+        var reordered = items
+        reordered.move(fromOffsets: source, toOffset: destination)
+        let slots = items.map(\.order).sorted()
+        for (item, slot) in zip(reordered, slots) { item.order = slot }
+        persist()
+    }
+
+    /// Bytes under the downloads folder; walks the disk, so call it off the main actor.
+    nonisolated static func storageBytes() -> Int64 {
+        let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
+        guard let walker = FileManager.default.enumerator(at: OfflineChapters.root, includingPropertiesForKeys: keys) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in walker {
+            guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? 0)
+        }
+        return total
+    }
+}
+
+/// What a chapter row shows for its download.
+enum ChapterDownloadStatus: Equatable {
+    case none, queued, downloading(Double), paused, failed, downloaded
 }

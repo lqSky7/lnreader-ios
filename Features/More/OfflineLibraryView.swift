@@ -4,59 +4,170 @@ import UniformTypeIdentifiers
 import UserNotifications
 
 struct OfflineLibraryView: View {
-    @Query(sort: \Entry.title) private var entries: [Entry]
     @Query(sort: \DownloadItem.order) private var queue: [DownloadItem]
-    @State private var selected: PersistentIdentifier?
     @State private var downloads = ChapterDownloadManager.shared
     @AppStorage("downloads.wifiOnly") private var wifiOnly = true
+    @State private var storageBytes: Int64?
+    @State private var confirmCancelAll = false
+    @State private var confirmClearAll = false
+    @State private var editMode: EditMode = .inactive
+
+    /// Still to do, in the order they will run.
+    private var pending: [DownloadItem] { queue.filter { $0.state != .completed } }
+    private var completed: [DownloadItem] { queue.filter { $0.state == .completed } }
+    private var isEmpty: Bool { queue.isEmpty }
+    private var hasRunning: Bool { pending.contains { $0.state == .queued || $0.state == .downloading } }
+
     var body: some View {
         List {
-            Section {
-                Picker("Title", selection: $selected) {
-                    Text("Choose a library title").tag(nil as PersistentIdentifier?)
-                    ForEach(entries.filter { $0.inLibrary && !$0.isLocal }) { entry in
-                        Text(entry.displayTitle).tag(Optional(entry.persistentModelID))
-                    }
-                }
-                if let entry = entries.first(where: { $0.persistentModelID == selected }) {
-                    Button("Download unread chapters") { downloads.enqueue(entry.chapters.filter { !$0.read }) }
-                    Button("Download all chapters") { downloads.enqueue(entry.chapters) }
-                }
-                Toggle("Wi-Fi only", isOn: $wifiOnly).onChange(of: wifiOnly) { _, _ in downloads.resume() }
-                Button("Resume queue") { downloads.resume(); LibraryMaintenance.scheduleDownloads() }
-            } header: {
-                Text("Download chapters")
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Novels save chapter text. Manga saves every page. Add a title to your library before downloading.")
-                    if let message = downloads.message { Text(message) }
-                }
-            }
-            Section("Queue and offline chapters") {
-                if queue.isEmpty {
-                    ContentUnavailableView("No downloads yet", systemImage: "arrow.down.circle")
-                }
-                ForEach(queue) { item in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(item.chapter?.entry?.displayTitle ?? "Removed title").font(.caption).foregroundStyle(.secondary)
-                        Text(item.chapter?.name ?? "Removed chapter")
-                        HStack {
-                            Text(item.state.rawValue.capitalized).font(.caption)
-                            Spacer()
-                            if item.state == .queued || item.state == .downloading {
-                                Button("Pause") { downloads.pause(item) }.buttonStyle(.borderless)
-                            } else if item.state != .completed {
-                                Button("Retry") { downloads.retry(item) }.buttonStyle(.borderless)
-                            }
-                        }
-                        if item.state == .downloading { ProgressView(value: item.progress) }
-                        if let error = item.error { Text(error).font(.caption).foregroundStyle(.secondary) }
-                    }
-                    .swipeActions { Button("Remove", role: .destructive) { downloads.remove(item) } }
-                }
+            if isEmpty {
+                ContentUnavailableView(
+                    "No downloads yet", systemImage: "arrow.down.circle",
+                    description: Text("Download chapters from a title’s chapter list. They show up here while they download and stay readable offline."))
+                    .listRowBackground(Color.clear)
+            } else {
+                overviewSection
+                if !pending.isEmpty { queueSection }
+                if !completed.isEmpty { downloadedSection }
             }
         }
         .settingsScreen("Downloads")
+        .environment(\.editMode, $editMode)
+        .toolbar { toolbarItems }
+        .task(id: completed.count) {
+            storageBytes = await Task.detached(priority: .utility) { ChapterDownloadManager.storageBytes() }.value
+        }
+        .confirmationDialog("Cancel every pending download?", isPresented: $confirmCancelAll, titleVisibility: .visible) {
+            Button("Cancel \(pending.count) downloads", role: .destructive) { downloads.cancelAll() }
+        }
+        .confirmationDialog("Delete every downloaded chapter?", isPresented: $confirmClearAll, titleVisibility: .visible) {
+            Button("Delete all downloads", role: .destructive) { downloads.clearAll() }
+        } message: {
+            Text("Chapters stay in your library and can be downloaded again.")
+        }
+    }
+
+    // MARK: Sections
+
+    private var overviewSection: some View {
+        Section {
+            LabeledContent("Downloaded", value: "\(completed.count) chapters")
+            LabeledContent("Storage used", value: storageBytes.map { $0.formatted(.byteCount(style: .file)) } ?? "…")
+            Toggle("Wi-Fi only", isOn: $wifiOnly).onChange(of: wifiOnly) { _, _ in downloads.resume() }
+            if !pending.isEmpty {
+                Button(hasRunning ? "Pause all" : "Resume all", systemImage: hasRunning ? "pause.fill" : "play.fill") {
+                    if hasRunning { downloads.pauseAll() } else { downloads.resumeAll() }
+                    LibraryMaintenance.scheduleDownloads()
+                }
+            }
+        } footer: {
+            if let message = downloads.message { Text(message) }
+        }
+    }
+
+    private var queueSection: some View {
+        Section {
+            ForEach(pending) { item in
+                DownloadQueueRow(item: item)
+            }
+            .onMove { source, destination in downloads.move(pending, from: source, to: destination) }
+        } header: {
+            Text("Queue · \(pending.count)")
+        } footer: {
+            Text("Swipe a download to cancel it or run it next. Tap Edit to reorder.")
+        }
+    }
+
+    private var downloadedSection: some View {
+        let groups = Dictionary(grouping: completed) { $0.chapter?.entry?.persistentModelID }
+        let rows = groups.compactMap { _, items -> (title: String, items: [DownloadItem])? in
+            guard let title = items.first?.chapter?.entry?.displayTitle else { return nil }
+            return (title, items)
+        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return Section("Downloaded") {
+            ForEach(rows, id: \.title) { row in
+                LabeledContent(row.title, value: "\(row.items.count)")
+                    .swipeActions {
+                        Button("Delete", role: .destructive) { for item in row.items { downloads.remove(item) } }
+                    }
+            }
+        }
+    }
+
+    @ToolbarContentBuilder private var toolbarItems: some ToolbarContent {
+        if !isEmpty {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    if pending.count > 1 {
+                        Button(editMode.isEditing ? "Done reordering" : "Reorder queue", systemImage: "arrow.up.arrow.down") {
+                            withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                        }
+                    }
+                    if !pending.isEmpty {
+                        Button("Cancel all pending", systemImage: "xmark", role: .destructive) { confirmCancelAll = true }
+                    }
+                    if !completed.isEmpty {
+                        Button("Delete all downloads", systemImage: "trash", role: .destructive) { confirmClearAll = true }
+                    }
+                } label: { Label("More", systemImage: "ellipsis.circle") }
+            }
+        }
+    }
+}
+
+/// One pending download: a state button on the left that pauses or resumes it,
+/// the title and chapter, and a plain-language status line.
+private struct DownloadQueueRow: View {
+    let item: DownloadItem
+    private let downloads = ChapterDownloadManager.shared
+
+    private var isActive: Bool { item.state == .queued || item.state == .downloading }
+    private var progress: Double { downloads.progress(of: item) }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                if isActive { downloads.pause(item) } else { downloads.retry(item) }
+            } label: { stateIcon.frame(width: 44, height: 44).contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isActive ? "Pause download" : "Resume download")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.chapter?.entry?.displayTitle ?? "Removed title")
+                    .font(Typography.small).foregroundStyle(.secondary).lineLimit(1)
+                Text(item.chapter?.name ?? "Removed chapter").font(Typography.body).lineLimit(2)
+                Text(status).font(Typography.small).foregroundStyle(item.state == .failed ? AppTheme.warning : .secondary)
+                    .lineLimit(2)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button("Cancel", role: .destructive) { downloads.remove(item) }
+        }
+        .swipeActions(edge: .leading) {
+            Button("Run next", systemImage: "arrow.up.to.line") { downloads.moveToTop(item) }
+        }
+    }
+
+    @ViewBuilder private var stateIcon: some View {
+        switch item.state {
+        case .downloading:
+            DownloadProgressRing(progress: progress).frame(width: 25, height: 25)
+        case .paused:
+            Image(systemName: "pause.circle").font(.system(size: 25, weight: .light)).foregroundStyle(.primary)
+        case .failed:
+            Image(systemName: "arrow.clockwise.circle").font(.system(size: 25, weight: .light)).foregroundStyle(AppTheme.warning)
+        default:
+            Image(systemName: "ellipsis.circle").font(.system(size: 25, weight: .light)).foregroundStyle(.primary)
+        }
+    }
+
+    private var status: String {
+        switch item.state {
+        case .queued: "Waiting"
+        case .downloading: progress > 0 ? "Downloading · \(Int(progress * 100))%" : "Downloading"
+        case .paused: "Paused"
+        case .failed: item.error ?? "Failed"
+        case .completed: "Downloaded"
+        }
     }
 }
 

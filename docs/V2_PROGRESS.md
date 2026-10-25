@@ -60,7 +60,7 @@ filters and incognito all read it.
 | R11 | Duplicate detection | Planned | — |
 | R12 | Migrate manga / novel to another source | Planned | R11 |
 | R13 | Incognito mode | Planned | — |
-| R14 | Download UI/UX polish | Planned | — |
+| R14 | Download UI/UX polish | **Built**, not used on a device | — |
 
 ### Reader (R1–R6)
 
@@ -122,10 +122,17 @@ Pure rules live in `Features/MangaReader/MangaReaderControls.swift`, checked hea
 
 ### Downloads (R14)
 
-The queue and guards already exist; this is UI and information design, so it needs a device
-pass: clearer states (queued / downloading / paused / waiting for Wi-Fi / failed),
-reorderable queue, per-title progress, swipe actions, a download state on chapter rows, a
-storage summary with clear-all, and a sensible empty state.
+Built, not yet used on a device. Chapter rows end in a 44 pt download control
+(`ChapterDownloadControl`): tap to download, then a menu per state (pause, cancel, run next,
+retry, delete) with a progress ring while it runs. State and live progress come from
+`ChapterDownloadManager.states` / `liveProgress`, keyed by chapter, so rows update without a
+model lookup or a save. The chapter list header has Mihon's download menu (next 1 / 5 / 10 / 25
+unread, all unread, all, delete). More → Downloads is an overview (count, storage, Wi-Fi,
+pause/resume all), a reorderable queue with swipe actions (cancel, run next), downloads by
+title and an empty state. Runs of selected chapters are drawn as one rounded block.
+
+Not done from Mihon: download ahead while reading, delete after reading, downloaded-only mode,
+per-title size, split tall images.
 
 ## Chapter fetching is manual
 

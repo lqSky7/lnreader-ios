@@ -106,7 +106,8 @@ import UserNotifications
                 if let continued = task as? BGContinuedProcessingTask {
                     let items = (try? context.fetch(FetchDescriptor<DownloadItem>())) ?? []
                     continued.progress.totalUnitCount = Int64(max(items.count, 1) * 1000)
-                    continued.progress.completedUnitCount = Int64(items.reduce(0.0) { $0 + ($1.state == .completed ? 1 : $1.progress) } * 1000)
+                    let manager = ChapterDownloadManager.shared
+                    continued.progress.completedUnitCount = Int64(items.reduce(0.0) { $0 + ($1.state == .completed ? 1 : manager.progress(of: $1)) } * 1000)
                 }
                 try? await Task.sleep(for: .seconds(1))
             }

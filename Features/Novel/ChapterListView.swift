@@ -32,6 +32,7 @@ struct ChapterListView: View {
     @State private var showSearchField = false
     @State private var showDirectory = false
     @State private var showScanlators = false
+    @State private var confirmDeleteAll = false
     @FocusState private var searchFocused: Bool
 
     /// The whole list in the chosen order, built when the directory opens.
@@ -53,6 +54,7 @@ struct ChapterListView: View {
                 searchButton
                 filterMenu
                 if let scanlatorSettings { scanlatorButton(scanlatorSettings) }
+                if let entry, entry.inLibrary, !entry.isLocal { downloadMenu(entry) }
             }
         }
     }
@@ -89,6 +91,30 @@ struct ChapterListView: View {
         .buttonBorderShape(.circle)
         .controlSize(.large)
         .accessibilityLabel("Sort and filter chapters")
+    }
+
+    /// Mihon's download menu: the next few unread chapters, all unread, or all.
+    private func downloadMenu(_ entry: Entry) -> some View {
+        Menu {
+            Button("Next chapter") { ChapterDownloadManager.shared.enqueueUnread(1, in: entry) }
+            Button("Next 5 chapters") { ChapterDownloadManager.shared.enqueueUnread(5, in: entry) }
+            Button("Next 10 chapters") { ChapterDownloadManager.shared.enqueueUnread(10, in: entry) }
+            Button("Next 25 chapters") { ChapterDownloadManager.shared.enqueueUnread(25, in: entry) }
+            Divider()
+            Button("All unread chapters") { ChapterDownloadManager.shared.enqueueUnread(nil, in: entry) }
+            Button("All chapters") { ChapterDownloadManager.shared.enqueue(entry.chapters) }
+            Divider()
+            Button("Delete downloads", systemImage: "trash", role: .destructive) { confirmDeleteAll = true }
+        } label: {
+            Image(systemName: "arrow.down.circle")
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel("Download chapters")
+        .confirmationDialog("Delete every downloaded chapter of this title?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
+            Button("Delete downloads", role: .destructive) { ChapterDownloadManager.shared.deleteDownloads(in: entry) }
+        }
     }
 
     private func scanlatorButton(_ settings: ScanlatorSettings) -> some View {
@@ -141,10 +167,16 @@ struct ChapterListView: View {
                 ContentUnavailableView(isFiltered ? "No matching chapters" : "No chapters yet", systemImage: "text.magnifyingglass")
             } else {
                 LazyVStack(spacing: 0) {
-                    ForEach(chapters) { chapter in
+                    ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
+                        let joins = selection?.neighbours(at: index, in: chapters) ?? (above: false, below: false)
+                        let selected = selection?.paths.contains(chapter.path) == true
                         ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey,
-                                   selection: selection, orderedPaths: { chapters.map(\.path) })
-                        if chapter.id != chapters.last?.id { Divider().padding(.leading, 50) }
+                                   selection: selection, orderedPaths: { chapters.map(\.path) },
+                                   joinsAbove: joins.above, joinsBelow: joins.below)
+                        // No rule inside or at the edge of a selected block.
+                        if index + 1 < chapters.count {
+                            Divider().padding(.leading, 50).opacity(selected || joins.below ? 0 : 1)
+                        }
                     }
                 }
                 .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
@@ -373,7 +405,9 @@ struct ChapterDirectoryView: View {
                     if let jumpError { Text(jumpError).font(.caption).foregroundStyle(AppTheme.destructive) }
                 }
                 Section {
-                    ForEach(visible) { chapter in
+                    ForEach(Array(visible.enumerated()), id: \.element.id) { index, chapter in
+                        let joins = selection.neighbours(at: index, in: visible)
+                        let picked = selection.paths.contains(chapter.path)
                         HStack(spacing: 8) {
                             Text(String(chapter.position + 1)).font(.caption.monospacedDigit()).foregroundStyle(chapter.path == currentChapterPath ? .primary : .secondary).fontWeight(chapter.path == currentChapterPath ? .semibold : .regular).frame(minWidth: 32)
                             if let onSelect {
@@ -387,10 +421,13 @@ struct ChapterDirectoryView: View {
                                 }.buttonStyle(.plain)
                             } else {
                                 ChapterRow(chapter: chapter, entry: entry, sourceKey: sourceKey,
-                                           selection: entry == nil ? nil : selection, orderedPaths: { filtered.map(\.path) })
+                                           selection: entry == nil ? nil : selection, orderedPaths: { filtered.map(\.path) },
+                                           joinsAbove: joins.above, joinsBelow: joins.below)
                                     .listRowInsets(EdgeInsets())
                             }
-                        }.id(chapter.path)
+                        }
+                        .listRowSeparator(picked || joins.below ? .hidden : .automatic)
+                        .id(chapter.path)
                     }
                     if visible.isEmpty { ContentUnavailableView("No chapters", systemImage: "text.magnifyingglass", description: Text("Try another number, title, or filter.")) }
                 } header: { Text(search.isEmpty ? "Chapters \(pageLabel)" : "\(filtered.count) results") }

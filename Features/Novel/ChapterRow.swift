@@ -19,6 +19,10 @@ struct ChapterRow: View {
     var selection: ChapterSelection? = nil
     /// The list's current order, read only when a long press needs a range.
     var orderedPaths: () -> [String] = { [] }
+    /// Whether the neighbouring rows are selected too. A run of selected rows is
+    /// drawn as one rounded block instead of a fill per row.
+    var joinsAbove = false
+    var joinsBelow = false
     private var isSelecting: Bool { selection?.isActive == true }
     private var isSelected: Bool { selection?.paths.contains(chapter.path) == true }
     private var bookPath: String { entry?.url ?? chapter.entryURL ?? chapter.path }
@@ -43,7 +47,37 @@ struct ChapterRow: View {
         .accessibilityHidden(true)
     }
 
+    /// Download is offered for stored chapters of titles in the library; local
+    /// books are already on disk and a browse result has nothing stored.
+    private var showsDownload: Bool { entry?.inLibrary == true && entry?.isLocal == false }
+
     var body: some View {
+        HStack(spacing: 0) {
+            mainButton
+            if let entry, showsDownload {
+                ChapterDownloadControl(entry: entry, chapter: chapter)
+                    .padding(.trailing, 8)
+                    .opacity(isSelecting ? 0 : 1)
+                    .allowsHitTesting(!isSelecting)
+            }
+        }
+        .background { selectionBackground }
+    }
+
+    @ViewBuilder private var selectionBackground: some View {
+        if isSelected {
+            UnevenRoundedRectangle(
+                topLeadingRadius: joinsAbove ? 0 : 14, bottomLeadingRadius: joinsBelow ? 0 : 14,
+                bottomTrailingRadius: joinsBelow ? 0 : 14, topTrailingRadius: joinsAbove ? 0 : 14,
+                style: .continuous)
+                .fill(.tint.opacity(0.16))
+                .padding(.horizontal, 6)
+                .padding(.top, joinsAbove ? 0 : 3)
+                .padding(.bottom, joinsBelow ? 0 : 3)
+        }
+    }
+
+    private var mainButton: some View {
         Button {
             if suppressTap {
                 suppressTap = false
@@ -104,18 +138,13 @@ struct ChapterRow: View {
                             .foregroundStyle(.primary)
                             .font(Typography.caption)
                     }
-                    if chapter.downloaded {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .font(Typography.caption)
-                    }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.leading, 16)
+            .padding(.trailing, showsDownload ? 4 : 16)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .background(isSelected ? AnyShapeStyle(.tint.opacity(0.16)) : AnyShapeStyle(.clear))
             .bookTransitionSource(chapter.path, in: chapterTransition)
         }
         .buttonStyle(.plain)
@@ -138,6 +167,108 @@ struct ChapterRow: View {
         )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityValue(chapter.unread ? "Unread" : "Read")
+    }
+}
+
+// MARK: - Download control
+
+/// The download button at the end of a chapter row. One tap downloads; once a
+/// download exists the same spot opens a menu for what can be done to it.
+struct ChapterDownloadControl: View {
+    let entry: Entry
+    let chapter: ChapterDisplay
+    private let downloads = ChapterDownloadManager.shared
+
+    private var status: ChapterDownloadStatus {
+        downloads.status(sourceKey: entry.sourceKey, entryURL: entry.url,
+                         chapterURL: chapter.path, downloaded: chapter.downloaded)
+    }
+    private var item: DownloadItem? { downloads.storedItem(chapter.path, in: entry) }
+
+    var body: some View {
+        Group {
+            if status == .none {
+                Button {
+                    Haptics.shared.impact(.light)
+                    downloads.download(chapter.path, in: entry)
+                } label: { icon }
+            } else {
+                Menu { menuItems } label: { icon }
+            }
+        }
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .accessibilityLabel(label)
+    }
+
+    @ViewBuilder private var menuItems: some View {
+        switch status {
+        case .queued:
+            Button("Download next", systemImage: "arrow.up.to.line") { if let item { downloads.moveToTop(item) } }
+            Button("Cancel download", systemImage: "xmark", role: .destructive) { if let item { downloads.remove(item) } }
+        case .downloading:
+            Button("Pause", systemImage: "pause") { if let item { downloads.pause(item) } }
+            Button("Cancel download", systemImage: "xmark", role: .destructive) { if let item { downloads.remove(item) } }
+        case .paused:
+            Button("Resume", systemImage: "play") { if let item { downloads.retry(item) } }
+            Button("Cancel download", systemImage: "xmark", role: .destructive) { if let item { downloads.remove(item) } }
+        case .failed:
+            Button("Retry", systemImage: "arrow.clockwise") { if let item { downloads.retry(item) } }
+            Button("Remove", systemImage: "xmark", role: .destructive) { if let item { downloads.remove(item) } }
+        case .downloaded:
+            Button("Delete download", systemImage: "trash", role: .destructive) { if let item { downloads.remove(item) } }
+        case .none:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder private var icon: some View {
+        switch status {
+        case .none:
+            Image(systemName: "arrow.down.circle").font(.system(size: 25, weight: .light)).foregroundStyle(.primary)
+        case .queued:
+            Image(systemName: "ellipsis.circle").font(.system(size: 25, weight: .light)).foregroundStyle(.primary)
+        case .paused:
+            Image(systemName: "pause.circle").font(.system(size: 25, weight: .light)).foregroundStyle(.primary)
+        case .failed:
+            Image(systemName: "exclamationmark.circle").font(.system(size: 25, weight: .light)).foregroundStyle(AppTheme.warning)
+        case .downloaded:
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 25)).foregroundStyle(.primary)
+        case .downloading(let progress):
+            DownloadProgressRing(progress: progress).frame(width: 25, height: 25)
+        }
+    }
+
+    private var label: String {
+        switch status {
+        case .none: "Download chapter"
+        case .queued: "Download queued"
+        case .downloading(let progress): "Downloading, \(Int(progress * 100)) percent"
+        case .paused: "Download paused"
+        case .failed: "Download failed"
+        case .downloaded: "Downloaded"
+        }
+    }
+}
+
+/// A ring that fills as pages arrive; a spinner while nothing has (novels have
+/// no page count to report).
+struct DownloadProgressRing: View {
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(.quaternary, lineWidth: 2.5)
+            if progress > 0 {
+                Circle()
+                    .trim(from: 0, to: min(progress, 1))
+                    .stroke(.primary, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: "stop.fill").font(.system(size: 8)).foregroundStyle(.primary)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
     }
 }
 
@@ -182,6 +313,12 @@ final class ChapterSelection {
     func invert(in order: [String]) { paths = Set(order).subtracting(paths) }
 
     func end() { isActive = false; paths = []; anchor = nil }
+
+    /// Whether the rows around `index` are selected, for drawing runs as one block.
+    func neighbours(at index: Int, in order: [ChapterDisplay]) -> (above: Bool, below: Bool) {
+        (index > 0 && paths.contains(order[index - 1].path),
+         index + 1 < order.count && paths.contains(order[index + 1].path))
+    }
 }
 
 /// Selection actions as a system bottom bar: read state, download and a menu for
