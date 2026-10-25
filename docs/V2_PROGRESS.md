@@ -5,8 +5,8 @@
 collection view with chapter stitching, device profiling script
 
 The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end, and puts
-every source behind one protocol so a JS plugin and a transpiled extension are the same
-thing to the rest of the app.
+every source behind one protocol (`CatalogSource`). Every source is native Swift, compiled into
+the app; the JavaScript bridge is gone.
 
 Migration from v1 is **deferred by decision**, and nothing implements it: v2 opens its own
 store file (`LNReader-v2.store`) and never touches `default.store`, so v1 data stays
@@ -27,8 +27,7 @@ backup/restore and narration are built but have never been exercised on a device
 | Novel read path | **Verified** | Library, detail, chapter list, web reader, history, updates, stats |
 | Manga read path | **Verified** | Pager + webtoon, cache, prefetch, progress; all reader gestures checked on device |
 | Source abstraction | **Built** | `CatalogSource` / `NovelSource` / `MangaSource`; `SourceManager` registry |
-| JS extension host | **Built** | JSC + `http`/`dom`/`webview` bridge, bundle contract, repo/trust/install |
-| Bundled extensions | **Built** | MangaFire and AllManga, ported from keiyoushi, both verified live |
+| Native sources | **Built** | Light novels: Novel Fire, Novel Phoenix, Free Web Novel. Manga: MangaFire, AllManga, Manhwa18, 4KHD, Omega Scans (ported from keiyoushi). All pass `scripts/try-native.sh` against the live sites; none used on a device yet |
 | Chapter lists | **Built** | Number ordering, all-chapters for manga, scanlator priority |
 | Browse | **Built** | Split into Light Novels / Manga; native search, glass switcher |
 | Downloads | **Built** | Novel text and manga pages, durable queue, offline reader paths, pause/retry/remove, Wi-Fi and storage guards. Not exercised on a device |
@@ -38,8 +37,7 @@ backup/restore and narration are built but have never been exercised on a device
 | Library | **Verified** | Filters, per-category sort / display / update scope, badges — all checked on device. No category editor yet |
 | Chapter fetching | **Verified** | Opening an entry no longer refetches; last-fetched time and a Refresh button |
 | Performance | **Pass done** | Library counts cached off-main, reader writes coalesced, covers downsampled; numbers in [PERFORMANCE.md](PERFORMANCE.md), next rewrite in [LIBRARY_QUERY_PLAN.md](LIBRARY_QUERY_PLAN.md) |
-| Extension repo UI | **On hold** | Existing service retained |
-| Kotlin/JS transpiler | **On hold** | Toolchain also absent; rationale in [MANGA_SUPPORT_PLAN.md](MANGA_SUPPORT_PLAN.md) §1 |
+| Extension repos, JS bridge, Kotlin/JS transpiler | **Removed** | Sources are native; adding one is a Swift file in `Services/Sources/Native/` |
 | Migration (v1 → v2) | **Deferred** | User's call; fresh installs start empty. Importing another app's `.tachibk` is the only way in |
 
 ## Roadmap — Mihon / Yokai parity
@@ -202,7 +200,7 @@ only. **The backend docs have not caught up** — see open issue 6. Playback on 
    Breeze narration playback.
 2. **Then R11 → R14** (duplicates, migrate source, incognito, download UI).
 
-Extension repository UI and the Kotlin/JS shims stay on hold at the user's request.
+Sources are native Swift. The extension repository UI, the JS bridge and the Kotlin/JS shims were removed.
 
 ## Verification
 
@@ -221,7 +219,7 @@ Offline checks (no device, no network):
 | `check.sh chapter-sync` | Chapter parsing (40 Yokai cases), merge, delete guard |
 | `check.sh page-pipeline` | Cache LRU, loader dedupe, prefetch order, progress |
 | `check.sh scanlators` | Dedup/hide rules, hidden-winner fallback |
-| `check.sh extensions` | Bundle through the real host against a localhost fixture (needs the SwiftSoup checkout) |
+| `scripts/try-native.sh` | Every native source against its live site (network; not part of `all`) |
 | `check.sh reader-settings` | Per-series reader settings: resolution, persistence, reset, make default |
 | `check.sh offline` | Backup encryption, rejection/merge rules, durable manifests, manual vs automatic update policy |
 | `check.sh mihon-backup` | `.tachibk` import: merge rules, bundled source ids; `TACHIBK_SAMPLE=` runs a real file |
@@ -294,9 +292,6 @@ which is fragile once re-signed.
   `.tint`, which beats button roles and turned destructive swipe actions white. Colours go
   through `AppTheme` tokens (`hairline`, `surface`, `warning`), not `Color.gray.opacity(…)`.
 - **Settings sheets are partial-height** (`.medium`/`.large` detents), not full-screen modals.
-- **`JSExtensionHost` is synchronous by design.** The JS thread blocks during `http.get`, so
-  bundles are straight-line code and a transpiler can emit plain calls. `webview.capture`
-  follows the same contract.
 - **MangaFire's "token" is upstream code, not a secret.** `VrfSigner.kt` is three
   substitution stages over the sorted query string; ported byte for byte it returns 200.
 - **Performance rules are in [PERFORMANCE.md](PERFORMANCE.md).** The two that bite most: no

@@ -1,8 +1,7 @@
 // BrowseView.swift
 // Sources, split by kind: light novels and manga are separate catalogues.
 //
-// Novels come from the JS plugin registry, manga from installed extension
-// bundles, so the two lists have different sections and different empty states.
+// Every source is built into the app, so each catalogue is just the registry filtered by kind.
 // A native segmented control in a glass top bar switches between them in place.
 
 import SwiftUI
@@ -30,15 +29,12 @@ enum BrowseKind: String, CaseIterable, Identifiable {
 }
 
 struct BrowseView: View {
-    @Environment(PluginManager.self) private var pluginManager
     @Environment(SourceManager.self) private var sourceManager
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @AppStorage("browse.kind") private var kindRaw = BrowseKind.novels.rawValue
     @State private var searchText = ""
-    @State private var selectedLanguage: String?
-    @State private var initializedLanguage = false
 
     private var kind: BrowseKind {
         BrowseKind(rawValue: kindRaw) ?? .novels
@@ -57,18 +53,6 @@ struct BrowseView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .toolbar { toolbarContent }
-                .navigationDestination(for: PluginListItem.self) { plugin in
-                    SourceDetailView(
-                        sourceKey: SourceKey.make(kind: .novel, id: plugin.id),
-                        title: plugin.name
-                    )
-                }
-                .task { await loadPlugins() }
-                .overlay {
-                    if kind == .novels && pluginManager.isLoading && pluginManager.plugins.isEmpty {
-                        LoadingView(message: "Fetching sources...")
-                    }
-                }
         }
     }
 
@@ -85,29 +69,7 @@ struct BrowseView: View {
                 }
                 .accessibilityLabel("Search all sources")
             }
-            if !pluginManager.availableLanguages.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) { languageMenu }
-            }
         }
-    }
-
-    /// Language filter. A menu rather than a chip row: it is a rarely changed
-    /// setting, and the chips pushed the sources down the screen.
-    private var languageMenu: some View {
-        Menu {
-            Picker("Language", selection: $selectedLanguage) {
-                Text("All Languages").tag(String?.none)
-                ForEach(pluginManager.availableLanguages, id: \.self) { lang in
-                    Text(lang).tag(String?.some(lang))
-                }
-            }
-        } label: {
-            Image(systemName: selectedLanguage == nil
-                ? "line.3.horizontal.decrease"
-                : "line.3.horizontal.decrease.circle.fill")
-        }
-        .accessibilityLabel("Language")
-        .accessibilityValue(selectedLanguage ?? "All")
     }
 
     // MARK: - Kind switcher
@@ -142,9 +104,8 @@ struct BrowseView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
-            if kind == .novels { novelSourcesContent } else { mangaSourcesContent }
+            sourcesContent
         }
-        .refreshable { await loadPlugins(forceRefresh: true) }
         // Rows cross-fade in place. Animating the rows, not the list, keeps the
         // scroll view (and the nav bar tracking it) alive, so it stays cheap.
         .animation(AppMotion.tabSwitch(reduceMotion: reduceMotion), value: kindRaw)
@@ -164,49 +125,13 @@ struct BrowseView: View {
     }
 
     @ViewBuilder
-    private var novelSourcesContent: some View {
-        if !installedPlugins.isEmpty {
-            Section("Installed · \(installedPlugins.count)") {
-                ForEach(installedPlugins) { plugin in
-                    NavigationLink(value: plugin) {
-                        SourceCard(plugin: plugin, isInstalled: true) {}
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            pluginManager.uninstallPlugin(id: plugin.id)
-                        } label: {
-                            Label("Uninstall", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-        }
-
-        Section(selectedLanguage.map { "Available · \($0)" } ?? "Available") {
-            ForEach(availablePlugins) { plugin in
-                SourceCard(plugin: plugin, isInstalled: false) {
-                    Task {
-                        try? await pluginManager.installPlugin(id: plugin.id)
-                    }
-                }
-            }
-        }
-
-        if installedPlugins.isEmpty && availablePlugins.isEmpty && !searchText.isEmpty {
-            ContentUnavailableView.search(text: searchText)
-                .listRowBackground(Color.clear)
-        }
-    }
-
-    @ViewBuilder
-    private var mangaSourcesContent: some View {
-        if mangaSources.isEmpty {
+    private var sourcesContent: some View {
+        if visibleSources.isEmpty {
             Section {
                 if searchText.isEmpty {
                     ContentUnavailableView(
-                        "No manga sources",
-                        systemImage: "books.vertical",
-                        description: Text("Install an extension bundle to read manga.")
+                        kind == .novels ? "No novel sources" : "No manga sources",
+                        systemImage: "books.vertical"
                     )
                 } else {
                     ContentUnavailableView.search(text: searchText)
@@ -214,27 +139,30 @@ struct BrowseView: View {
             }
             .listRowBackground(Color.clear)
         } else {
-            Section("Installed · \(mangaSources.count)") {
-                ForEach(mangaSources, id: \.key) { source in
+            Section("Sources · \(visibleSources.count)") {
+                ForEach(visibleSources, id: \.key) { source in
                     NavigationLink {
                         SourceDetailView(sourceKey: source.key, title: source.name)
                     } label: {
-                        mangaRow(source)
+                        sourceRow(source)
                     }
                 }
             }
         }
     }
 
-    private func mangaRow(_ source: any CatalogSource) -> some View {
+    private func sourceRow(_ source: any CatalogSource) -> some View {
         HStack(spacing: 12) {
             SourceIconView(source: source, size: 44)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(source.name)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                Text(mangaSubtitle(source))
+                HStack(spacing: 6) {
+                    Text(source.name)
+                        .font(.body.weight(.medium))
+                        .lineLimit(1)
+                    if source.isAdult { adultChip }
+                }
+                Text(sourceSubtitle(source))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -243,7 +171,17 @@ struct BrowseView: View {
         .padding(.vertical, 2)
     }
 
-    private func mangaSubtitle(_ source: any CatalogSource) -> String {
+    private var adultChip: some View {
+        Text("18+")
+            .font(Typography.small.weight(.bold))
+            .foregroundStyle(AppTheme.destructive)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(AppTheme.destructive.opacity(0.15), in: Capsule())
+            .accessibilityLabel("Adult content")
+    }
+
+    private func sourceSubtitle(_ source: any CatalogSource) -> String {
         var parts: [String] = []
         if !source.lang.isEmpty { parts.append(source.lang.uppercased()) }
         if !source.supportsLatest { parts.append("Popular only") }
@@ -252,51 +190,9 @@ struct BrowseView: View {
 
     // MARK: - Filtering
 
-    private var mangaSources: [any CatalogSource] {
-        let all = sourceManager.sources(of: .manga)
+    private var visibleSources: [any CatalogSource] {
+        let all = sourceManager.sources(of: kind.contentKind)
         guard !searchText.isEmpty else { return all }
         return all.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
-    }
-
-    private var installedPlugins: [PluginListItem] {
-        pluginManager.installedPluginsList.filtered(
-            searchText: searchText, language: nil
-        )
-    }
-
-    private var availablePlugins: [PluginListItem] {
-        pluginManager.availablePluginsList.filtered(
-            searchText: searchText, language: selectedLanguage
-        )
-    }
-
-    // MARK: - Actions
-
-    private func loadPlugins(forceRefresh: Bool = false) async {
-        try? await pluginManager.fetchPluginList(forceRefresh: forceRefresh)
-        if !initializedLanguage, !pluginManager.plugins.isEmpty {
-            selectedLanguage = pluginManager.availableLanguages.first {
-                ["en", "english"].contains($0.lowercased())
-            }
-            initializedLanguage = true
-        }
-        await pluginManager.restoreInstalledPlugins()
-    }
-}
-
-// MARK: - Array Filtering Helper
-
-extension Array where Element == PluginListItem {
-    func filtered(searchText: String, language: String?) -> [PluginListItem] {
-        var result = self
-        if let language {
-            result = result.filter { $0.lang == language }
-        }
-        if !searchText.isEmpty {
-            result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-        return result
     }
 }

@@ -181,11 +181,17 @@ struct MihonBackupChecks {
         expect(summary.categories == 2, "categories created")
         expect(summary.unmatchedSources == ["Obscure Reader": 1], "unmatched source reported")
 
+        // Ids confirmed against a real Tachimanga backup (MangaFire, AllManga); the rest follow upstream's rule.
+        expect(NativeSourceIDs.mihon[6_084_907_896_154_116_083] == "builtin:mangafire", "MangaFire id")
+        expect(NativeSourceIDs.mihon[4_709_139_914_729_853_090] == "builtin:allmanga", "AllManga id")
+        expect(MihonSourceID.make(name: "allanime", lang: "en") == 4_709_139_914_729_853_090, "AllManga id derives from allanime")
+        expect(NativeSourceIDs.mihon.count == 5, "five native manga sources carry a Mihon id")
+
         let context = ModelContext(container)
         let entries = try context.fetch(FetchDescriptor<Entry>())
         expect(entries.count == 2, "two entries stored")
         let overgeared = try unwrap(entries.first { $0.title == "Overgeared" })
-        expect(overgeared.sourceKey == "mihon:all.mangafire", "MangaFire id maps to the bundled extension")
+        expect(overgeared.sourceKey == "builtin:mangafire", "MangaFire id maps to the native source")
         expect(overgeared.kind == .manga && overgeared.inLibrary, "kind and library flag")
         expect(overgeared.status == .ongoing && overgeared.genres == ["Action", "Fantasy"], "status and genres")
         expect(overgeared.categories.map(\.name) == ["hiatus"], "category order 3 -> hiatus")
@@ -213,7 +219,7 @@ struct MihonBackupChecks {
     private static func checkMergeKeepsLocalState() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let entry = Entry(kind: .manga, sourceKey: "mihon:all.mangafire", url: "/manga/overgeared.728q1", title: "My Title")
+        let entry = Entry(kind: .manga, sourceKey: "builtin:mangafire", url: "/manga/overgeared.728q1", title: "My Title")
         entry.summary = "mine"
         context.insert(entry)
         let local = SchemaV1.Chapter(url: "/manga/overgeared.728q1/1002-chapter-2-en", name: "Chapter 2", chapterNumber: 2)
@@ -274,8 +280,8 @@ struct MihonBackupChecks {
         let context = ModelContext(container)
         try expect(try context.fetch(FetchDescriptor<Entry>()).count == backup.manga.count, "every title stored")
         try expect(try context.fetch(FetchDescriptor<SchemaV1.Chapter>()).count == chapters, "every chapter stored")
-        let fire = try context.fetch(FetchDescriptor<Entry>()).filter { $0.sourceKey == "mihon:all.mangafire" }
-        let all = try context.fetch(FetchDescriptor<Entry>()).filter { $0.sourceKey == "mihon:all.allmanga" }
+        let fire = try context.fetch(FetchDescriptor<Entry>()).filter { $0.sourceKey == "builtin:mangafire" }
+        let all = try context.fetch(FetchDescriptor<Entry>()).filter { $0.sourceKey == "builtin:allmanga" }
         print("sample sources: mangafire=\(fire.count) allmanga=\(all.count)")
         expect(fire.count + all.count == backup.manga.count, "both sources in the file map to bundled extensions")
     }

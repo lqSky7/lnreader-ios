@@ -8,7 +8,6 @@ import SwiftUI
 /// Tab bar automatically adopts Liquid Glass when compiled with Xcode 26.
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(PluginManager.self) private var pluginManager
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(SyncManager.self) private var syncManager
     @Environment(SourceManager.self) private var sourceManager
@@ -79,15 +78,7 @@ struct ContentView: View {
         }
         .task {
             await syncManager.loadSession()
-            // v2 source registry mirrors the installed LN plugins, and refreshes
-            // whenever one is installed or removed.
-            pluginManager.onInstalledSourcesChanged = { sourceManager.sync(with: pluginManager) }
-            await pluginManager.restoreInstalledPlugins()
-            sourceManager.sync(with: pluginManager)
-            // Extensions: ship MangaFire with the binary, then load whatever is
-            // installed (bundled or from a repository).
-            BundledExtensions.installMissing()
-            sourceManager.registerInstalledExtensions()
+            sourceManager.registerNativeSources()
             ChapterDownloadManager.shared.configure(context: modelContext, sources: sourceManager)
             LibraryMaintenance.schedule()
             // The HTTP stack gets its Cloudflare solver before any source is browsed.

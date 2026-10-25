@@ -178,7 +178,7 @@ final class SyncManager {
         }
     }
 
-    func push(profile: UserProfile, entries: [Entry], sources: [PluginListItem]) async {
+    func push(profile: UserProfile, entries: [Entry], sources: [any CatalogSource]) async {
         let payload = SyncPayload(
             profile: SyncProfilePayload(
                 username: currentUser?.username,
@@ -187,7 +187,7 @@ final class SyncManager {
                 image: profile.avatarData?.base64EncodedString()
             ),
             library: entries.filter { $0.inLibrary && !$0.isLocal }.map { SyncNovelPayload(entry: $0) },
-            sources: sources.map { SyncSourcePayload(plugin: $0) }
+            sources: sources.map { SyncSourcePayload(source: $0) }
         )
 
         await run("Synced to backend") {
@@ -195,15 +195,23 @@ final class SyncManager {
         }
     }
 
-    func restore(into context: ModelContext, pluginManager: PluginManager) async {
+    func restore(into context: ModelContext) async {
         await run("Restored backend data") {
             let envelope: SyncEnvelope = try await request(path: "/api/sync", method: "GET")
             currentUser = envelope.user
             guard let data = envelope.data else { return }
 
-            try await pluginManager.installSyncedSources(data.sources)
             try apply(data: data, context: context)
         }
+    }
+
+    /// The wire format carries genres as one comma-separated string.
+    private static func splitGenres(_ raw: String?) -> [String] {
+        guard let raw else { return [] }
+        return raw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     private func apply(data: RemoteSyncData, context: ModelContext) throws {
@@ -220,9 +228,8 @@ final class SyncManager {
         }
 
         for remoteNovel in data.library {
-            // The wire format still uses the v1 `pluginId`; v2 stores the
-            // prefixed source key.
-            let sourceKey = SourceKey.make(kind: .novel, id: remoteNovel.pluginId)
+            // The wire format still calls the source id `pluginId`; v2 stores the prefixed source key.
+            let sourceKey = SourceKey.makeBuiltin(id: remoteNovel.pluginId)
             let path = remoteNovel.path
             let predicate = #Predicate<Entry> { $0.url == path && $0.sourceKey == sourceKey }
             let existing = try context.fetch(FetchDescriptor(predicate: predicate)).first
@@ -238,7 +245,7 @@ final class SyncManager {
             novel.author = remoteNovel.author
             novel.artist = remoteNovel.artist
             novel.status = EntryStatus.parse(remoteNovel.status)
-            novel.genres = LNPluginSource.splitGenres(remoteNovel.genres)
+            novel.genres = Self.splitGenres(remoteNovel.genres)
             novel.inLibrary = remoteNovel.inLibrary
             novel.libraryOrder = remoteNovel.libraryPosition
 
@@ -383,13 +390,13 @@ private extension EntryStatus {
 }
 
 extension SyncSourcePayload {
-    init(plugin: PluginListItem) {
-        self.id = plugin.id
-        self.name = plugin.name
-        self.site = plugin.site
-        self.lang = plugin.lang
-        self.version = plugin.version
-        self.url = plugin.url
-        self.iconUrl = plugin.iconUrl
+    init(source: any CatalogSource) {
+        self.id = SourceKey.identifier(from: source.key)
+        self.name = source.name
+        self.site = ""
+        self.lang = source.lang
+        self.version = "native"
+        self.url = ""
+        self.iconUrl = source.iconURL ?? ""
     }
 }

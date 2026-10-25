@@ -1,5 +1,9 @@
 # Manga support — architecture decisions
 
+> **Superseded in part.** Sources are now hand-written native Swift (`Services/Sources/Native/`);
+> the JS bridge, extension repos and the Kotlin/JS transpiler described below were removed. The
+> sections on them are kept as history.
+
 What is left of the original design doc: the decisions that still constrain the code, and the
 parts of the extension pipeline that were never built. Everything else it described has
 shipped — the reader, downloads, backup and AniList are in the app and

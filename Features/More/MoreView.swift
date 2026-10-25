@@ -6,7 +6,7 @@ import SwiftData
 import SwiftUI
 
 struct MoreView: View {
-    @Environment(PluginManager.self) private var pluginManager
+    @Environment(SourceManager.self) private var sourceManager
     @Environment(SyncManager.self) private var syncManager
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<Entry> { $0.inLibrary }) private var libraryNovels: [Entry]
@@ -120,7 +120,7 @@ struct MoreView: View {
                         await syncManager.push(
                             profile: userProfile,
                             entries: libraryNovels,
-                            sources: pluginManager.installedPluginsList
+                            sources: sourceManager.novelSources
                         )
                     }
                 } label: {
