@@ -80,13 +80,17 @@ struct OfflineLibraryView: View {
 
     private var downloadedSection: some View {
         let groups = Dictionary(grouping: completed) { $0.chapter?.entry?.persistentModelID }
-        let rows = groups.compactMap { _, items -> (title: String, items: [DownloadItem])? in
-            guard let title = items.first?.chapter?.entry?.displayTitle else { return nil }
-            return (title, items)
-        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let rows = groups.compactMap { _, items -> (entry: Entry, items: [DownloadItem])? in
+            guard let entry = items.first?.chapter?.entry else { return nil }
+            return (entry, items)
+        }.sorted { $0.entry.displayTitle.localizedStandardCompare($1.entry.displayTitle) == .orderedAscending }
         return Section("Downloaded") {
-            ForEach(rows, id: \.title) { row in
-                LabeledContent(row.title, value: "\(row.items.count)")
+            ForEach(rows, id: \.entry.persistentModelID) { row in
+                NavigationLink {
+                    NovelDetailView(entry: row.entry)
+                } label: {
+                    LabeledContent(row.entry.displayTitle, value: "\(row.items.count)")
+                }
                     .swipeActions {
                         Button("Delete", role: .destructive) { for item in row.items { downloads.remove(item) } }
                     }
@@ -131,12 +135,10 @@ private struct DownloadQueueRow: View {
             } label: { stateIcon.frame(width: 44, height: 44).contentShape(Rectangle()) }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isActive ? "Pause download" : "Resume download")
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.chapter?.entry?.displayTitle ?? "Removed title")
-                    .font(Typography.small).foregroundStyle(.secondary).lineLimit(1)
-                Text(item.chapter?.name ?? "Removed chapter").font(Typography.body).lineLimit(2)
-                Text(status).font(Typography.small).foregroundStyle(item.state == .failed ? AppTheme.warning : .secondary)
-                    .lineLimit(2)
+            if let entry = item.chapter?.entry {
+                NavigationLink { NovelDetailView(entry: entry) } label: { details }
+            } else {
+                details
             }
         }
         .swipeActions(edge: .trailing) {
@@ -144,6 +146,16 @@ private struct DownloadQueueRow: View {
         }
         .swipeActions(edge: .leading) {
             Button("Run next", systemImage: "arrow.up.to.line") { downloads.moveToTop(item) }
+        }
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.chapter?.entry?.displayTitle ?? "Removed title")
+                .font(Typography.small).foregroundStyle(.secondary).lineLimit(1)
+            Text(item.chapter?.name ?? "Removed chapter").font(Typography.body).lineLimit(2)
+            Text(status).font(Typography.small).foregroundStyle(item.state == .failed ? AppTheme.warning : .secondary)
+                .lineLimit(2)
         }
     }
 
