@@ -181,7 +181,7 @@ struct ChapterDownloadControl: View {
 
     private var status: ChapterDownloadStatus {
         downloads.status(sourceKey: entry.sourceKey, entryURL: entry.url,
-                         chapterURL: chapter.path, downloaded: chapter.downloaded)
+                         chapterURL: chapter.path, downloaded: entry.isLocal)
     }
     private var item: DownloadItem? { downloads.storedItem(chapter.path, in: entry) }
 
