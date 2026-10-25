@@ -33,17 +33,6 @@ struct MangaZoomState: Equatable {
         setScale(scale * factor, in: size)
     }
 
-    /// Zooms so the point under the finger stays put (clamped to the content edges).
-    mutating func zoom(to target: CGFloat, at point: CGPoint, in size: CGSize, horizontalOnly: Bool) {
-        let clamped = min(max(target, Self.minScale), Self.maxScale)
-        let proposed = CGSize(
-            width: (size.width / 2 - point.x) * (clamped - 1),
-            height: horizontalOnly ? 0 : (size.height / 2 - point.y) * (clamped - 1)
-        )
-        scale = clamped
-        offset = Self.clamp(proposed, scale: clamped, in: size)
-    }
-
     mutating func reset() {
         scale = 1
         offset = .zero

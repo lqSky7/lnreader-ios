@@ -60,8 +60,6 @@ struct MangaReaderView: View {
     @State private var errorMessage: String?
     @State private var chrome: ReaderChromeState = .control
     @State private var zoom = MangaZoomState()
-    @State private var menuToggleTask: Task<Void, Never>?
-    @State private var lastTap: (time: TimeInterval, point: CGPoint)?
     @State private var showChapterSheet = false
     /// Set when stepping back a chapter so it opens on its last page.
     @State private var landOnLastPage = false
@@ -790,17 +788,8 @@ struct MangaReaderView: View {
     private func handleTap(at point: CGPoint) {
         // The finger lifting after a hold-to-scroll is not a tap.
         guard !scroller.justHeld else { return }
-        let isDoubleTap = registerTap(at: point)
         // Zoomed in, tap zones would turn the page under a magnified view.
-        if zoom.isZoomed {
-            if isDoubleTap {
-                menuToggleTask?.cancel()
-                animateZoom { zoom.reset() }
-            } else {
-                toggleControlsAfterDoubleTapWindow()
-            }
-            return
-        }
+        if zoom.isZoomed { toggleControls(); return }
 
         let preferences = seriesSettings.resolved
         let isPager = mode == .pager
@@ -812,47 +801,13 @@ struct MangaReaderView: View {
         ) {
         case .previous: isPager ? turnPage(forward: false) : scroller.scrollScreen(forward: false)
         case .next: isPager ? turnPage(forward: true) : scroller.scrollScreen(forward: true)
-        case .menu:
-            if isDoubleTap {
-                // Double tap outside the page-turn zones zooms in on the tapped point.
-                menuToggleTask?.cancel()
-                animateZoom {
-                    zoom.zoom(to: Self.doubleTapScale, at: point, in: readerSize, horizontalOnly: mode == .webtoon)
-                }
-            } else {
-                toggleControlsAfterDoubleTapWindow()
-            }
-        }
-    }
-
-    /// A single tap on the controls zone waits out the double-tap window, so a
-    /// double tap zooms without the controls flashing.
-    private func toggleControlsAfterDoubleTapWindow() {
-        menuToggleTask?.cancel()
-        menuToggleTask = Task {
-            try? await Task.sleep(for: .seconds(Self.doubleTapInterval))
-            guard !Task.isCancelled else { return }
-            toggleControls()
+        case .menu: toggleControls()
         }
     }
 
     /// Eased, never a spring: an overshoot below 1x would show black bars around the page.
     private func animateZoom(_ change: () -> Void) {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25), change)
-    }
-
-    private static let doubleTapScale: CGFloat = 2.5
-    private static let doubleTapInterval: TimeInterval = 0.2
-
-    /// Records a tap and says whether it completes a double tap: two taps close in time and place.
-    private func registerTap(at point: CGPoint) -> Bool {
-        let now = Date.timeIntervalSinceReferenceDate
-        defer { lastTap = (now, point) }
-        guard let last = lastTap, now - last.time <= Self.doubleTapInterval,
-              hypot(point.x - last.point.x, point.y - last.point.y) <= 40
-        else { return false }
-        lastTap = nil
-        return true
     }
 
     private func turnPage(forward: Bool) {
