@@ -113,6 +113,9 @@ struct MangaReaderView: View {
         return sourceChapters
     }
 
+    /// Finger travel, in points, beyond which a touch is a swipe and not a tap.
+    private static let tapSlop: CGFloat = 6
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -123,9 +126,17 @@ struct MangaReaderView: View {
                 // `Color.clear` sits above the scroll view and eats the drag, so
                 // the webtoon would not scroll and the pager would not swipe.
                 .simultaneousGesture(
-                    SpatialTapGesture()
+                    // A drag with no minimum distance rather than `SpatialTapGesture`,
+                    // which forgives a lot of finger travel: a micro swipe would
+                    // count as a tap and turn the page. Past `tapSlop` it is a swipe.
+                    DragGesture(minimumDistance: 0)
                         // The webtoon strip handles its own taps.
-                        .onEnded { value in if mode != .webtoon { handleTap(at: value.location) } }
+                        .onEnded { value in
+                            guard mode != .webtoon,
+                                  hypot(value.translation.width, value.translation.height) <= Self.tapSlop
+                            else { return }
+                            handleTap(at: value.startLocation)
+                        }
                 )
 
             if chrome.isControl {
