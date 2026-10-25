@@ -416,6 +416,7 @@ struct ChapterSelectionToolbar: ViewModifier {
 
     private func setRead(_ read: Bool) {
         for chapter in picked { apply(read: read, to: chapter) }
+        if read { ChapterDownloadManager.shared.chaptersMarkedRead(picked) }
         finish()
     }
 
@@ -432,7 +433,9 @@ struct ChapterSelectionToolbar: ViewModifier {
     private func markPreviousRead() {
         guard let floor = allChapters.filter({ selection.paths.contains($0.path) }).map(\.sortNumber).min() else { return }
         let earlier = Set(allChapters.filter { $0.sortNumber < floor }.map(\.path))
-        for chapter in entry?.chapters ?? [] where earlier.contains(chapter.url) { apply(read: true, to: chapter) }
+        let marked = (entry?.chapters ?? []).filter { earlier.contains($0.url) }
+        for chapter in marked { apply(read: true, to: chapter) }
+        ChapterDownloadManager.shared.chaptersMarkedRead(marked)
         finish()
     }
 

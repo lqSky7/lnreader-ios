@@ -136,7 +136,9 @@ title and an empty state. Runs of selected chapters are drawn as one rounded blo
 time a chapter is read each session (`ChapterDownloadManager.chapterOpened`, called from the
 two `LibraryManager.record…` paths). *Delete after reading* removes the download of the chapter
 N places behind the one just finished (`chapterFinished`), sparing bookmarks by default. Rows
-in the downloads screen open the title.
+in the downloads screen open the title. *Remove when marked as read*
+(`downloads.deleteOnMarkRead`, off by default) deletes downloads of chapters marked read from the
+selection bar, including "mark previous as read".
 
 Not done from Mihon: downloaded-only mode, per-title size, split tall images.
 

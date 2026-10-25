@@ -280,6 +280,18 @@ final class ChapterDownloadManager {
         }
     }
 
+    /// Chapters the user marked read by hand (selection bar). With "Remove after
+    /// marked as read" on, their downloads go, sparing bookmarks if asked.
+    func chaptersMarkedRead(_ chapters: [Chapter]) {
+        guard UserDefaults.standard.bool(forKey: "downloads.deleteOnMarkRead") else { return }
+        let keepBookmarked = UserDefaults.standard.object(forKey: "downloads.keepBookmarked") as? Bool ?? true
+        for chapter in chapters {
+            guard chapter.entry?.isLocal == false, let item = chapter.downloadItem, item.state == .completed else { continue }
+            if keepBookmarked && chapter.bookmark { continue }
+            remove(item)
+        }
+    }
+
     // MARK: Queue and per-title actions
 
     /// Items still to do, in the order they will run.

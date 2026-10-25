@@ -10,6 +10,7 @@ struct OfflineLibraryView: View {
     @AppStorage("downloads.aheadCount") private var aheadCount = 0
     @AppStorage("downloads.deleteAfterRead") private var deleteAfterRead = 0
     @AppStorage("downloads.keepBookmarked") private var keepBookmarked = true
+    @AppStorage("downloads.deleteOnMarkRead") private var deleteOnMarkRead = false
     @State private var storageBytes: Int64?
     @State private var confirmCancelAll = false
     @State private var confirmClearAll = false
@@ -85,11 +86,12 @@ struct OfflineLibraryView: View {
                 Text("Fourth to last read").tag(4)
                 Text("Fifth to last read").tag(5)
             }
+            Toggle("Remove when marked as read", isOn: $deleteOnMarkRead)
             Toggle("Keep bookmarked chapters", isOn: $keepBookmarked)
         } header: {
             Text("While reading")
         } footer: {
-            Text("Download ahead queues the next chapters when you open one, using your Wi-Fi setting. Delete after reading removes a chapter’s download once you finish the chapter that many places after it.")
+            Text("Download ahead queues the next chapters when you open one, using your Wi-Fi setting. Delete after reading removes a chapter’s download once you finish the chapter that many places after it. Remove when marked as read does the same when you mark chapters read from the chapter list.")
         }
     }
 
