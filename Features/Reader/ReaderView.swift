@@ -99,6 +99,11 @@ struct ReaderView: View {
         setChrome(chrome.toggled)
     }
 
+    private func openSettings() {
+        settingsDetent = .large
+        showSettings = true
+    }
+
     /// Single tap moves between the two states: focus shows the page, control
     /// shows every action.
     private func setChrome(_ state: ReaderChromeState) {
@@ -256,10 +261,7 @@ struct ReaderView: View {
                 hasNext: hasNextChapter,
                 isPreparingTTS: isPreparingTTS,
                 onDismiss: { dismiss() },
-                onSettings: {
-                    settingsDetent = .large
-                    showSettings = true
-                },
+                onSettings: openSettings,
                 onTTSStart: { isCurrentSpeech ? stopTTSPlayback() : startTTSPlayback() },
                 onPreviousChapter: navigateToPreviousChapter,
                 onNextChapter: navigateToNextChapter,
@@ -771,7 +773,7 @@ struct ReaderView: View {
             voiceId: ttsManager.manifest?.voiceId ?? ttsVoiceId,
             voiceName: audioLibrary.voices.first { $0.id == (ttsManager.manifest?.voiceId ?? ttsVoiceId) }?.name ?? ttsManager.manifest?.voiceName ?? "Breeze",
             isFollowing: ttsBridge.isFollowing, sleepTimerLabel: ttsManager.sleepTimerLabel, playbackStatus: ttsManager.playbackStatus,
-            onSettings: { showSettings = true },
+            onSettings: openSettings,
             onPlayPause: { ttsManager.togglePause() }, onSkipBack: { ttsManager.skip(-15) },
             onSkipForward: { ttsManager.skip(30) }, onRate: { showSpeedPicker = true },
             onVoice: { showAudioDownloads = true },

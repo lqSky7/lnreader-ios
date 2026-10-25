@@ -195,8 +195,10 @@ final class Haptics {
     /// compressed into a tick. Each tick's intensity and sharpness are set on
     /// the player as dynamic parameters just before it restarts.
     private func tick(intensity: Double, sharpness: Double, direction: ScrollDirection) {
+        // .medium gentles to .light, keeping the fallback directions distinct.
+        let fallbackWeight: Weight = direction == .forward ? .soft : .medium
         guard supportsEngine, let engine = readyEngine() else {
-            return impact(direction == .forward ? .soft : .light, intensity: intensity)
+            return impact(fallbackWeight, intensity: intensity)
         }
         let parameters = [
             // A multiplier on the pattern's intensity envelope.
@@ -221,7 +223,7 @@ final class Haptics {
             tickPlayers[direction] = nil
             engineNeedsStart = true
             guard let restarted = readyEngine(), (try? fire(on: restarted)) != nil else {
-                return impact(direction == .forward ? .soft : .light, intensity: intensity)
+                return impact(fallbackWeight, intensity: intensity)
             }
         }
     }
