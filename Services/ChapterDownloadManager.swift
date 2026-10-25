@@ -235,6 +235,51 @@ final class ChapterDownloadManager {
         guard free > 200 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
     }
 
+    // MARK: Reading-driven automation
+
+    /// Chapters already counted for download-ahead this session, so the queue is
+    /// touched once per chapter and not on every progress tick.
+    private var aheadTriggered: Set<PersistentIdentifier> = []
+
+    /// Called as a chapter is read. With "Download ahead" on, queues the next few
+    /// chapters by number (never `sourceOrder`) that have no download yet.
+    func chapterOpened(_ chapter: Chapter) {
+        let ahead = UserDefaults.standard.integer(forKey: "downloads.aheadCount")
+        guard ahead > 0, let entry = chapter.entry, entry.inLibrary, !entry.isLocal,
+              chapter.chapterNumber >= 0,
+              aheadTriggered.insert(chapter.persistentModelID).inserted else { return }
+        var seen = Set<Double>()
+        let window = entry.chapters
+            .filter { $0.chapterNumber > chapter.chapterNumber }
+            .sorted { $0.chapterNumber < $1.chapterNumber }
+            .filter { seen.insert($0.chapterNumber).inserted }
+            .prefix(ahead)
+        let missing = window.filter { $0.downloadItem == nil }
+        if !missing.isEmpty { enqueue(missing, userInitiated: false) }
+    }
+
+    /// Called when a chapter flips to read. "Delete after reading" removes the
+    /// download of the chapter `offset - 1` places behind it (1 = the one just
+    /// read), optionally sparing bookmarks.
+    func chapterFinished(_ chapter: Chapter) {
+        let offset = UserDefaults.standard.integer(forKey: "downloads.deleteAfterRead")
+        guard offset > 0, let entry = chapter.entry, !entry.isLocal, chapter.chapterNumber >= 0 else { return }
+        let keepBookmarked = UserDefaults.standard.object(forKey: "downloads.keepBookmarked") as? Bool ?? true
+        var seen = Set<Double>()
+        let numbers = entry.chapters
+            .map(\.chapterNumber)
+            .filter { $0 <= chapter.chapterNumber && $0 >= 0 }
+            .sorted(by: >)
+            .filter { seen.insert($0).inserted }
+        guard numbers.count >= offset else { return }
+        let target = numbers[offset - 1]
+        for old in entry.chapters where old.chapterNumber == target {
+            guard let item = old.downloadItem, item.state == .completed else { continue }
+            if keepBookmarked && old.bookmark { continue }
+            remove(item)
+        }
+    }
+
     // MARK: Queue and per-title actions
 
     /// Items still to do, in the order they will run.

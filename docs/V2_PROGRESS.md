@@ -131,8 +131,14 @@ unread, all unread, all, delete). More → Downloads is an overview (count, stor
 pause/resume all), a reorderable queue with swipe actions (cancel, run next), downloads by
 title and an empty state. Runs of selected chapters are drawn as one rounded block.
 
-Not done from Mihon: download ahead while reading, delete after reading, downloaded-only mode,
-per-title size, split tall images.
+**While reading** (More → Downloads, `downloads.aheadCount`, `downloads.deleteAfterRead`,
+`downloads.keepBookmarked`): *Download ahead* queues the next 1–10 chapters by number the first
+time a chapter is read each session (`ChapterDownloadManager.chapterOpened`, called from the
+two `LibraryManager.record…` paths). *Delete after reading* removes the download of the chapter
+N places behind the one just finished (`chapterFinished`), sparing bookmarks by default. Rows
+in the downloads screen open the title.
+
+Not done from Mihon: downloaded-only mode, per-title size, split tall images.
 
 ## Chapter fetching is manual
 

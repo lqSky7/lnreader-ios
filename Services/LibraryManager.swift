@@ -181,6 +181,7 @@ final class LibraryManager {
         percent: Int,
         context: ModelContext
     ) {
+        ChapterDownloadManager.shared.chapterOpened(chapter)
         let finished = chapter.read && chapter.progress >= 100
         let clamped = min(max(percent, 0), 100)
         let wasRead = chapter.read
@@ -199,7 +200,10 @@ final class LibraryManager {
         // A chapter flipping to read is the one change the library cares about.
         if chapter.read != wasRead {
             LibraryChapterCounts.shared.invalidate()
-            if chapter.read, let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
+            if chapter.read {
+                ChapterDownloadManager.shared.chapterFinished(chapter)
+                if let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
+            }
         }
 
         touchTimestamps(chapter)
@@ -279,6 +283,7 @@ final class LibraryManager {
         pageCount: Int,
         context: ModelContext
     ) {
+        ChapterDownloadManager.shared.chapterOpened(chapter)
         let update = MangaProgress.update(pageIndex: pageIndex, pageCount: pageCount)
         let wasRead = chapter.read
 
@@ -291,7 +296,10 @@ final class LibraryManager {
 
         if chapter.read != wasRead {
             LibraryChapterCounts.shared.invalidate()
-            if chapter.read, let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
+            if chapter.read {
+                ChapterDownloadManager.shared.chapterFinished(chapter)
+                if let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
+            }
         }
 
         touchTimestamps(chapter)

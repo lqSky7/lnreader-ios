@@ -7,6 +7,9 @@ struct OfflineLibraryView: View {
     @Query(sort: \DownloadItem.order) private var queue: [DownloadItem]
     @State private var downloads = ChapterDownloadManager.shared
     @AppStorage("downloads.wifiOnly") private var wifiOnly = true
+    @AppStorage("downloads.aheadCount") private var aheadCount = 0
+    @AppStorage("downloads.deleteAfterRead") private var deleteAfterRead = 0
+    @AppStorage("downloads.keepBookmarked") private var keepBookmarked = true
     @State private var storageBytes: Int64?
     @State private var confirmCancelAll = false
     @State private var confirmClearAll = false
@@ -27,6 +30,9 @@ struct OfflineLibraryView: View {
                     .listRowBackground(Color.clear)
             } else {
                 overviewSection
+            }
+            automationSection
+            if !isEmpty {
                 if !pending.isEmpty { queueSection }
                 if !completed.isEmpty { downloadedSection }
             }
@@ -62,6 +68,28 @@ struct OfflineLibraryView: View {
             }
         } footer: {
             if let message = downloads.message { Text(message) }
+        }
+    }
+
+    private var automationSection: some View {
+        Section {
+            Picker("Download ahead", selection: $aheadCount) {
+                Text("Off").tag(0)
+                ForEach([1, 2, 3, 5, 10], id: \.self) { Text("\($0) chapters").tag($0) }
+            }
+            Picker("Delete after reading", selection: $deleteAfterRead) {
+                Text("Never").tag(0)
+                Text("Chapter just read").tag(1)
+                Text("Second to last read").tag(2)
+                Text("Third to last read").tag(3)
+                Text("Fourth to last read").tag(4)
+                Text("Fifth to last read").tag(5)
+            }
+            Toggle("Keep bookmarked chapters", isOn: $keepBookmarked)
+        } header: {
+            Text("While reading")
+        } footer: {
+            Text("Download ahead queues the next chapters when you open one, using your Wi-Fi setting. Delete after reading removes a chapter’s download once you finish the chapter that many places after it.")
         }
     }
 
