@@ -59,6 +59,9 @@ struct MangaReaderView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var chrome: ReaderChromeState = .control
+    @State private var zoom = MangaZoomState()
+    @State private var menuToggleTask: Task<Void, Never>?
+    @State private var lastTap: (time: TimeInterval, point: CGPoint)?
     @State private var showChapterSheet = false
     /// Set when stepping back a chapter so it opens on its last page.
     @State private var landOnLastPage = false
@@ -121,6 +124,7 @@ struct MangaReaderView: View {
             Color.black.ignoresSafeArea()
 
             content
+                .mangaZoom($zoom, in: readerSize, horizontalOnly: mode == .webtoon)
                 .contentShape(Rectangle())
                 // A simultaneous gesture, not an overlay: an overlay of
                 // `Color.clear` sits above the scroll view and eats the drag, so
@@ -179,6 +183,7 @@ struct MangaReaderView: View {
             libraryManager.flushProgress(context: modelContext)
         }
         .onChange(of: currentIndex) { old, index in
+            if mode == .pager { zoom.reset() }
             pageTurnHaptic(from: old, to: index)
             handlePageChange(index)
         }
@@ -193,6 +198,7 @@ struct MangaReaderView: View {
             // Re-run the layout without refetching the page list. The strip
             // starts again from the chapter that is open.
             chrome = .control
+            zoom.reset()
             appendTask?.cancel()
             appendTask = nil
             segments = pages.isEmpty ? [] : [ReaderSegment(id: chapterURL, name: chapterName, pages: pages)]
@@ -236,6 +242,8 @@ struct MangaReaderView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        // A zoomed page is panned, not swiped.
+        .scrollDisabled(zoom.isZoomed)
         .id(chapterURL)
         .environment(\.layoutDirection, direction.layoutDirection)
         .ignoresSafeArea()
@@ -375,6 +383,17 @@ struct MangaReaderView: View {
                     scroller.isAutoScrolling ? "Stop auto scroll" : "Start auto scroll",
                     systemImage: scroller.isAutoScrolling ? "pause.circle" : "play.circle"
                 ) { toggleAutoScroll() }
+            }
+            Section("Zoom") {
+                Button("Zoom in", systemImage: "plus.magnifyingglass") { zoomBy(MangaZoomState.step) }
+                    .disabled(!zoom.canZoomIn)
+                Button("Zoom out", systemImage: "minus.magnifyingglass") { zoomBy(1 / MangaZoomState.step) }
+                    .disabled(!zoom.isZoomed)
+                if zoom.isZoomed {
+                    Button("Reset zoom", systemImage: "arrow.up.left.and.down.right.magnify") {
+                        animateZoom { zoom.reset() }
+                    }
+                }
             }
             Button("Reader settings…", systemImage: "gearshape") { showReaderSettings = true }
         } label: {
@@ -771,6 +790,17 @@ struct MangaReaderView: View {
     private func handleTap(at point: CGPoint) {
         // The finger lifting after a hold-to-scroll is not a tap.
         guard !scroller.justHeld else { return }
+        let isDoubleTap = registerTap(at: point)
+        // Zoomed in, tap zones would turn the page under a magnified view.
+        if zoom.isZoomed {
+            if isDoubleTap {
+                menuToggleTask?.cancel()
+                animateZoom { zoom.reset() }
+            } else {
+                toggleControlsAfterDoubleTapWindow()
+            }
+            return
+        }
 
         let preferences = seriesSettings.resolved
         let isPager = mode == .pager
@@ -782,8 +812,47 @@ struct MangaReaderView: View {
         ) {
         case .previous: isPager ? turnPage(forward: false) : scroller.scrollScreen(forward: false)
         case .next: isPager ? turnPage(forward: true) : scroller.scrollScreen(forward: true)
-        case .menu: toggleControls()
+        case .menu:
+            if isDoubleTap {
+                // Double tap outside the page-turn zones zooms in on the tapped point.
+                menuToggleTask?.cancel()
+                animateZoom {
+                    zoom.zoom(to: Self.doubleTapScale, at: point, in: readerSize, horizontalOnly: mode == .webtoon)
+                }
+            } else {
+                toggleControlsAfterDoubleTapWindow()
+            }
         }
+    }
+
+    /// A single tap on the controls zone waits out the double-tap window, so a
+    /// double tap zooms without the controls flashing.
+    private func toggleControlsAfterDoubleTapWindow() {
+        menuToggleTask?.cancel()
+        menuToggleTask = Task {
+            try? await Task.sleep(for: .seconds(Self.doubleTapInterval))
+            guard !Task.isCancelled else { return }
+            toggleControls()
+        }
+    }
+
+    /// Eased, never a spring: an overshoot below 1x would show black bars around the page.
+    private func animateZoom(_ change: () -> Void) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25), change)
+    }
+
+    private static let doubleTapScale: CGFloat = 2.5
+    private static let doubleTapInterval: TimeInterval = 0.2
+
+    /// Records a tap and says whether it completes a double tap: two taps close in time and place.
+    private func registerTap(at point: CGPoint) -> Bool {
+        let now = Date.timeIntervalSinceReferenceDate
+        defer { lastTap = (now, point) }
+        guard let last = lastTap, now - last.time <= Self.doubleTapInterval,
+              hypot(point.x - last.point.x, point.y - last.point.y) <= 40
+        else { return false }
+        lastTap = nil
+        return true
     }
 
     private func turnPage(forward: Bool) {
@@ -816,6 +885,10 @@ struct MangaReaderView: View {
         guard chrome != state else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { chrome = state }
         Haptics.shared.impact(.light)
+    }
+
+    private func zoomBy(_ factor: CGFloat) {
+        animateZoom { zoom.zoom(by: factor, in: readerSize) }
     }
 
     private func toggleControls() {
