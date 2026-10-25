@@ -98,7 +98,9 @@ final class TrackingManager {
     /// Start tracking `entry` as `result`. Progress is the larger of what is read
     /// here and what AniList already has, so binding never rolls anything back.
     @discardableResult
-    func bind(_ result: TrackSearchResult, to entry: Entry, context: ModelContext) async throws -> Track {
+    func bind(
+        _ result: TrackSearchResult, to entry: Entry, isPrivate: Bool = false, context: ModelContext
+    ) async throws -> Track {
         do {
             let user = try await requireUser()
             let existing = try await AniListClient.shared.entry(mediaId: result.id, userId: user)
@@ -115,7 +117,8 @@ final class TrackingManager {
             let finish = status == .completed ? (existing?.finish ?? now) : existing?.finish
 
             let saved = try await AniListClient.shared.save(
-                mediaId: result.id, progress: progress, status: status, start: start, finish: finish)
+                mediaId: result.id, progress: progress, status: status, start: start, finish: finish,
+                isPrivate: isPrivate)
 
             if let old = aniListTrack(for: entry) { context.delete(old) }
             let track = Track(syncId: TrackerID.aniList, remoteId: result.id, title: saved.title)
@@ -132,14 +135,15 @@ final class TrackingManager {
     /// A manual edit from the tracker sheet. Only the fields given are changed.
     func update(
         _ track: Track, status: TrackStatus? = nil, progress: Int? = nil, score: Double? = nil,
-        start: Date?? = nil, finish: Date?? = nil, context: ModelContext
+        start: Date?? = nil, finish: Date?? = nil, isPrivate: Bool? = nil, context: ModelContext
     ) async throws {
         do {
             _ = try await requireUser()
             let saved = try await AniListClient.shared.save(
                 mediaId: track.remoteId, progress: progress, status: status, score: score,
                 start: start.flatMap { $0 }, finish: finish.flatMap { $0 },
-                clearStart: start != nil && start! == nil, clearFinish: finish != nil && finish! == nil)
+                clearStart: start != nil && start! == nil, clearFinish: finish != nil && finish! == nil,
+                isPrivate: isPrivate)
             apply(saved, to: track, fallbackTotal: track.totalChapters)
             try? context.save()
         } catch { throw handle(error) }
@@ -169,6 +173,7 @@ final class TrackingManager {
         track.score = remote.score
         track.startDate = remote.start
         track.finishDate = remote.finish
+        track.isPrivate = remote.isPrivate
         if !remote.url.isEmpty { track.remoteURL = remote.url }
     }
 

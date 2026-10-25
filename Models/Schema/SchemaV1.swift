@@ -320,6 +320,8 @@ enum SchemaV1: VersionedSchema {
         var remoteURL: String = ""
         var startDate: Date?
         var finishDate: Date?
+        /// Hidden from the user's public AniList profile and activity feed.
+        var isPrivate: Bool = false
 
         var entry: Entry?
 

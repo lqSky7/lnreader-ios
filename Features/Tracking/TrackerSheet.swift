@@ -16,6 +16,9 @@ struct TrackerSheet: View {
     @State private var error: String?
     @State private var confirmRemove = false
     @State private var searchTask: Task<Void, Never>?
+    /// The title picked from search. Nothing is sent to AniList until Done.
+    @State private var draft: TrackSearchResult?
+    @State private var draftPrivate = false
 
     private var track: Track? { tracking.aniListTrack(for: entry) }
 
@@ -26,6 +29,8 @@ struct TrackerSheet: View {
                     loggedOut
                 } else if let track {
                     editor(track)
+                } else if let draft {
+                    draftForm(draft)
                 } else {
                     search
                 }
@@ -33,7 +38,10 @@ struct TrackerSheet: View {
             .navigationTitle("AniList")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.bold() }
+                if draft != nil {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { draft = nil } }
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { finish() }.bold() }
             }
             .overlay { if isBusy { ProgressView().controlSize(.large).padding(24).glassEffect(.regular, in: .rect(cornerRadius: 16)) } }
             .alert("Couldn't reach AniList", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
@@ -41,6 +49,7 @@ struct TrackerSheet: View {
             } message: { Text(error ?? "") }
         }
         .presentationDetents([.large])
+        .interactiveDismissDisabled(draft != nil)
         .onAppear { if query.isEmpty { query = entry.displayTitle } }
     }
 
@@ -68,7 +77,7 @@ struct TrackerSheet: View {
             }
             Section {
                 ForEach(results) { result in
-                    Button { bind(result) } label: { resultRow(result) }
+                    Button { draft = result } label: { resultRow(result) }
                         .buttonStyle(.plain)
                 }
             } footer: {
@@ -110,8 +119,29 @@ struct TrackerSheet: View {
         }
     }
 
-    private func bind(_ result: TrackSearchResult) {
-        run { _ = try await tracking.bind(result, to: entry, context: modelContext) }
+    private func draftForm(_ result: TrackSearchResult) -> some View {
+        Form {
+            Section { resultRow(result) }
+            Section {
+                Toggle("Private", isOn: $draftPrivate)
+            } footer: {
+                Text("Private entries stay off your AniList profile and activity feed. Tap Done to start tracking.")
+            }
+        }
+    }
+
+    /// Done binds a picked title with the chosen options, then closes the sheet.
+    private func finish() {
+        guard let result = draft else { dismiss(); return }
+        Task {
+            isBusy = true
+            defer { isBusy = false }
+            do {
+                _ = try await tracking.bind(result, to: entry, isPrivate: draftPrivate, context: modelContext)
+                draft = nil
+                dismiss()
+            } catch AniListError.cancelled {} catch { self.error = error.localizedDescription }
+        }
     }
 
     // MARK: Editor
@@ -139,6 +169,9 @@ struct TrackerSheet: View {
                     LabeledContent("Chapters", value: track.totalChapters > 0
                         ? "\(Int(track.lastChapterRead)) / \(track.totalChapters)" : "\(Int(track.lastChapterRead))")
                 }
+                Toggle("Private", isOn: Binding(get: { track.isPrivate }, set: { new in
+                    run { try await tracking.update(track, isPrivate: new, context: modelContext) }
+                }))
                 Picker("Score", selection: Binding(get: { Int((track.score / 10).rounded()) }, set: { new in
                     run { try await tracking.update(track, score: Double(new) * 10, context: modelContext) }
                 })) {

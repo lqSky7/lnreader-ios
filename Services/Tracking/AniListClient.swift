@@ -64,6 +64,7 @@ struct RemoteTrack: Sendable {
     var score: Double
     var start: Date?
     var finish: Date?
+    var isPrivate: Bool
     var url: String
 }
 
@@ -228,7 +229,7 @@ final class AniListClient: @unchecked Sendable {
     }
 
     private static let entryFields = """
-    id progress status scoreRaw: score(format: POINT_100)
+    id progress status private scoreRaw: score(format: POINT_100)
     startedAt { year month day } completedAt { year month day }
     media { id siteUrl chapters title { romaji english } }
     """
@@ -247,7 +248,8 @@ final class AniListClient: @unchecked Sendable {
     /// Create or update an entry. Only the fields given are sent.
     func save(
         mediaId: Int64, progress: Int? = nil, status: TrackStatus? = nil, score: Double? = nil,
-        start: Date? = nil, finish: Date? = nil, clearStart: Bool = false, clearFinish: Bool = false
+        start: Date? = nil, finish: Date? = nil, clearStart: Bool = false, clearFinish: Bool = false,
+        isPrivate: Bool? = nil
     ) async throws -> RemoteTrack {
         var variables: [String: Any] = ["mediaId": Int(mediaId)]
         var declared = ["$mediaId: Int"], passed = ["mediaId: $mediaId"]
@@ -258,6 +260,7 @@ final class AniListClient: @unchecked Sendable {
         }
         if let progress { add("progress", "Int", progress) }
         if let status { add("status", "MediaListStatus", status.aniList) }
+        if let isPrivate { add("private", "Boolean", isPrivate) }
         if let score { add("score", "Int", Int(score.rounded())) }
         if let start { add("startedAt", "FuzzyDateInput", Self.fuzzy(start)) }
         else if clearStart { add("startedAt", "FuzzyDateInput", ["year": NSNull(), "month": NSNull(), "day": NSNull()]) }
@@ -304,6 +307,7 @@ final class AniListClient: @unchecked Sendable {
             status: TrackStatus(aniList: item["status"] as? String ?? "") ?? .planning,
             score: (item["scoreRaw"] as? NSNumber)?.doubleValue ?? 0,
             start: date(item["startedAt"]), finish: date(item["completedAt"]),
+            isPrivate: item["private"] as? Bool ?? false,
             url: media["siteUrl"] as? String ?? "")
     }
 }
