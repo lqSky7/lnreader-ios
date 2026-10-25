@@ -179,17 +179,26 @@ struct HistoryView: View {
     }
 
     private func delete(_ items: [History]) {
-        for item in items {
-            modelContext.delete(item)
+        let ids = items.map(\.persistentModelID)
+        let container = modelContext.container
+        Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            for id in ids {
+                if let item = context.model(for: id) as? History { context.delete(item) }
+            }
+            try? context.save()
         }
-        try? modelContext.save()
     }
 
     private func clearAllHistory() {
-        for item in history {
-            modelContext.delete(item)
+        // One batch delete in the store, off the main thread, instead of
+        // faulting in and deleting every row on it.
+        let container = modelContext.container
+        Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            try? context.delete(model: History.self)
+            try? context.save()
         }
-        try? modelContext.save()
     }
 }
 

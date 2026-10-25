@@ -533,15 +533,17 @@ final class LibraryManager {
         return result
     }
 
-    /// Mark every "new chapter" badge as seen.
-    func clearUpdates(context: ModelContext) {
-        let predicate = #Predicate<Chapter> { $0.dateFetch != nil }
-        if let chapters = try? context.fetch(FetchDescriptor(predicate: predicate)) {
-            for chapter in chapters {
-                chapter.dateFetch = nil
-            }
+    /// Mark every "new chapter" badge as seen. Runs on a background context: on a
+    /// large library, touching every chapter on the main thread froze the app.
+    func clearUpdates(container: ModelContainer) async {
+        await Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            let predicate = #Predicate<Chapter> { $0.dateFetch != nil }
+            guard let chapters = try? context.fetch(FetchDescriptor(predicate: predicate)) else { return }
+            for chapter in chapters { chapter.dateFetch = nil }
             try? context.save()
-        }
+        }.value
+        LibraryChapterCounts.shared.invalidate()
     }
 }
 

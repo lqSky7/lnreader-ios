@@ -82,7 +82,8 @@ struct UpdatesView: View {
                             titleVisibility: .visible
                         ) {
                             Button("Clear All", role: .destructive) {
-                                libraryManager.clearUpdates(context: modelContext)
+                                let container = modelContext.container
+                                Task { await libraryManager.clearUpdates(container: container) }
                             }
                             Button("Cancel", role: .cancel) {}
                         }
