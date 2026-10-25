@@ -96,6 +96,7 @@ docs/              Status ledger, performance numbers, feature notes
   (or any agent) about to change code.
 - [docs/V2_PROGRESS.md](docs/V2_PROGRESS.md) — status of everything, open issues, next steps.
   Start here.
+- [docs/ADDING_A_SOURCE.md](docs/ADDING_A_SOURCE.md) — how to add a source.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — measured hot paths and the rules that came out
   of them.
 - [docs/OFFLINE_LIBRARY.md](docs/OFFLINE_LIBRARY.md) — downloads, background work, backup
