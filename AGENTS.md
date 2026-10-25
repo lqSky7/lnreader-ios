@@ -76,8 +76,8 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 ## UI invariants [V2_PROGRESS]
 
 - **Behave consistently.** The same kind of surface acts the same everywhere. Novel and manga
-  reader settings are half-height sheets with one `.medium` detent; change one, change both.
-  Settings sheets are partial-height, never full-screen.
+  reader settings are sheets with `.medium` and `.large` detents, opening at `.large`;
+  change one, change both. Other settings sheets stay partial-height.
 - **Swipe right from the left edge goes back.** Full-screen surfaces that hide the back button
   must add `EdgeSwipeDismiss` and ignore it while a sheet is open.
 - **Chapter lists select by holding.** No context menu on chapter rows; it shares the long press.

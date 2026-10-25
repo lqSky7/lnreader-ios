@@ -10,6 +10,11 @@ struct MangaReaderSettingsSheet: View {
     /// Volume keys, auto scroll, hold to scroll: these follow the user.
     @Binding var controls: MangaControlSettings
 
+    /// Opens full height; half height is one drag down.
+    @State private var detent: PresentationDetent = .large
+    @AppStorage(Haptics.enabledKey) private var hapticsEnabled = true
+    @AppStorage(Haptics.scrollEnabledKey) private var scrollHaptics = true
+
     var body: some View {
         NavigationStack {
             Form {
@@ -19,6 +24,7 @@ struct MangaReaderSettingsSheet: View {
                 volumeSection
                 autoScrollSection
                 holdSection
+                hapticsSection
             }
             // The app's accent is white in dark mode, which turned every switch
             // solid white; the rest of the app tints controls with this instead.
@@ -31,11 +37,28 @@ struct MangaReaderSettingsSheet: View {
                 }
             }
         }
-        // A partial-height sheet keeps the page in view above it and takes the
-        // system glass material. Medium is the only detent so scrolling the
-        // list can't pull the sheet up to full height.
-        .presentationDetents([.medium])
+        // Full height by default, so every setting is in reach; half height is
+        // one drag down and keeps the page in view above the sheet.
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
+    }
+
+    private var hapticsSection: some View {
+        Section {
+            Toggle("Scroll haptics", isOn: $scrollHaptics)
+                .disabled(!hapticsEnabled)
+                .onChange(of: scrollHaptics) { _, on in
+                    if on { Haptics.shared.scroll(ScrollFeel.detent(speed: 800)) }
+                }
+        } header: {
+            Text("Haptics")
+        } footer: {
+            Text(hapticsEnabled
+                ? "A soft swell as you scroll: rising as you read on, falling as you scroll back, "
+                    + "and stronger the faster you flick. The master switch and strength live in "
+                    + "Settings › General › Haptics."
+                : "All vibration is off in Settings › General › Haptics.")
+        }
     }
 
     // MARK: - This series

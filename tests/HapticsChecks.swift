@@ -12,7 +12,7 @@ struct HapticsChecks {
         checkChapterBreaks()
         checkEdges()
         print("PASS: haptics — speed smoothing and pauses, feel scales with speed, "
-            + "steady distance ticks, rate-limited, chapter breaks, edge bumps once per run-in")
+            + "steady distance ticks, direction-aware swells, rate-limited, chapter breaks, edge bumps once per run-in")
     }
 
     private static func checkSpeedometer() {
@@ -36,6 +36,11 @@ struct HapticsChecks {
                      "a flick clicks stronger and crisper than a drag")
         let hardest = ScrollFeel.detent(speed: 1e6)
         precondition(hardest.intensity <= 1 && hardest.sharpness <= 1, "values stay in 0...1")
+        let back = ScrollFeel.detent(speed: 3000, direction: .backward)
+        precondition(back.direction == .backward && fast.direction == .forward,
+                     "the cue carries which way the page is moving")
+        precondition(back.intensity == fast.intensity && back.sharpness == fast.sharpness,
+                     "neither direction is louder; only the envelope differs")
         let wall = ScrollFeel.edge(speed: 3000)
         precondition(wall.sharpness < fast.sharpness, "an edge is duller than a click at the same speed")
         precondition(ScrollFeel.edge(speed: 3000).intensity > ScrollFeel.edge(speed: 80).intensity,
@@ -51,10 +56,11 @@ struct HapticsChecks {
                      "within one notch: silent")
         precondition(detents.update(offset: step * 1.1, speed: 500, time: 0.2, userDriven: true)?.kind == .detent,
                      "each notch of travel ticks")
-        precondition(detents.update(offset: step * 2.1, speed: 500, time: 0.3, userDriven: true) != nil,
-                     "and the next one, at the same rhythm")
-        precondition(detents.update(offset: step * 1.5, speed: 500, time: 0.4, userDriven: true) != nil,
-                     "scrolling back ticks too")
+        precondition(detents.update(offset: step * 2.1, speed: 500, time: 0.3, userDriven: true)?.direction == .forward,
+                     "reading on ticks with the rising swell, at the same rhythm")
+        let backTick = detents.update(offset: step * 1.5, speed: 500, time: 0.4, userDriven: true)
+        precondition(backTick != nil, "scrolling back ticks too")
+        precondition(backTick?.direction == .backward, "scrolling back uses the falling swell")
         precondition(detents.update(offset: step * 2.5, speed: 4000, time: 0.405, userDriven: true) == nil,
                      "ticks closer than the engine can separate are dropped")
         precondition(detents.update(offset: step * 3.5, speed: 4000, time: 0.42, userDriven: true) != nil,
@@ -72,8 +78,9 @@ struct HapticsChecks {
         }
         precondition(ticks == Int(600 / step), "one tick per notch over a second's drag, got \(ticks)")
         let slow = ScrollFeel.detent(speed: 80), fast = ScrollFeel.detent(speed: 3000)
-        precondition(fast.intensity - slow.intensity < 0.2, "ticks feel even across speeds")
-        precondition(slow.sharpness >= 0.7, "even a slow tick is crisp, not mushy")
+        precondition(fast.intensity - slow.intensity > 0.3, "tick intensity clearly follows scroll velocity")
+        precondition(slow.sharpness <= 0.45 && fast.sharpness <= 0.65,
+                     "ticks stay soft at every speed, never a hard click")
         detents.reset()
         precondition(detents.update(offset: 0, speed: 300, time: 5, userDriven: true) == nil,
                      "after a reset the next offset is a fresh start")

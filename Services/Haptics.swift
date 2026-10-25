@@ -51,15 +51,24 @@ final class Haptics {
             case .rigid: .rigid
             }
         }
+
+        /// One notch softer, as taps are played.
+        var gentled: Weight {
+            switch self {
+            case .soft, .light: .soft
+            case .medium: .light
+            case .heavy, .rigid: .medium
+            }
+        }
     }
 
     private let supportsEngine = CHHapticEngine.capabilitiesForHardware().supportsHaptics
     private var engine: CHHapticEngine?
     private var engineNeedsStart = true
-    /// The scroll tick's player, built once and restarted for every tick: a
-    /// tick can fire seventy times a second, and a new pattern and player each
-    /// time is allocation and latency on the scroll's hot path.
-    private var tickPlayer: CHHapticPatternPlayer?
+    /// The scroll swell's players, one per direction, built once and restarted
+    /// for every tick: a tick can fire seventy times a second, and a new pattern
+    /// and player each time is allocation and latency on the scroll's hot path.
+    private var tickPlayers: [ScrollDirection: CHHapticPatternPlayer] = [:]
     private var impactGenerators: [UIImpactFeedbackGenerator.FeedbackStyle: UIImpactFeedbackGenerator] = [:]
     private lazy var selectionGenerator = UISelectionFeedbackGenerator()
     private lazy var notificationGenerator = UINotificationFeedbackGenerator()
@@ -69,10 +78,17 @@ final class Haptics {
     // MARK: - Everyday feedback
 
     /// A tap of the given weight, for buttons, long presses and toggles.
+    ///
+    /// Deliberately gentler than stock UIKit feedback: one weight softer and
+    /// well under full intensity, so reading controls never thump.
     func impact(_ weight: Weight, intensity: Double = 1) {
         guard Self.isEnabled else { return }
-        generator(weight.style).impactOccurred(intensity: CGFloat(intensity * Self.strength))
+        let scaled = intensity * Self.strength * Self.tapIntensityScale
+        generator(weight.gentled.style).impactOccurred(intensity: CGFloat(scaled))
     }
+
+    /// How much of a tap's requested intensity actually reaches the device.
+    private static let tapIntensityScale = 0.6
 
     /// The light tick of a value changing, as a picker wheel gives.
     func selection() {
@@ -99,7 +115,7 @@ final class Haptics {
         let i = cue.intensity, s = cue.sharpness
         switch cue.kind {
         case .detent:
-            tick(intensity: i, sharpness: s)
+            tick(intensity: i, sharpness: s, direction: cue.direction)
         case .edge:
             // The hit, then a faint rebound as the content springs back.
             play([
@@ -173,51 +189,71 @@ final class Haptics {
 
     // MARK: - Playing
 
-    /// Sharpness the tick pattern is built at; each tick shifts it from here.
-    private static let tickBaseSharpness: Float = 0.5
-
-    /// One clean click on the reused player. The pattern is a full-strength
-    /// transient; each tick's intensity and sharpness are set on the player as
-    /// dynamic parameters just before it restarts.
-    private func tick(intensity: Double, sharpness: Double) {
-        guard supportsEngine, let engine = readyEngine() else { return impact(.light, intensity: intensity) }
+    /// One soft swell on the player cached for that direction. The pattern is a
+    /// short continuous event with an intensity envelope rather than a hard
+    /// transient — the same round, rising feel as Traverse's login button,
+    /// compressed into a tick. Each tick's intensity and sharpness are set on
+    /// the player as dynamic parameters just before it restarts.
+    private func tick(intensity: Double, sharpness: Double, direction: ScrollDirection) {
+        // .medium gentles to .light, keeping the fallback directions distinct.
+        let fallbackWeight: Weight = direction == .forward ? .soft : .medium
+        guard supportsEngine, let engine = readyEngine() else {
+            return impact(fallbackWeight, intensity: intensity)
+        }
         let parameters = [
-            // A multiplier on the pattern's intensity of 1.
+            // A multiplier on the pattern's intensity envelope.
             CHHapticDynamicParameter(parameterID: .hapticIntensityControl, value: scaled(intensity), relativeTime: 0),
             // An offset, -1...1, added to the pattern's sharpness.
             CHHapticDynamicParameter(
                 parameterID: .hapticSharpnessControl,
-                value: clamp(sharpness) - Self.tickBaseSharpness,
+                value: clamp(sharpness) - direction.baseSharpness,
                 relativeTime: 0
             ),
         ]
         func fire(on engine: CHHapticEngine) throws {
-            if tickPlayer == nil {
-                let pattern = try CHHapticPattern(events: [
-                    CHHapticEvent(
-                        eventType: .hapticTransient,
-                        parameters: [
-                            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
-                            CHHapticEventParameter(parameterID: .hapticSharpness, value: Self.tickBaseSharpness),
-                        ],
-                        relativeTime: 0
-                    ),
-                ], parameters: [])
-                tickPlayer = try engine.makePlayer(with: pattern)
-            }
-            try tickPlayer?.sendParameters(parameters, atTime: CHHapticTimeImmediate)
-            try tickPlayer?.start(atTime: CHHapticTimeImmediate)
+            if tickPlayers[direction] == nil {
+                tickPlayers[direction] = try engine.makePlayer(with: Self.scrollSwellPattern(direction))            }
+            try tickPlayers[direction]?.sendParameters(parameters, atTime: CHHapticTimeImmediate)
+            try tickPlayers[direction]?.start(atTime: CHHapticTimeImmediate)
         }
         do {
             try fire(on: engine)
         } catch {
             // The engine stopped or reset under the player. Rebuild both once.
-            tickPlayer = nil
+            tickPlayers[direction] = nil
             engineNeedsStart = true
             guard let restarted = readyEngine(), (try? fire(on: restarted)) != nil else {
-                return impact(.light, intensity: intensity)
+                return impact(fallbackWeight, intensity: intensity)
             }
         }
+    }
+
+    /// The scroll tick, 55 ms long. Reading on swells up and lets go at the
+    /// peak; scrolling back is the same softness released downwards, so the two
+    /// directions are told apart without either being louder than the other.
+    private static func scrollSwellPattern(_ direction: ScrollDirection) throws -> CHHapticPattern {
+        let duration: TimeInterval = 0.055
+        let event = CHHapticEvent(
+            eventType: .hapticContinuous,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: direction.baseSharpness),
+            ],
+            relativeTime: 0,
+            duration: duration
+        )
+        let points: [CHHapticParameterCurve.ControlPoint] = switch direction {
+        case .forward:
+            [.init(relativeTime: 0, value: 0.05), .init(relativeTime: duration, value: 1)]
+        case .backward:
+            [.init(relativeTime: 0, value: 1), .init(relativeTime: duration, value: 0.05)]
+        }
+        let envelope = CHHapticParameterCurve(
+            parameterID: .hapticIntensityControl,
+            controlPoints: points,
+            relativeTime: 0
+        )
+        return try CHHapticPattern(events: [event], parameterCurves: [envelope])
     }
 
     private func play(_ events: [CHHapticEvent], fallback: () -> Void) {
@@ -252,7 +288,7 @@ final class Haptics {
             made.resetHandler = { @Sendable [weak self] in
                 Task { @MainActor in
                     self?.engineNeedsStart = true
-                    self?.tickPlayer = nil
+                    self?.tickPlayers.removeAll()
                 }
             }
             engine = made
@@ -324,6 +360,12 @@ final class Haptics {
 
     private func scaled(_ intensity: Double) -> Float { clamp(intensity * Self.strength) }
     private func clamp(_ value: Double) -> Float { Float(min(max(value, 0), 1)) }
+}
+
+extension ScrollDirection {
+    /// Sharpness the swell pattern is built at; each tick shifts it from here.
+    /// Scrolling back is the duller of the two.
+    var baseSharpness: Float { self == .forward ? 0.30 : 0.18 }
 }
 
 extension View {
