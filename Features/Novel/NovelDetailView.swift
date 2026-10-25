@@ -200,6 +200,15 @@ struct NovelDetailView: View {
             refreshChapters()
         }
         .onChange(of: entry) { refreshChapters() }
+        // The reader is a full-screen cover, so this screen never disappears and
+        // `onAppear` does not run again. Refresh once the reader has closed and
+        // again when its closing write lands.
+        .onChange(of: readerRouter.request == nil) { _, closed in
+            if closed { refreshChapters() }
+        }
+        .onChange(of: libraryManager.progressSaveCount) {
+            if readerRouter.request == nil { refreshChapters() }
+        }
         .onChange(of: localEntry) { refreshChapters() }
         // Scanlator priority changes the merge/hide result, so the ordered list
         // has to be rebuilt — it is no longer a computed property.

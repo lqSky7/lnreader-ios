@@ -61,6 +61,11 @@ final class LibraryManager {
     /// granularity — nothing reads it below a minute.
     private static let timestampRefreshInterval: TimeInterval = 60
 
+    /// Bumped after every progress write lands. Screens that show chapter
+    /// progress and sit under the reader watch it, because the reader's last
+    /// write happens after it has already started closing.
+    private(set) var progressSaveCount = 0
+
     private var pendingProgressSave = false
     private var progressSaveTask: Task<Void, Never>?
     private var lastProgressSave = Date.distantPast
@@ -270,6 +275,7 @@ final class LibraryManager {
         pendingProgressSave = false
         lastProgressSave = .now
         try? context.save()
+        progressSaveCount += 1
     }
 
     /// Record a manga page turn.
