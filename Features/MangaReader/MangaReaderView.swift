@@ -677,7 +677,7 @@ struct MangaReaderView: View {
     private func scheduleChromeHide() {
         guard chrome.isControl, chromeHideTask == nil else { return }
         chromeHideTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             chromeHideTask = nil
             setChrome(.focus)
