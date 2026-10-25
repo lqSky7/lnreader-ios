@@ -36,6 +36,9 @@ final class WebtoonScrollController {
     @ObservationIgnored var isHoldEnabled = true {
         didSet { holdRecognizer.isEnabled = isHoldEnabled }
     }
+    /// Which way a hold at this point (in the strip's container) scrolls: `true`
+    /// is forward. Set by the reader from the series' tap-zone layout.
+    @ObservationIgnored var holdGoesForward: ((CGPoint) -> Bool)?
     /// Called when auto scroll runs out of content.
     @ObservationIgnored var onReachedEnd: (() -> Void)?
     /// Called while the strip is moving for any reason: drag, hold, auto or a screenful.
@@ -48,6 +51,7 @@ final class WebtoonScrollController {
     private(set) var isAutoScrolling = false
     /// Current hold speed in points per second, `nil` when not holding.
     private(set) var holdSpeed: Double?
+    @ObservationIgnored private var holdForward = true
 
     /// A hold just ended. The finger lifting after a long press looks like a
     /// tap to the reader's tap gesture; this lets it ignore that one.
@@ -138,8 +142,9 @@ final class WebtoonScrollController {
 
     // MARK: - Hold to scroll
 
-    fileprivate func holdBegan(at y: CGFloat) {
+    fileprivate func holdBegan(at y: CGFloat, zonePoint: CGPoint) {
         guard let view = scrollView else { return }
+        holdForward = holdGoesForward?(zonePoint) ?? true
         holdStartY = y
         let start = hold.speed(forDrag: 0)
         holdSpeed = start
@@ -152,8 +157,14 @@ final class WebtoonScrollController {
         updateLink()
     }
 
-    fileprivate func holdMoved(to y: CGFloat) {
+    fileprivate func holdMoved(to y: CGFloat, zonePoint: CGPoint) {
         guard holdSpeed != nil else { return }
+        // Sliding into another zone turns the scroll around mid-hold.
+        let forward = holdGoesForward?(zonePoint) ?? true
+        if forward != holdForward {
+            holdForward = forward
+            Haptics.shared.scrollSpeedLimit()
+        }
         let speed = hold.speed(forDrag: Double(y - holdStartY))
         holdSpeed = speed
         switch hapticTracker?.update(speed: speed, config: hold) {
@@ -210,7 +221,7 @@ final class WebtoonScrollController {
 
         let speed: Double
         if let holdSpeed {
-            speed = holdSpeed
+            speed = holdForward ? holdSpeed : -holdSpeed
         } else if isAutoScrolling, autoStyle == .stepped {
             return stepTick(view, dt: dt, readerMoving: readerMoving)
         } else if isAutoScrolling, !readerMoving {
@@ -231,7 +242,8 @@ final class WebtoonScrollController {
             offset: start,
             speed: speed,
             dt: dt,
-            maxOffset: Double(maxOffset(view))
+            maxOffset: Double(maxOffset(view)),
+            minOffset: Double(-view.adjustedContentInset.top)
         )
         exactOffset = step.offset
         view.contentOffset.y = CGFloat(ScrollStep.pixelAligned(step.offset, scale: scale))
@@ -289,9 +301,11 @@ final class WebtoonScrollController {
                 // Window coordinates: the content moves under the finger while
                 // it scrolls, so a point in the scroll view would drift.
                 let y = recognizer.location(in: nil).y
+                let zone = recognizer.view?.superview.map { recognizer.location(in: $0) }
+                    ?? recognizer.location(in: nil)
                 switch recognizer.state {
-                case .began: owner?.holdBegan(at: y)
-                case .changed: owner?.holdMoved(to: y)
+                case .began: owner?.holdBegan(at: y, zonePoint: zone)
+                case .changed: owner?.holdMoved(to: y, zonePoint: zone)
                 case .ended, .cancelled, .failed: owner?.endHold()
                 default: break
                 }

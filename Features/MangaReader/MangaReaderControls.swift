@@ -258,13 +258,20 @@ enum ScrollStep {
     }
 
     /// Advance `offset` by `speed` points per second over `dt` seconds, never
-    /// past `maxOffset`. `reachedEnd` is true on the step that arrives there.
+    /// past `maxOffset`. A negative `speed` moves back, never past `minOffset`.
+    /// `reachedEnd` is true on the step that arrives at the limit it moves toward.
     static func advance(
         offset: Double,
         speed: Double,
         dt: Double,
-        maxOffset: Double
+        maxOffset: Double,
+        minOffset: Double = 0
     ) -> (offset: Double, reachedEnd: Bool) {
+        if speed < 0, dt > 0 {
+            let back = offset + speed * min(dt, maxFrameGap)
+            if back <= minOffset { return (min(minOffset, max(offset, minOffset)), true) }
+            return (back, false)
+        }
         guard speed > 0, dt > 0 else { return (offset, offset >= maxOffset) }
         let next = offset + speed * min(dt, maxFrameGap)
         if next >= maxOffset { return (max(maxOffset, min(offset, maxOffset)), true) }
