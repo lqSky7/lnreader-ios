@@ -270,7 +270,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.position = position ?? chapter.sourceOrder
         self.chapterNumber = chapter.chapterNumber >= 0 ? chapter.chapterNumber : nil
         self.scanlator = chapter.scanlator
-        self.sortNumber = chapter.chapterNumber > 0
+        self.sortNumber = chapter.chapterNumber >= 0
             ? chapter.chapterNumber
             : Double((position ?? chapter.sourceOrder) + 1)
         self.sourceKey = chapter.entry?.sourceKey ?? ""
@@ -297,10 +297,10 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.position = position
         self.chapterNumber = sourceChapter.chapterNumber >= 0 ? sourceChapter.chapterNumber : nil
         self.scanlator = sourceChapter.scanlator
-        let parsed = sourceChapter.chapterNumber > 0
+        let parsed = sourceChapter.chapterNumber >= 0
             ? sourceChapter.chapterNumber
             : ChapterRecognition.parseChapterNumber(sourceChapter.name)
-        self.sortNumber = parsed > 0 ? parsed : Double(position + 1)
+        self.sortNumber = parsed >= 0 ? parsed : Double(position + 1)
         self.sourceKey = sourceKey
         self.entryURL = entryURL
         self.kind = kind
