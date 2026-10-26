@@ -396,7 +396,11 @@ final class WebtoonViewController: UIViewController,
         }
         // At the very bottom the top row can be a page or two short of the last
         // one; the reader has still reached it.
-        if top >= maxOffsetY - 1, let last = items.indices.last, case .page = items[last] {
+        // Judged by the last row's own edge rather than the offset limit, which
+        // is off by the insets and by rows that resized after loading.
+        if let last = items.indices.last, case .page = items[last],
+           let frame = layout.layoutAttributesForItem(at: IndexPath(item: last, section: 0))?.frame,
+           bottom >= frame.maxY - 2 || top >= maxOffsetY - 1 {
             current = last
         }
         if let current, current != lastReported, case let .page(segment, index, _) = items[current] {
