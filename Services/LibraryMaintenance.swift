@@ -8,6 +8,22 @@ import UserNotifications
     static let downloadID = "com.lnreader.chapter.downloads"
     static let continuedID = "com.lnreader.chapter.continued.*"
     static var container: ModelContainer?
+
+    /// Copy reads to same-numbered chapters from other scanlators, once, for
+    /// entries read before `ChapterTwins` existed.
+    static func reconcileTwinReads() {
+        let key = "maintenance.twinReads.v1"
+        guard !UserDefaults.standard.bool(forKey: key), let container else { return }
+        let context = container.mainContext
+        guard let entries = try? context.fetch(FetchDescriptor<Entry>()) else { return }
+        var changed = 0
+        for entry in entries { changed += ChapterTwins.reconcile(entry) }
+        if changed > 0 {
+            try? context.save()
+            LibraryChapterCounts.shared.invalidate()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
     static func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: refreshID, using: .main) { task in
             Task { @MainActor in handle(task, downloadsOnly: false) }

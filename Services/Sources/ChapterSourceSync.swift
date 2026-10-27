@@ -87,6 +87,10 @@ enum ChapterSourceSync {
             }
         }
 
+        // A new upload of a chapter the user already read, from another
+        // scanlator, is not new.
+        if result.added > 0 { ChapterTwins.reconcile(entry) }
+
         return result
     }
 
@@ -144,5 +148,70 @@ enum ChapterSourceSync {
     private static func resolvedNumber(for chapter: SourceChapter, entryTitle: String) -> Double {
         if chapter.chapterNumber > -1 { return chapter.chapterNumber }
         return ChapterRecognition.parseChapterNumber(chapter.name, mangaTitle: entryTitle)
+    }
+}
+
+// MARK: - Same chapter, other scanlator
+
+/// Chapters that are the same number from a different scanlator.
+///
+/// Read state is per row, so reading chapter 5 from one scanlator left the
+/// other's chapter 5 unread, and the library badge counted both. Rather than
+/// make every count apply the per-entry scanlator rules, a read is copied to
+/// the twins, so `!read` stays the only thing anything has to ask.
+///
+/// Only entries with more than one scanlator are touched: a novel that reuses
+/// a number across volumes has a single (or no) scanlator and is left alone.
+enum ChapterTwins {
+
+    /// Copy `read` from `chapter` to its twins. Returns the ones that changed.
+    @MainActor
+    @discardableResult
+    static func fanOut(from chapter: Chapter, read: Bool) -> [Chapter] {
+        guard chapter.chapterNumber > 0, let entry = chapter.entry,
+              hasSeveralScanlators(entry.chapters) else { return [] }
+        var changed: [Chapter] = []
+        for other in entry.chapters
+        where other.chapterNumber == chapter.chapterNumber
+            && other.url != chapter.url
+            && other.read != read {
+            other.read = read
+            other.progress = read ? 100 : 0
+            other.paragraphIndex = read ? 0 : nil
+            if !read {
+                other.lastPageRead = 0
+                other.pagesLeft = 0
+            }
+            changed.append(other)
+        }
+        return changed
+    }
+
+    /// Make every twin of a read chapter read. For fetched chapters and for
+    /// entries read before this existed. Returns how many it changed.
+    @MainActor
+    @discardableResult
+    static func reconcile(_ entry: Entry) -> Int {
+        let chapters = entry.chapters
+        guard hasSeveralScanlators(chapters) else { return 0 }
+        let readNumbers = Set(chapters.lazy.filter { $0.read && $0.chapterNumber > 0 }.map(\.chapterNumber))
+        guard !readNumbers.isEmpty else { return 0 }
+        var count = 0
+        for chapter in chapters where !chapter.read && readNumbers.contains(chapter.chapterNumber) {
+            chapter.read = true
+            chapter.progress = 100
+            chapter.paragraphIndex = 0
+            count += 1
+        }
+        return count
+    }
+
+    private static func hasSeveralScanlators(_ chapters: [Chapter]) -> Bool {
+        var first: String?
+        for chapter in chapters {
+            guard let name = chapter.scanlator, !name.isEmpty else { continue }
+            if let first { if first != name { return true } } else { first = name }
+        }
+        return false
     }
 }

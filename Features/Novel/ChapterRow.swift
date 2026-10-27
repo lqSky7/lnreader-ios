@@ -427,6 +427,7 @@ struct ChapterSelectionToolbar: ViewModifier {
         chapter.paragraphIndex = read ? 0 : nil
         chapter.lastPageRead = 0
         chapter.pagesLeft = 0
+        ChapterTwins.fanOut(from: chapter, read: read)
     }
 
     /// Every chapter numbered below the lowest one picked.

@@ -206,6 +206,7 @@ final class LibraryManager {
         if chapter.read != wasRead {
             LibraryChapterCounts.shared.invalidate()
             if chapter.read {
+                ChapterTwins.fanOut(from: chapter, read: true)
                 ChapterDownloadManager.shared.chapterFinished(chapter)
                 if let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
             }
@@ -303,6 +304,7 @@ final class LibraryManager {
         if chapter.read != wasRead {
             LibraryChapterCounts.shared.invalidate()
             if chapter.read {
+                ChapterTwins.fanOut(from: chapter, read: true)
                 ChapterDownloadManager.shared.chapterFinished(chapter)
                 if let entry = chapter.entry { tracking?.readStateChanged(entry: entry) }
             }

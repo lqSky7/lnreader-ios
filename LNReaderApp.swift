@@ -42,7 +42,10 @@ struct LNReaderApp: App {
                 .environment(syncManager)
                 .environment(sourceManager)
                 .environment(trackingManager)
-                .task { libraryManager.tracking = trackingManager }
+                .task {
+                    libraryManager.tracking = trackingManager
+                    LibraryMaintenance.reconcileTwinReads()
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await trackingManager.flushPending() } }
                 }

@@ -16,8 +16,9 @@ struct V2ChapterSyncChecks {
         try checkMerge()
         try checkMissingChapterGuard()
         try checkReaddedChapterKeepsState()
+        try checkTwinReads()
         print("PASS: chapter recognition (Yokai cases) and source sync "
-            + "(add/update/remove, delete guard, re-add keeps read state)")
+            + "(add/update/remove, delete guard, re-add keeps read state, same chapter from another scanlator)")
     }
 
     // MARK: - Chapter numbers
@@ -267,6 +268,46 @@ struct V2ChapterSyncChecks {
         precondition(after.read, "re-added chapter keeps its read state")
         precondition(after.bookmark)
         precondition(after.progress == 100)
+    }
+
+    private static func checkTwinReads() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let entry = Entry(kind: .manga, sourceKey: "mihon:2", url: "/manga/z", title: "Z")
+        context.insert(entry)
+
+        func chapter(_ url: String, _ n: Double, _ group: String?) -> SourceChapter {
+            SourceChapter(url: url, name: "Chapter \(Int(n))", chapterNumber: n, scanlator: group)
+        }
+        ChapterSourceSync.merge(
+            [chapter("a1", 1, "A"), chapter("b1", 1, "B"), chapter("a2", 2, "A"), chapter("b2", 2, "B")],
+            into: entry, context: context)
+        func row(_ url: String) throws -> Chapter { try unwrap(entry.chapters.first { $0.url == url }) }
+
+        let a1 = try row("a1")
+        a1.read = true
+        precondition(ChapterTwins.fanOut(from: a1, read: true).count == 1)
+        let (b1, a2, b2) = (try row("b1"), try row("a2"), try row("b2"))
+        precondition(b1.read && !a2.read && !b2.read, "reading one scanlator's chapter reads its twin only")
+        a1.read = false
+        ChapterTwins.fanOut(from: a1, read: false)
+        precondition(!b1.read, "unread fans out too")
+
+        // A late upload of an already-read chapter arrives read.
+        a2.read = true
+        ChapterSourceSync.merge(
+            [chapter("a2", 2, "A"), chapter("b2", 2, "B"), chapter("c2", 2, "C")],
+            into: entry, context: context, removeMissing: false)
+        let c2 = try row("c2")
+        precondition(c2.read && b2.read, "twins reconciled on merge")
+
+        // One scanlator: same number is not a twin.
+        let solo = Entry(kind: .novel, sourceKey: "ln:z", url: "n/z", title: "S")
+        context.insert(solo)
+        ChapterSourceSync.merge([chapter("s1", 1, nil), chapter("s2", 1, nil)], into: solo, context: context)
+        let s1 = try unwrap(solo.chapters.first { $0.url == "s1" })
+        s1.read = true
+        precondition(ChapterTwins.fanOut(from: s1, read: true).isEmpty, "single-scanlator entries are untouched")
     }
 
     private static func unwrap<T>(_ value: T?) throws -> T {
