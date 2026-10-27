@@ -4,6 +4,7 @@
 #
 #   ./scripts/install-release.sh            # build, install, launch
 #   ./scripts/install-release.sh --no-launch
+#   ./scripts/install-release.sh fast       # Debug build (alias: debug): incremental, far quicker than Release
 #
 # Works over USB or Wi-Fi (the phone must be on the same network).
 # Signs with the project's automatic signing settings, so the
@@ -13,14 +14,19 @@ set -eu
 cd "$(dirname "$0")/.."
 
 LAUNCH=1
+CONFIG=Release
 for argument in "$@"; do
   case "$argument" in
     --no-launch) LAUNCH=0 ;;
+    debug|fast|--debug|--fast) CONFIG=Debug ;;
     *) echo "install-release: unknown option '$argument'" >&2; exit 2 ;;
   esac
 done
 
 DERIVED=.build/device
+EXTRA=""
+# ENABLE_DEBUG_DYLIB=NO: the default Debug build is a stub launcher plus a dylib.
+[ "$CONFIG" = Debug ] && EXTRA="ENABLE_DEBUG_DYLIB=NO"
 DEVICE=$(./scripts/lib/pick-device.sh)
 
 if [ -z "$DEVICE" ]; then
@@ -31,17 +37,17 @@ fi
 DEVICE_ID=$(printf '%s' "$DEVICE" | cut -f1)
 DEVICE_NAME=$(printf '%s' "$DEVICE" | cut -f3)
 
-echo "install-release: building Release for $DEVICE_NAME"
+echo "install-release: building $CONFIG for $DEVICE_NAME"
 xcodebuild \
   -project LNReader.xcodeproj \
   -scheme LNReader \
-  -configuration Release \
+  -configuration "$CONFIG" \
   -destination "id=$DEVICE_ID" \
   -derivedDataPath "$DERIVED" \
   -allowProvisioningUpdates \
-  build
+  build $EXTRA
 
-APP="$DERIVED/Build/Products/Release-iphoneos/LNReader.app"
+APP="$DERIVED/Build/Products/$CONFIG-iphoneos/LNReader.app"
 [ -d "$APP" ] || { echo "install-release: build did not produce $APP" >&2; exit 1; }
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
 
