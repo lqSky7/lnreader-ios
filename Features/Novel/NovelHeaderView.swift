@@ -14,6 +14,8 @@ struct NovelHeaderView<Actions: View>: View {
     /// Source name, shown on the status line.
     var source: String? = nil
     var hasStartedReading: Bool = true
+    /// Name of the chapter the button opens, shown under the label.
+    var continueChapterName: String? = nil
     /// False until there is a chapter to open. The button used to look enabled
     /// and do nothing when tapped.
     var canStartReading: Bool = true
@@ -146,10 +148,19 @@ struct NovelHeaderView<Actions: View>: View {
     /// Primary action: a solid white glass capsule over the dark hero.
     private var continueButton: some View {
         Button(action: onContinueReading) {
-            Label(hasStartedReading ? "Continue reading" : "Start reading", systemImage: "book.fill")
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity)
+            VStack(spacing: 2) {
+                Label(hasStartedReading ? "Continue reading" : "Start reading", systemImage: "book.fill")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                if let continueChapterName, !continueChapterName.isEmpty {
+                    Text(continueChapterName)
+                        .font(Typography.caption)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .opacity(0.65)
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.glassProminent)
         .tint(.white)

@@ -97,6 +97,7 @@ struct NovelDetailView: View {
                     status: localEntry?.status ?? details?.status ?? .unknown,
                     source: sourceName,
                     hasStartedReading: hasStartedReading,
+                    continueChapterName: resumeChapter?.name,
                     canStartReading: !allChapters.isEmpty,
                     onContinueReading: continueReading
                 ) {
@@ -582,17 +583,17 @@ struct NovelDetailView: View {
         )
     }
 
-    private func continueReading() {
+    /// The chapter "Continue reading" opens, also shown on the button.
+    private var resumeChapter: ChapterDisplay? {
         guard let localEntry, !localEntry.chapters.isEmpty else {
-            if let first = sourceChapters.first {
-                navigateToChapter = ChapterDisplay(
-                    sourceChapter: first,
+            return sourceChapters.first.map {
+                ChapterDisplay(
+                    sourceChapter: $0,
                     position: 0,
                     sourceKey: sourceKey,
                     kind: sourceEntry?.kind ?? .novel
                 )
             }
-            return
         }
 
         let chapters = localEntry.chapters
@@ -603,29 +604,22 @@ struct NovelDetailView: View {
             .filter({ $0.history != nil })
             .max(by: { ($0.history?.lastRead ?? .distantPast) < ($1.history?.lastRead ?? .distantPast) }),
            !lastOpened.read {
-            navigateToChapter = ChapterDisplay(chapter: lastOpened)
-            return
+            return ChapterDisplay(chapter: lastOpened)
         }
 
-        let readChapters = chapters.filter(\.read)
-        if let latestRead = readChapters.max(by: { $0.sourceOrder < $1.sourceOrder }) {
-            let next = chapters
-                .filter { !$0.read && $0.sourceOrder > latestRead.sourceOrder }
-                .min { $0.sourceOrder < $1.sourceOrder }
-            if let next {
-                navigateToChapter = ChapterDisplay(chapter: next)
-                return
-            }
+        if let latestRead = chapters.filter(\.read).max(by: { $0.sourceOrder < $1.sourceOrder }),
+           let next = chapters
+            .filter({ !$0.read && $0.sourceOrder > latestRead.sourceOrder })
+            .min(by: { $0.sourceOrder < $1.sourceOrder }) {
+            return ChapterDisplay(chapter: next)
         }
 
         let sorted = chapters.sorted { $0.sourceOrder < $1.sourceOrder }
-        if let firstUnread = sorted.first(where: { !$0.read }) {
-            navigateToChapter = ChapterDisplay(chapter: firstUnread)
-            return
-        }
-        if let last = sorted.last {
-            navigateToChapter = ChapterDisplay(chapter: last)
-        }
+        return (sorted.first(where: { !$0.read }) ?? sorted.last).map { ChapterDisplay(chapter: $0) }
+    }
+
+    private func continueReading() {
+        if let resumeChapter { navigateToChapter = resumeChapter }
     }
 }
 
