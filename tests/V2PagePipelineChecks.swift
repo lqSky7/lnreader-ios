@@ -264,9 +264,14 @@ struct V2PagePipelineChecks {
         let last = MangaProgress.update(pageIndex: 9, pageCount: 10)
         precondition(last.progress == 100)
         precondition(last.pagesLeft == 0)
-        precondition(last.finished, "only the last page finishes a chapter")
+        precondition(last.finished, "the last page finishes a chapter")
 
         // Out-of-range and empty chapters must not trap or report success.
+        let nearEnd = MangaProgress.update(pageIndex: 18, pageCount: 20)
+        precondition(nearEnd.finished, "95% finishes a chapter before its last page")
+        let belowThreshold = MangaProgress.update(pageIndex: 17, pageCount: 20)
+        precondition(!belowThreshold.finished)
+
         let clamped = MangaProgress.update(pageIndex: 99, pageCount: 10)
         precondition(clamped.lastPageRead == 9)
         precondition(clamped.finished)

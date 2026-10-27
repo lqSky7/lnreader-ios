@@ -8,6 +8,9 @@ import Foundation
 
 enum MangaProgress {
 
+    /// Percent at which a chapter counts as read; mirrors `Chapter.finishedThreshold`.
+    static let threshold: Double = 95
+
     struct Update: Equatable {
         /// 0–100, kind-agnostic progress stored on the chapter.
         let progress: Double
@@ -31,9 +34,10 @@ enum MangaProgress {
             progress: progress,
             lastPageRead: index,
             pagesLeft: pagesLeft,
-            // The last page is the only page that finishes a chapter; reaching
-            // 100% by arithmetic is not the same as the user seeing it.
-            finished: index == pageCount - 1
+            // Reaching the threshold finishes the chapter, the same 95% novels use.
+            // The last page always does, so short chapters (where no page lands
+            // between 95% and 100%) still complete.
+            finished: progress >= threshold || index == pageCount - 1
         )
     }
 }

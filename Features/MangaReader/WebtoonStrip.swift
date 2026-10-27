@@ -356,6 +356,8 @@ final class WebtoonViewController: UIViewController,
         if !didRestore, itemCount > 0 {
             didRestore = true
             if startIndex > 0 { jump(to: startIndex) }
+            // A strip that fits on screen, or restores to offset 0, never scrolls.
+            scrollViewDidScroll(collectionView)
         }
     }
 
@@ -390,8 +392,14 @@ final class WebtoonViewController: UIViewController,
             switch items[path.item] {
             case let .divider(segment, _, _):
                 if visible >= frame.height * 0.95 { endSegment = segments[segment].id }
-            case .page:
+            case let .page(segment, index, _):
                 if current == nil, visible >= frame.height * 0.05 { current = path.item }
+                // A chapter's last page scrolled fully into view finishes it, even
+                // when the divider after it cannot reach 95% (it can sit under the
+                // bottom inset, or be a stub while the next chapter loads).
+                if index == segments[segment].pages.count - 1, bottom >= frame.maxY - 2 {
+                    endSegment = segments[segment].id
+                }
             }
         }
         // At the very bottom the top row can be a page or two short of the last

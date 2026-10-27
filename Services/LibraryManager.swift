@@ -281,8 +281,8 @@ final class LibraryManager {
     /// Record a manga page turn.
     ///
     /// Separate from `recordReadingPosition` because a manga chapter is measured
-    /// in pages, not paragraphs, and "finished" means the reader reached the
-    /// last page rather than a percentage threshold.
+    /// in pages, not paragraphs, and "finished" means the reader reached 95% or the
+    /// last page.
     func recordMangaProgress(
         chapter: Chapter,
         pageIndex: Int,
