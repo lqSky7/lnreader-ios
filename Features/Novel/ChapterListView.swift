@@ -28,11 +28,12 @@ struct ChapterListView: View {
     @Binding var selectedRange: ChapterRange
     @Binding var selectedFilter: ChapterFilter
     @Binding var searchText: String
+    /// When the list was last fetched, or that it is being fetched now.
+    var fetchStatus: String? = nil
     @AppStorage("chapters.ascending") private var ascending = false
     @State private var showSearchField = false
     @State private var showDirectory = false
     @State private var showScanlators = false
-    @State private var confirmDeleteAll = false
     @FocusState private var searchFocused: Bool
 
     /// The whole list in the chosen order, built when the directory opens.
@@ -53,8 +54,6 @@ struct ChapterListView: View {
             HStack(spacing: 8) {
                 searchButton
                 filterMenu
-                if let scanlatorSettings { scanlatorButton(scanlatorSettings) }
-                if let entry, entry.inLibrary, !entry.isLocal { downloadMenu(entry) }
             }
         }
     }
@@ -75,6 +74,18 @@ struct ChapterListView: View {
         .accessibilityLabel(showSearchField ? "Close chapter search" : "Search chapters")
     }
 
+    /// Every scanlator in the list, for the scanlator sheet.
+    private var scanlators: [String] {
+        Set(allChapters.isEmpty ? chapters : allChapters)
+            .compactMap(\.scanlator)
+            .filter { !$0.isEmpty }
+            .sorted()
+    }
+
+    private var hasActiveScanlatorRules: Bool { scanlatorSettings?.hasActiveRules ?? false }
+
+    /// The list's only menu: order, filter, and scanlators when there are any.
+    /// Entry-wide actions (downloads, tracking) live in `EntryActionBar`.
     private var filterMenu: some View {
         Menu {
             Picker("Order", selection: $ascending) {
@@ -84,49 +95,21 @@ struct ChapterListView: View {
             Picker("Filter chapters", selection: $selectedFilter) {
                 ForEach(ChapterFilter.allCases) { Text($0.rawValue).tag($0) }
             }
+            if scanlatorSettings != nil, !scanlators.isEmpty {
+                Section {
+                    Button { showScanlators = true } label: {
+                        Label("Scanlators…", systemImage: hasActiveScanlatorRules ? "person.2.fill" : "person.2")
+                    }
+                }
+            }
         } label: {
-            Image(systemName: selectedFilter != .all ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+            Image(systemName: selectedFilter != .all || hasActiveScanlatorRules
+                ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .controlSize(.large)
         .accessibilityLabel("Sort and filter chapters")
-    }
-
-    /// Mihon's download menu: the next few unread chapters, all unread, or all.
-    private func downloadMenu(_ entry: Entry) -> some View {
-        Menu {
-            Button("Next chapter") { ChapterDownloadManager.shared.enqueueUnread(1, in: entry) }
-            Button("Next 5 chapters") { ChapterDownloadManager.shared.enqueueUnread(5, in: entry) }
-            Button("Next 10 chapters") { ChapterDownloadManager.shared.enqueueUnread(10, in: entry) }
-            Button("Next 25 chapters") { ChapterDownloadManager.shared.enqueueUnread(25, in: entry) }
-            Divider()
-            Button("All unread chapters") { ChapterDownloadManager.shared.enqueueUnread(nil, in: entry) }
-            Button("All chapters") { ChapterDownloadManager.shared.enqueue(entry.chapters) }
-            Divider()
-            Button("Delete downloads", systemImage: "trash", role: .destructive) { confirmDeleteAll = true }
-        } label: {
-            Image(systemName: "arrow.down.circle")
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .accessibilityLabel("Download chapters")
-        .confirmationDialog("Delete every downloaded chapter of this title?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
-            Button("Delete downloads", role: .destructive) { ChapterDownloadManager.shared.deleteDownloads(in: entry) }
-        }
-    }
-
-    private func scanlatorButton(_ settings: ScanlatorSettings) -> some View {
-        Button {
-            showScanlators = true
-        } label: {
-            Image(systemName: settings.hasActiveRules ? "person.2.fill" : "person.2")
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .accessibilityLabel("Scanlator priority")
     }
 
     var body: some View {
@@ -136,6 +119,10 @@ struct ChapterListView: View {
                     Text("Chapters").font(Typography.title)
                     Text(isFiltered ? "\(filteredCount) matching chapters" : rangeDescription)
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    if let fetchStatus {
+                        Text(fetchStatus)
+                            .font(Typography.small).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 headerButtons
@@ -205,10 +192,7 @@ struct ChapterListView: View {
             if let scanlatorSettings {
                 ScanlatorSettingsView(
                     settings: scanlatorSettings,
-                    scanlators: Set(allChapters.isEmpty ? chapters : allChapters)
-                        .compactMap(\.scanlator)
-                        .filter { !$0.isEmpty }
-                        .sorted()
+                    scanlators: scanlators
                 )
             }
         }

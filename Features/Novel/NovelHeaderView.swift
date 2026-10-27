@@ -1,25 +1,25 @@
 // NovelHeaderView.swift
-// Hero header with cover, background extension effect, and glass action buttons.
+// Hero header: cover, title, byline, status line and the primary reading action.
 
 import SwiftUI
 import Glur
 
-struct NovelHeaderView: View {
+struct NovelHeaderView<Actions: View>: View {
     var transitionNamespace: Namespace.ID? = nil
     let name: String
     let author: String?
+    var artist: String? = nil
     let cover: String?
     let status: EntryStatus
-    let inLibrary: Bool
-    /// True while the entry is being written to the store. The button shows a
-    /// spinner and refuses taps instead of silently doing the work twice.
-    var isAddingToLibrary: Bool = false
-    let onToggleLibrary: () -> Void
+    /// Source name, shown on the status line.
+    var source: String? = nil
     var hasStartedReading: Bool = true
     /// False until there is a chapter to open. The button used to look enabled
     /// and do nothing when tapped.
     var canStartReading: Bool = true
     let onContinueReading: () -> Void
+    /// Secondary entry actions, drawn under the primary button.
+    @ViewBuilder var actions: Actions
 
     @Namespace private var namespace
 
@@ -38,7 +38,7 @@ struct NovelHeaderView: View {
             // Content overlay
             contentOverlay
         }
-        .frame(height: 520)
+        .frame(height: 560)
     }
 
     // MARK: - Hero Background
@@ -83,77 +83,81 @@ struct NovelHeaderView: View {
 
     // MARK: - Content Overlay
 
+    /// Author and artist, once each.
+    private var byline: String? {
+        var names: [String] = []
+        for name in [author, artist].compactMap({ $0?.trimmingCharacters(in: .whitespaces) })
+        where !name.isEmpty && !names.contains(name) {
+            names.append(name)
+        }
+        return names.isEmpty ? nil : names.joined(separator: " · ")
+    }
+
+    private var statusLine: String {
+        [status == .unknown ? nil : status.displayName, source]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    /// The hero holds the title and the one primary action. Every other entry
+    /// action lives in `EntryActionBar` or the toolbar menu.
     private var contentOverlay: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Spacer()
 
             Text(name)
                 .font(Typography.largeTitle)
                 .foregroundStyle(.white)
+                .lineLimit(3)
                 .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
 
-            if let author {
-                Text(author)
+            if let byline {
+                Text(byline)
                     .font(Typography.headline)
                     .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(2)
                     .shadow(radius: 2)
             }
 
-            // Glass action buttons
-            GlassEffectContainer(spacing: 12) {
-                HStack(spacing: 12) {
-                    // Primary action: a solid white glass capsule over the dark hero.
-                    Button(action: onContinueReading) {
-                        Label(hasStartedReading ? "Continue" : "Start Reading", systemImage: "book.fill")
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(.white)
-                    .foregroundStyle(.black)
-                    .controlSize(.large)
-                    .buttonBorderShape(.capsule)
-                    .disabled(!canStartReading)
-                    .glassEffectID("continue", in: namespace)
-                    .bookTransitionSource("continue", in: transitionNamespace)
+            if !statusLine.isEmpty {
+                Label {
+                    Text(statusLine)
+                } icon: {
+                    Image(systemName: status.iconName)
+                }
+                .font(Typography.caption)
+                .foregroundStyle(.white.opacity(0.75))
+                .lineLimit(1)
+                .shadow(radius: 2)
+            }
 
-                    // Secondary action: plain glass, so the two are not equals.
-                    Button(action: onToggleLibrary) {
-                        HStack(spacing: 6) {
-                            if isAddingToLibrary {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Image(systemName: inLibrary ? "checkmark.circle.fill" : "plus.circle")
-                            }
-                            Text(libraryButtonTitle)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.85)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                    .foregroundStyle(.white)
-                    .controlSize(.large)
-                    .buttonBorderShape(.capsule)
-                    .disabled(isAddingToLibrary)
-                    .glassEffectID("library", in: namespace)
+            GlassEffectContainer(spacing: 10) {
+                VStack(spacing: 10) {
+                    continueButton
+                    actions
                 }
             }
-            .contentShape(.rect)
-            // Tapping "Add" now answers immediately: the label changes to a
-            // spinner, then to "In Library" with a spring, and the change is
-            // acknowledged by a haptic.
-            .animation(.spring(response: 0.32, dampingFraction: 0.8), value: inLibrary)
-            .animation(.easeInOut(duration: 0.18), value: isAddingToLibrary)
-            .hapticFeedback(.success, trigger: inLibrary)
+            .padding(.top, 8)
         }
         .padding()
         .padding(.bottom, 8)
     }
 
-    private var libraryButtonTitle: String {
-        if isAddingToLibrary { return "Adding…" }
-        return inLibrary ? "In Library" : "Add to Library"
+    /// Primary action: a solid white glass capsule over the dark hero.
+    private var continueButton: some View {
+        Button(action: onContinueReading) {
+            Label(hasStartedReading ? "Continue reading" : "Start reading", systemImage: "book.fill")
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(.white)
+        .foregroundStyle(.black)
+        .controlSize(.large)
+        .buttonBorderShape(.capsule)
+        .disabled(!canStartReading)
+        .glassEffectID("continue", in: namespace)
+        .bookTransitionSource("continue", in: transitionNamespace)
     }
 }

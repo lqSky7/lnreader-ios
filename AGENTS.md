@@ -81,6 +81,10 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
   change one, change both. Other settings sheets stay partial-height.
 - **Swipe right from the left edge goes back.** Full-screen surfaces that hide the back button
   must add `EdgeSwipeDismiss` and ignore it while a sheet is open.
+- **On the detail screen a control lives with what it acts on.** Hero: one primary button.
+  `EntryActionBar`: up to four stateful entry tiles. Toolbar: a visible Refresh button (no pull
+  to refresh; pulling down goes back), then a `…` menu for occasional actions such as migrate.
+  Chapter header: search and one sort/filter menu. [DETAIL_SCREEN]
 - **Chapter lists select by holding.** No context menu on chapter rows; it shares the long press.
 - Settings screens use `.settingsScreen(_:)` for their sentence-case title.
 - **Grey means secondary, never tappable.** The `AccentColor` asset is primary, so buttons and

@@ -14,6 +14,7 @@ struct NovelDetailView: View {
     @Environment(LibraryManager.self) private var libraryManager
     @Environment(ReaderRouter.self) private var readerRouter
     @Environment(TrackingManager.self) private var tracking
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Stored entry, when opened from the library or from a search hit that is
     /// already in the library.
@@ -91,15 +92,25 @@ struct NovelDetailView: View {
                     transitionNamespace: chapterTransition,
                     name: displayTitle,
                     author: displayAuthor,
+                    artist: localEntry?.displayArtist ?? details?.artist,
                     cover: displayCover,
                     status: localEntry?.status ?? details?.status ?? .unknown,
-                    inLibrary: localEntry?.inLibrary ?? false,
-                    isAddingToLibrary: isAddingToLibrary,
-                    onToggleLibrary: toggleLibrary,
+                    source: sourceName,
                     hasStartedReading: hasStartedReading,
                     canStartReading: !allChapters.isEmpty,
                     onContinueReading: continueReading
-                )
+                ) {
+                    EntryActionBar(
+                        entry: localEntry,
+                        isManga: isManga,
+                        isAddingToLibrary: isAddingToLibrary,
+                        track: localEntry.flatMap { tracking.aniListTrack(for: $0) },
+                        onToggleLibrary: toggleLibrary,
+                        onTracking: { showTracker = true },
+                        onAudio: { showAudioDownloads = true }
+                    )
+                }
+                .padding(.bottom, 16)
 
                 if isLoading && localEntry == nil {
                     ProgressView("Loading entry details…")
@@ -115,21 +126,12 @@ struct NovelDetailView: View {
                     NovelInfoSection(
                         summary: localEntry?.displaySummary ?? details?.description,
                         genres: displayGenres,
-                        author: displayAuthor,
-                        artist: localEntry?.displayArtist ?? details?.artist,
-                        status: localEntry?.status ?? details?.status ?? .unknown,
-                        source: sourceName,
                         showFullDescription: $showFullDescription
                     )
-                    .padding(.bottom, 12)
 
                     Divider()
                         .padding(.horizontal)
-                        .padding(.vertical, 16)
-
-                    trackingRow
-
-                    fetchStatusRow
+                        .padding(.vertical, 20)
 
                     ChapterListView(
                         entry: localEntry,
@@ -145,7 +147,8 @@ struct NovelDetailView: View {
                         selection: localEntry == nil ? nil : chapterSelection,
                         selectedRange: $selectedRange,
                         selectedFilter: $selectedFilter,
-                        searchText: $chapterSearch
+                        searchText: $chapterSearch,
+                        fetchStatus: fetchStatus
                     )
                 }
             }
@@ -160,19 +163,10 @@ struct NovelDetailView: View {
         .onDisappear { chapterSelection.end() }
         .toolbar(removing: .title)
         .toolbar {
-            if let localEntry, localEntry.inLibrary {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showTracker = true } label: {
-                        Label("Tracking", systemImage: localEntry.tracks.isEmpty ? "chart.bar" : "chart.bar.fill")
-                    }
-                }
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            }
-            // Audio is generated from chapter text, which manga don't have.
-            if !isManga {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAudioDownloads = true } label: { Label("Manage chapter audio downloads", systemImage: "headphones.circle") }
-                }
+            // Refresh is a toolbar button, not pull to refresh: pulling down
+            // dismisses this screen.
+            if canRefetch {
+                ToolbarItem(placement: .topBarTrailing) { refreshButton }
             }
         }
         .sheet(isPresented: $showTracker) {
@@ -231,76 +225,31 @@ struct NovelDetailView: View {
 
     private var lastFetched: Date? { fetchedAt ?? localEntry?.lastUpdate }
 
-    /// The toolbar icon alone was easy to miss, so tracking also gets a labelled
-    /// row that summarises the AniList entry once there is one.
-    @ViewBuilder
-    private var trackingRow: some View {
-        if let localEntry, localEntry.inLibrary {
-            let track = tracking.aniListTrack(for: localEntry)
-            Button { showTracker = true } label: {
-                HStack {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(track == nil ? "Track on AniList" : "AniList")
-                                .font(Typography.headline)
-                            Text(trackingSummary(track))
-                                .font(Typography.small)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: track == nil ? "chart.bar" : "chart.bar.fill")
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Tracking")
-        }
+    /// When the list was last fetched, shown under the chapter count.
+    private var fetchStatus: String? {
+        if isRefetching { return "Refreshing…" }
+        guard canRefetch else { return nil }
+        guard let lastFetched else { return "Not fetched yet" }
+        return "Updated \(lastFetched.formatted(.relative(presentation: .named)))"
     }
 
-    private func trackingSummary(_ track: Track?) -> String {
-        guard let track else {
-            return tracking.isLoggedIn ? "Not tracked" : "Log in to sync your progress"
-        }
-        let status = (TrackStatus(rawValue: track.status) ?? .planning).title
-        let progress = track.totalChapters > 0
-            ? "\(Int(track.lastChapterRead)) / \(track.totalChapters)" : "\(Int(track.lastChapterRead))"
-        return "\(status) · \(progress) ch"
-    }
-
-    private var fetchStatusRow: some View {
-        HStack(spacing: 8) {
-            if let lastFetched {
-                Text("Last fetched \(lastFetched.formatted(.relative(presentation: .named)))")
+    /// Refetches details and chapters. Turns into the spinner while it runs,
+    /// so the refresh shows where it was started.
+    ///
+    /// Occasional entry actions (migrate, edit info) go in a `…` menu after
+    /// this button once there is one; see docs/DETAIL_SCREEN.md.
+    private var refreshButton: some View {
+        Button {
+            Task { await fetchDetails(force: true) }
+        } label: {
+            if isRefetching {
+                ProgressView()
             } else {
-                Text("Not fetched yet")
-            }
-            Spacer()
-            if canRefetch {
-                Button {
-                    Task { await fetchDetails(force: true) }
-                } label: {
-                    if isRefetching {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                }
-                .buttonStyle(.borderless)
-                .disabled(isRefetching)
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
         }
-        .font(Typography.small)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal)
-        .padding(.bottom, 8)
+        .disabled(isRefetching)
+        .accessibilityLabel(isRefetching ? "Refreshing" : "Refresh")
     }
 
     // MARK: - Chapter Computation
@@ -590,10 +539,14 @@ struct NovelDetailView: View {
     private func toggleLibrary() {
         guard !isAddingToLibrary else { return }
 
-        // Removing is local and instant.
+        let morph = AppMotion.glassMorph(reduceMotion: reduceMotion)
+
+        // Removing is local and instant. The flag flips inside the animation so
+        // the action bar merges back into the library button.
         if let localEntry, localEntry.inLibrary {
-            libraryManager.removeFromLibrary(entry: localEntry, context: modelContext)
-            refreshChapters()
+            withAnimation(morph) {
+                libraryManager.removeFromLibrary(entry: localEntry, context: modelContext)
+            }
             return
         }
 
@@ -611,9 +564,12 @@ struct NovelDetailView: View {
                 chapters: sourceChapters,
                 context: modelContext
             )
-            localEntry = added
-            isAddingToLibrary = false
-            refreshChapters()
+            // One transaction: the other actions split out of the library
+            // button as it shrinks to the left.
+            withAnimation(morph) {
+                localEntry = added
+                isAddingToLibrary = false
+            }
         }
     }
 

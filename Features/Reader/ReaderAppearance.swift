@@ -59,4 +59,10 @@ enum AppMotion {
     static func tabSwitch(reduceMotion: Bool) -> Animation? {
         reduceMotion ? nil : .smooth(duration: 0.4)
     }
+
+    /// Glass controls splitting from or merging into each other, such as the
+    /// detail screen's actions when an entry joins or leaves the library.
+    static func glassMorph(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.35)
+    }
 }
