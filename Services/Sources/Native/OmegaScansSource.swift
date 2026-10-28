@@ -17,6 +17,11 @@ final class OmegaScansSource: MangaSource {
     let iconAsset: String? = "OmegaScansIcon"
     let isAdult = true
     let supportsLatest = true
+    let filtersAreRemote = true
+
+    func filtersAreComplete(_ filters: [SourceFilter]) -> Bool {
+        filters.contains { $0.id == "genres" }
+    }
 
     private let engine = HeanCmsEngine(
         HeanCmsConfig(

@@ -21,6 +21,12 @@ final class PornPicsSource: MangaSource {
     let iconAsset: String? = "PornPicsIcon"
     let isAdult = true
     let supportsLatest = true
+    let filtersAreRemote = true
+
+    func filtersAreComplete(_ filters: [SourceFilter]) -> Bool {
+        let ids = Set(filters.map(\.id))
+        return ["category", "tag", "star", "channel"].allSatisfy(ids.contains)
+    }
 
     private let site = SiteClient(
         sourceKey: SourceKey.makeBuiltin(id: "pornpics"),

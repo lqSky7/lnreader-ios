@@ -19,6 +19,11 @@ final class MasonrySource: MangaSource {
     let iconAsset: String?
     let isAdult = true
     let supportsLatest = true
+    let filtersAreRemote = true
+
+    func filtersAreComplete(_ filters: [SourceFilter]) -> Bool {
+        filters.contains { $0.id == "tag" }
+    }
 
     private let site: SiteClient
 

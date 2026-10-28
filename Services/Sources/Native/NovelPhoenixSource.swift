@@ -9,6 +9,7 @@ final class NovelPhoenixSource: NovelSource {
     let lang = "English"
     let iconAsset: String? = "NovelPhoenixIcon"
     let supportsLatest = true
+    let filtersApplyToPopular = true
 
     private let engine = NovelFireEngine(
         sourceKey: SourceKey.makeBuiltin(id: "novelphoenix"),

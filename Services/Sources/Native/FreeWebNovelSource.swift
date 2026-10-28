@@ -12,6 +12,7 @@ final class FreeWebNovelSource: NovelSource {
     let lang = "English"
     let iconAsset: String? = "FreeWebNovelIcon"
     let supportsLatest = true
+    let filtersApplyToPopular = true
 
     private let engine = FreeWebNovelEngine(.init(
         sourceKey: SourceKey.makeBuiltin(id: "freewebnovel"),

@@ -134,6 +134,8 @@
 		BB062E90FBD86B888400C533 /* ChapterReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A83CC9BB2AEC8F3766BF2EC /* ChapterReader.swift */; };
 		BFFABD8B1BC6977119832E29 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B42540A8553644A4BA6829 /* EmptyStateView.swift */; };
 		C4748B637ED36325AFC4D906 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7EF8F1619F87E49C91AA9D /* AdvancedSettingsView.swift */; };
+		A1F0C0DE00000000000F1175 /* SourceFilterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0C0DE00000000000F1176 /* SourceFilterSheet.swift */; };
+		A1F0C0DE00000000000F1177 /* SourceFilterStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0C0DE00000000000F1178 /* SourceFilterStore.swift */; };
 		C54D0BBB558ED4A8EEB89352 /* SourceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D249BF6B2E5EFC8CEE1A15F /* SourceDetailView.swift */; };
 		C78C4F0A0CF920BC95529973 /* ModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA30AB4E3157E05E08B3470 /* ModelContainerFactory.swift */; };
 		C7DCD24BA48D3707D689052D /* ReaderChapterListSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3F4D29864B2CD889170153 /* ReaderChapterListSheet.swift */; };
@@ -221,6 +223,8 @@
 		2B650856C28BA6DD64543A24 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		2BA30AB4E3157E05E08B3470 /* ModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContainerFactory.swift; sourceTree = "<group>"; };
 		2C7BE97FD82780D085139CC2 /* SourceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceModels.swift; sourceTree = "<group>"; };
+		A1F0C0DE00000000000F1176 /* SourceFilterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFilterSheet.swift; sourceTree = "<group>"; };
+		A1F0C0DE00000000000F1178 /* SourceFilterStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFilterStore.swift; sourceTree = "<group>"; };
 		2D249BF6B2E5EFC8CEE1A15F /* SourceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDetailView.swift; sourceTree = "<group>"; };
 		2E6A6D07AE4B518B274A5072 /* FocusModeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusModeManager.swift; sourceTree = "<group>"; };
 		2EEBA7B6D149D352914BE166 /* HTTPTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPTypes.swift; sourceTree = "<group>"; };
@@ -456,6 +460,7 @@
 				6D146837B0A35B46E96AA935 /* BrowseView.swift */,
 				DE7855CDF6838B115B019E60 /* GlobalSearchView.swift */,
 				2D249BF6B2E5EFC8CEE1A15F /* SourceDetailView.swift */,
+				A1F0C0DE00000000000F1176 /* SourceFilterSheet.swift */,
 			);
 			path = Browse;
 			sourceTree = "<group>";
@@ -582,6 +587,7 @@
 				D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */,
 				32DFC42772907A1432627098 /* SourceFilters.swift */,
 				BC517C802BAFA82D76F87B6E /* SourceKey.swift */,
+				A1F0C0DE00000000000F1178 /* SourceFilterStore.swift */,
 				95FC6D6218E18B347E20036D /* SourceManager.swift */,
 				2C7BE97FD82780D085139CC2 /* SourceModels.swift */,
 			);
@@ -922,6 +928,7 @@
 				A808755A9ED9DE0C3FB473C8 /* SortOrder.swift in Sources */,
 				EDC300000000000000000001 /* ../ReadingNavigation.swift in Sources */,
 				C54D0BBB558ED4A8EEB89352 /* SourceDetailView.swift in Sources */,
+				A1F0C0DE00000000000F1175 /* SourceFilterSheet.swift in Sources */,
 				EEDF92E541FC7528E7BEAA2B /* StatisticsView.swift in Sources */,
 				62C08A004F957CA7BE8565D4 /* String+Extensions.swift in Sources */,
 				F8879A418673455C0E62F341 /* SyncManager.swift in Sources */,
@@ -971,6 +978,7 @@
 				41519F5E53EF4ED524B1DCA4 /* ChapterSourceSync.swift in Sources */,
 				2220BBC5FB756854B1B4A9A9 /* SourceFilters.swift in Sources */,
 				04D74105186AEBE9879341B0 /* SourceKey.swift in Sources */,
+				A1F0C0DE00000000000F1177 /* SourceFilterStore.swift in Sources */,
 				8B3EDC653451FF7B962965A6 /* SourceManager.swift in Sources */,
 				7AAEBEF2A33430B43EBBB97D /* SourceModels.swift in Sources */,
 				BA5373CEFD2C47E31C3F7277 /* DateParsing.swift in Sources */,

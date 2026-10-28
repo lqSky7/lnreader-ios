@@ -22,6 +22,14 @@ protocol CatalogSource: Identifiable, Sendable {
     var iconAsset: String? { get }
     /// Whether the source has a distinct "latest" listing.
     var supportsLatest: Bool { get }
+    /// Whether `popular(page:filters:)` applies the filters itself. Otherwise Browse runs a
+    /// filtered listing as `search(query: "", ...)`, which is where Mihon-style sources read them.
+    var filtersApplyToPopular: Bool { get }
+    /// Whether `filters()` fetches part of its list from the site. Browse caches those on disk.
+    var filtersAreRemote: Bool { get }
+    /// Whether a `filters()` result includes everything it should. Remote fetches that fail
+    /// quietly return a shorter list, which must not be cached.
+    func filtersAreComplete(_ filters: [SourceFilter]) -> Bool
     /// Whether the whole source is adult content; Browse marks it with an 18+ chip.
     var isAdult: Bool { get }
 
@@ -47,6 +55,9 @@ extension CatalogSource {
     var iconAsset: String? { nil }
     var supportsLatest: Bool { false }
     var isAdult: Bool { false }
+    var filtersApplyToPopular: Bool { false }
+    var filtersAreRemote: Bool { false }
+    func filtersAreComplete(_ filters: [SourceFilter]) -> Bool { true }
 
     func filters() async throws -> [SourceFilter] { [] }
 

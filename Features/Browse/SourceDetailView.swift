@@ -18,6 +18,13 @@ struct SourceDetailView: View {
     @State private var isLoading = false
     @State private var isSearching = false
     @State private var hasMore = true
+    @State private var filterDefinitions: [SourceFilter] = []
+    @State private var filtersLoaded = false
+    @State private var filtersFetchedAt: Date?
+    @State private var isRefreshingFilters = false
+    @State private var filterRefreshFailed = false
+    @State private var filterState = FilterState()
+    @State private var showFilters = false
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: LayoutConstants.gridItemMinSize), spacing: 12)]
@@ -77,7 +84,43 @@ struct SourceDetailView: View {
             }
         }
         .task { await loadPopular() }
+        .task { await loadFilterDefinitions() }
+        .sheet(isPresented: $showFilters) {
+            Group {
+                if filtersLoaded {
+                    SourceFilterSheet(
+                        filters: filterDefinitions,
+                        applied: filterState,
+                        refresh: source?.filtersAreRemote == true
+                            ? FilterRefresh(
+                                fetchedAt: filtersFetchedAt,
+                                isRefreshing: isRefreshingFilters,
+                                failed: filterRefreshFailed,
+                                action: { Task { await refreshFilters() } }
+                            )
+                            : nil
+                    ) { newState in
+                        guard newState != filterState else { return }
+                        filterState = newState
+                        Task { await reload() }
+                    }
+                } else {
+                    LoadingView(message: "Loading filters...")
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .toolbar {
+            if hasFilters {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showFilters = true } label: {
+                        Label("Filters", systemImage: activeFilterCount > 0
+                            ? "line.3.horizontal.decrease.circle.fill"
+                            : "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityValue(activeFilterCount > 0 ? "\(activeFilterCount) active" : "")
+                }
+            }
             if let site = CommentSite.site(for: SourceKey.identifier(from: sourceKey)) {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink(destination: NovelFireLoginView(onLoginSuccess: {
@@ -92,9 +135,68 @@ struct SourceDetailView: View {
 
     // MARK: - Data Loading
 
-    /// Filters are not surfaced in the UI yet; the protocol takes a state so the
-    /// browse redesign can add a filter sheet without touching this call site.
-    private var emptyFilters: FilterState { FilterState() }
+    /// Shown straight away; hidden only once the source reports it has nothing to filter.
+    private var hasFilters: Bool {
+        !filtersLoaded || SourceFilter.flatten(filterDefinitions).contains { $0.isSelectable }
+    }
+
+    private var activeFilterCount: Int { filterState.modifiedCount(for: filterDefinitions) }
+
+    /// Remote filter lists come from disk when there is a copy, and are refetched quietly once it
+    /// is past 30 days. Sources with built-in lists are just asked, which costs nothing.
+    private func loadFilterDefinitions() async {
+        guard let source else { return }
+        if source.filtersAreRemote, let stored = SourceFilterStore.load(sourceKey: sourceKey) {
+            filterDefinitions = stored.filters
+            filtersFetchedAt = stored.fetchedAt
+            filtersLoaded = true
+            if stored.isStale { await refreshFilters() }
+            return
+        }
+        let loaded = (try? await source.filters()) ?? []
+        filterDefinitions = loaded
+        if source.filtersAreRemote, source.filtersAreComplete(loaded) {
+            filtersFetchedAt = SourceFilterStore.save(loaded, sourceKey: sourceKey)?.fetchedAt
+        }
+        filtersLoaded = true
+    }
+
+    /// Refetches a remote list. A failed or partial result keeps the copy already on screen.
+    private func refreshFilters() async {
+        guard let source, source.filtersAreRemote, !isRefreshingFilters else { return }
+        isRefreshingFilters = true
+        filterRefreshFailed = false
+        defer { isRefreshingFilters = false }
+
+        let loaded = (try? await source.filters()) ?? []
+        guard source.filtersAreComplete(loaded) else {
+            filterRefreshFailed = true
+            return
+        }
+        filterDefinitions = loaded
+        filtersFetchedAt = SourceFilterStore.save(loaded, sourceKey: sourceKey)?.fetchedAt
+    }
+
+    /// Re-runs the current listing (search or browse) from the first page.
+    private func reload() async {
+        entries = []
+        if isSearching { await search() } else { await loadPopular() }
+    }
+
+    /// One page of whatever the screen is showing. A search always carries the filters. Browsing
+    /// carries them only once changed, through `popular` for sources that read them there and
+    /// through an empty search for the rest.
+    private func fetchPage(_ page: Int, from source: any CatalogSource) async throws -> EntriesPage {
+        if isSearching {
+            return try await source.search(query: searchText, page: page, filters: filterState)
+        }
+        if filterState.isModified(for: filterDefinitions) {
+            return source.filtersApplyToPopular
+                ? try await source.popular(page: page, filters: filterState)
+                : try await source.search(query: "", page: page, filters: filterState)
+        }
+        return try await source.popular(page: page, filters: FilterState())
+    }
 
     private func loadPopular() async {
         guard let source else { return }
@@ -103,7 +205,7 @@ struct SourceDetailView: View {
         hasMore = true
 
         do {
-            let page = try await source.popular(page: 1, filters: emptyFilters)
+            let page = try await fetchPage(1, from: source)
             entries = page.entries
             hasMore = page.hasNextPage
         } catch {
@@ -117,12 +219,7 @@ struct SourceDetailView: View {
         currentPage += 1
 
         do {
-            let page: EntriesPage
-            if isSearching {
-                page = try await source.search(query: searchText, page: currentPage, filters: emptyFilters)
-            } else {
-                page = try await source.popular(page: currentPage, filters: emptyFilters)
-            }
+            let page = try await fetchPage(currentPage, from: source)
             if page.entries.isEmpty {
                 hasMore = false
             } else {
@@ -141,7 +238,7 @@ struct SourceDetailView: View {
         currentPage = 1
 
         do {
-            let page = try await source.search(query: searchText, page: 1, filters: emptyFilters)
+            let page = try await fetchPage(1, from: source)
             entries = page.entries
             hasMore = page.hasNextPage
         } catch {

@@ -5,7 +5,7 @@ import Foundation
 // MARK: - Option
 
 /// One selectable choice inside a filter.
-struct FilterOption: Identifiable, Hashable, Sendable {
+struct FilterOption: Identifiable, Hashable, Sendable, Codable {
     /// Value the source expects back.
     let id: String
     let name: String
@@ -25,7 +25,7 @@ struct FilterOption: Identifiable, Hashable, Sendable {
 /// mutating the source. This is the one place v2 deviates from the plan's
 /// `search(query:page:filters: [SourceFilter])` signature, which assumed
 /// stateful filter objects.
-enum SourceFilter: Identifiable, Hashable, Sendable {
+enum SourceFilter: Identifiable, Hashable, Sendable, Codable {
 
     /// Section label, no value.
     case header(id: String, name: String)
@@ -169,5 +169,17 @@ struct FilterState: Hashable, Sendable {
             state.values[filter.id] = state.value(for: filter)
         }
         return state
+    }
+
+    /// Number of leaf filters whose value differs from the filter's default.
+    func modifiedCount(for filters: [SourceFilter]) -> Int {
+        SourceFilter.flatten(filters).filter { filter in
+            guard filter.isSelectable, let raw = values[filter.id] else { return false }
+            return raw != FilterState().value(for: filter)
+        }.count
+    }
+
+    func isModified(for filters: [SourceFilter]) -> Bool {
+        modifiedCount(for: filters) > 0
     }
 }
