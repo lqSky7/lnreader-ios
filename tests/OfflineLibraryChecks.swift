@@ -46,20 +46,16 @@ import SwiftData
         precondition(merged[0].chapters.count == 1 && merged[0].chapters[0].progress == 90)
         precondition(merged[0].tracks[0].lastChapterRead == 20)
         try checkOfflineFiles()
-        for strategy in UpdateStrategy.allCases {
-            precondition(LibraryUpdatePolicy.permits(strategy: strategy, hasFetched: true, status: .completed,
-                hasUnread: false, automatic: false, unreadOnly: true, skipCompleted: true))
-        }
         precondition(!LibraryUpdatePolicy.permits(strategy: .never, hasFetched: false, status: .ongoing,
-            hasUnread: true, automatic: true, unreadOnly: false, skipCompleted: false))
+            hasUnread: true, unreadOnly: false, skipCompleted: false))
         precondition(!LibraryUpdatePolicy.permits(strategy: .onlyFetchOnce, hasFetched: true, status: .ongoing,
-            hasUnread: true, automatic: true, unreadOnly: false, skipCompleted: false))
+            hasUnread: true, unreadOnly: false, skipCompleted: false))
         precondition(LibraryUpdatePolicy.permits(strategy: .onlyFetchOnce, hasFetched: false, status: .ongoing,
-            hasUnread: true, automatic: true, unreadOnly: true, skipCompleted: true))
+            hasUnread: true, unreadOnly: true, skipCompleted: true))
         precondition(!LibraryUpdatePolicy.permits(strategy: .always, hasFetched: false, status: .publishingFinished,
-            hasUnread: true, automatic: true, unreadOnly: false, skipCompleted: true))
+            hasUnread: true, unreadOnly: false, skipCompleted: true))
         precondition(!LibraryUpdatePolicy.permits(strategy: .always, hasFetched: true, status: .ongoing,
-            hasUnread: false, automatic: true, unreadOnly: true, skipCompleted: false))
+            hasUnread: false, unreadOnly: true, skipCompleted: false))
         print("PASS: backup encryption/authentication, wrong-key/tamper rejection, traversal rejection, full-state restore, idempotent non-destructive merge, offline manifests and missing files")
     }
     static func rejects(_ body: () throws -> Void) throws {

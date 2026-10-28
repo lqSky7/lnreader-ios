@@ -413,7 +413,7 @@ final class LibraryManager {
             // `hasUnread` faults in every chapter of the entry on the main actor,
             // so only ask when the answer can change the outcome.
             guard LibraryUpdatePolicy.permits(strategy: entry.updateStrategy, hasFetched: entry.lastUpdate != nil,
-                status: entry.status, hasUnread: automatic && unreadOnly ? entry.hasUnread : true, automatic: automatic,
+                status: entry.status, hasUnread: unreadOnly ? entry.hasUnread : true,
                 unreadOnly: unreadOnly, skipCompleted: skipCompleted) else { continue }
             guard let source = sourceManager.source(forKey: entry.sourceKey) else {
                 notInstalled += 1
