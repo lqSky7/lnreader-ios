@@ -13,11 +13,12 @@ struct V2ChapterSyncChecks {
 
     static func main() throws {
         checkChapterRecognition()
+        checkChapterOrder()
         try checkMerge()
         try checkMissingChapterGuard()
         try checkReaddedChapterKeepsState()
         try checkTwinReads()
-        print("PASS: chapter recognition (Yokai cases) and source sync "
+        print("PASS: chapter recognition (Yokai cases), chapter order (date, then numbers) and source sync "
             + "(add/update/remove, delete guard, re-add keeps read state, same chapter from another scanlator)")
     }
 
@@ -97,6 +98,39 @@ struct V2ChapterSyncChecks {
         precondition(
             ChapterRecognition.parseChapterNumber("Ch.4", mangaTitle: "", knownNumber: -2) == -2
         )
+    }
+
+    // MARK: - Order
+
+    private static func checkChapterOrder() {
+        typealias Key = ChapterOrder.Key
+        func names(_ keys: [Key]) -> [String] {
+            ChapterOrder.ascending(keys.shuffled(), key: { $0 }).map(\.name)
+        }
+        let day = Date(timeIntervalSince1970: 1_700_000_000)
+
+        precondition(ChapterOrder.numberSequence("Vol. 2 Ch. 10,5 (1/3)") == [2, 10.5, 1, 3])
+
+        // Upload time beats the number: a late upload of a lower number sorts later.
+        precondition(names([
+            Key(date: day.addingTimeInterval(60), number: 3, name: "Ch. 3"),
+            Key(date: day, number: 5, name: "Ch. 5"),
+        ]) == ["Ch. 5", "Ch. 3"])
+
+        // Same timestamp: the number, then every number in the title, then the title.
+        precondition(names([
+            Key(date: day, number: 3, name: "Vol.2 Ch.3"),
+            Key(date: day, number: 3, name: "Vol.1 Ch.3"),
+            Key(date: day, number: 2, name: "Vol.2 Ch.2"),
+            Key(date: day, number: -1, name: "Prologue"),
+        ]) == ["Prologue", "Vol.2 Ch.2", "Vol.1 Ch.3", "Vol.2 Ch.3"])
+
+        // One undated chapter: dates are ignored for the whole list.
+        precondition(names([
+            Key(date: day.addingTimeInterval(60), number: 1, name: "Ch. 1"),
+            Key(date: nil, number: 2, name: "Ch. 2"),
+            Key(date: day, number: 3, name: "Ch. 3"),
+        ]) == ["Ch. 1", "Ch. 2", "Ch. 3"])
     }
 
     // MARK: - Merge

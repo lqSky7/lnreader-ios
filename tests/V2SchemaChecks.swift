@@ -77,14 +77,9 @@ struct V2SchemaChecks {
         let latest = try unwrap(stored.latestChapter)
         precondition(latest.chapterNumber == 3)
 
-        // Continue-reading picks the first unread chapter.
-        let resume = try unwrap(stored.continueChapter)
-        precondition(resume.chapterNumber == 1)
-
+        // The chapter-state check expects the first chapter finished.
         chapters[0].read = true
         chapters[0].progress = 100
-        let nextUp = try unwrap(stored.continueChapter)
-        precondition(nextUp.chapterNumber == 2)
     }
 
     // MARK: Chapter state

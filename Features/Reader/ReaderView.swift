@@ -520,7 +520,10 @@ struct ReaderView: View {
             var descriptor = FetchDescriptor<Chapter>(predicate: predicate, sortBy: [SortDescriptor(\.sourceOrder)])
             descriptor.relationshipKeyPathsForPrefetching = []
             if let fetched = try? modelContext.fetch(descriptor) {
-                self.cachedChapters = fetched
+                // Previous/next follow the chapter list's order, not the source's.
+                self.cachedChapters = ChapterOrder.ascending(fetched) {
+                    ChapterOrder.Key(date: $0.dateUpload, number: $0.chapterNumber, name: $0.name)
+                }
             }
         }
         if let manifest = ttsManager.manifest, manifest.bookId == audioBookId, manifest.chapterId == currentChapterPath {

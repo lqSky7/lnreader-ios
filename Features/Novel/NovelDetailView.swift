@@ -53,6 +53,11 @@ struct NovelDetailView: View {
     /// every body evaluation meant two full passes over every chapter each time
     /// a chip, a search keystroke, or a scroll tick re-rendered the screen.
     @State private var orderedChapters: [ChapterDisplay] = []
+    /// The chapter opened most recently, from history; fetched with the chapters.
+    @State private var lastOpenedPath: String?
+    /// The chapter "Continue reading" opens, also shown on the button.
+    /// Rebuilt with `orderedChapters` so the body never walks relationships.
+    @State private var resumeChapter: ChapterDisplay?
     @State private var showAudioDownloads = false
     /// Hold-to-select state for the chapter list; the bar pins to this screen.
     @State private var chapterSelection = ChapterSelection()
@@ -276,11 +281,21 @@ struct NovelDetailView: View {
                 )
                 descriptor.relationshipKeyPathsForPrefetching = []
 
+                var lastOpened = FetchDescriptor<History>(
+                    predicate: #Predicate {
+                        $0.chapter?.entry?.url == entryURL && $0.chapter?.entry?.sourceKey == entrySourceKey
+                    },
+                    sortBy: [SortDescriptor(\.lastRead, order: .reverse)]
+                )
+                lastOpened.fetchLimit = 1
+
                 do {
                     let fetched = try context.fetch(descriptor)
                     let mapped = fetched.map { ChapterDisplay(chapter: $0) }
+                    let lastOpenedPath = (try? context.fetch(lastOpened))?.first?.chapterURL
                     await MainActor.run {
                         self.allChapters = mapped
+                        self.lastOpenedPath = lastOpenedPath
                         self.rebuildOrderedChapters()
                     }
                 } catch {
@@ -314,19 +329,33 @@ struct NovelDetailView: View {
         }
     }
 
-    /// Newest first, ordered by chapter number.
+    /// Newest first: by upload time, then by number (`ChapterOrder`).
     ///
     /// `sourceOrder` is whatever the source listed — MangaFire hands back
     /// newest-first while most novel sources go oldest-first — so it cannot be
-    /// used to sort. The parsed number can.
+    /// used to sort.
     private func rebuildOrderedChapters() {
         // Merge and hide by scanlator before ordering, so the list shows what
         // the user actually asked for.
         let base = ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
-        orderedChapters = base.sorted { lhs, rhs in
-            if lhs.sortNumber != rhs.sortNumber { return lhs.sortNumber > rhs.sortNumber }
-            return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
+        let oldestFirst = ChapterOrder.ascending(base, key: \.orderKey)
+        orderedChapters = oldestFirst.reversed()
+        resumeChapter = Self.resumeChapter(
+            oldestFirst: oldestFirst,
+            lastOpened: lastOpenedPath.flatMap { path in allChapters.first { $0.path == path } }
+        )
+    }
+
+    /// Reopen the chapter opened last if it is unfinished; otherwise the first
+    /// unread chapter after the latest one read, then the first unread one,
+    /// then the newest.
+    private static func resumeChapter(oldestFirst: [ChapterDisplay], lastOpened: ChapterDisplay?) -> ChapterDisplay? {
+        if let lastOpened, lastOpened.unread { return lastOpened }
+        if let latestRead = oldestFirst.lastIndex(where: { !$0.unread }),
+           let next = oldestFirst[latestRead...].first(where: \.unread) {
+            return next
         }
+        return oldestFirst.first(where: \.unread) ?? oldestFirst.last
     }
 
     private var filteredChapters: [ChapterDisplay] {
@@ -379,21 +408,9 @@ struct NovelDetailView: View {
             return Array(list.prefix(10))
 
         case .progress:
-            let readChapters = allChapters.filter { !$0.unread || $0.isInProgress }
-            let targetIndex: Int
-
-            if let maxRead = readChapters.max(by: { $0.sortNumber < $1.sortNumber }) {
-                if let idx = list.firstIndex(where: { $0.path == maxRead.path }) {
-                    targetIndex = idx
-                } else if let idx = list.firstIndex(where: { $0.sortNumber <= maxRead.sortNumber }) {
-                    targetIndex = idx
-                } else {
-                    targetIndex = list.count - 1
-                }
-            } else {
-                // Nothing read yet: start at the oldest chapter.
-                targetIndex = list.count - 1
-            }
+            // The list is newest-first, so the first started chapter is the
+            // latest one; with nothing read yet, start at the oldest chapter.
+            let targetIndex = list.firstIndex { !$0.unread || $0.isInProgress } ?? list.count - 1
 
             let totalCount = list.count
             let sliceSize = 11
@@ -440,9 +457,8 @@ struct NovelDetailView: View {
     }
 
     private var hasStartedReading: Bool {
-        localEntry?.chapters.contains { chapter in
-            chapter.read || chapter.progress > 0 || chapter.history != nil
-        } ?? false
+        localEntry != nil
+            && (lastOpenedPath != nil || allChapters.contains { !$0.unread || $0.isInProgress })
     }
 
     // MARK: - Actions
@@ -581,41 +597,6 @@ struct NovelDetailView: View {
             entryURL: localEntry?.url ?? sourceEntry?.url,
             kind: localEntry?.kind ?? sourceEntry?.kind ?? .novel
         )
-    }
-
-    /// The chapter "Continue reading" opens, also shown on the button.
-    private var resumeChapter: ChapterDisplay? {
-        guard let localEntry, !localEntry.chapters.isEmpty else {
-            return sourceChapters.first.map {
-                ChapterDisplay(
-                    sourceChapter: $0,
-                    position: 0,
-                    sourceKey: sourceKey,
-                    kind: sourceEntry?.kind ?? .novel
-                )
-            }
-        }
-
-        let chapters = localEntry.chapters
-
-        // The chapter opened most recently decides where to resume: if it is
-        // unfinished, reopen it.
-        if let lastOpened = chapters
-            .filter({ $0.history != nil })
-            .max(by: { ($0.history?.lastRead ?? .distantPast) < ($1.history?.lastRead ?? .distantPast) }),
-           !lastOpened.read {
-            return ChapterDisplay(chapter: lastOpened)
-        }
-
-        if let latestRead = chapters.filter(\.read).max(by: { $0.sourceOrder < $1.sourceOrder }),
-           let next = chapters
-            .filter({ !$0.read && $0.sourceOrder > latestRead.sourceOrder })
-            .min(by: { $0.sourceOrder < $1.sourceOrder }) {
-            return ChapterDisplay(chapter: next)
-        }
-
-        let sorted = chapters.sorted { $0.sourceOrder < $1.sourceOrder }
-        return (sorted.first(where: { !$0.read }) ?? sorted.last).map { ChapterDisplay(chapter: $0) }
     }
 
     private func continueReading() {

@@ -157,18 +157,6 @@ enum SchemaV1: VersionedSchema {
                 return lhs.sourceOrder < rhs.sourceOrder
             }
         }
-
-        /// Chapter to resume: the in-progress one, else the first unread one.
-        var continueChapter: Chapter? {
-            if let inProgress = chapters
-                .filter({ !$0.read && $0.progress > 0 })
-                .max(by: { $0.dateFetch ?? .distantPast < $1.dateFetch ?? .distantPast }) {
-                return inProgress
-            }
-            return chapters
-                .filter { !$0.read }
-                .min { $0.sourceOrder < $1.sourceOrder }
-        }
     }
 
     // MARK: - Chapter

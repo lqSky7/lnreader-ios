@@ -108,7 +108,7 @@ struct MangaReaderView: View {
         if !storedChapters.isEmpty {
             return storedChapters.map {
                 SourceChapter(url: $0.url, name: $0.name, chapterNumber: $0.chapterNumber,
-                              scanlator: $0.scanlator)
+                              scanlator: $0.scanlator, dateUpload: $0.dateUpload)
             }
         }
         return sourceChapters
@@ -492,11 +492,8 @@ struct MangaReaderView: View {
             predicate: predicate,
             sortBy: [SortDescriptor(\.sourceOrder)]
         )
-        storedChapters = ((try? modelContext.fetch(descriptor)) ?? []).sorted { lhs, rhs in
-            if lhs.chapterNumber != rhs.chapterNumber {
-                return lhs.chapterNumber < rhs.chapterNumber
-            }
-            return lhs.sourceOrder < rhs.sourceOrder
+        storedChapters = ChapterOrder.ascending((try? modelContext.fetch(descriptor)) ?? []) {
+            ChapterOrder.Key(date: $0.dateUpload, number: $0.chapterNumber, name: $0.name)
         }
         rebuildNavigable()
     }
@@ -509,11 +506,8 @@ struct MangaReaderView: View {
         defer { isLoadingChapters = false }
         do {
             let entry = SourceEntry(sourceKey: sourceKey, kind: .manga, url: entryURL, title: "")
-            sourceChapters = try await source.chapters(entry).sorted { lhs, rhs in
-                if lhs.chapterNumber != rhs.chapterNumber {
-                    return lhs.chapterNumber < rhs.chapterNumber
-                }
-                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            sourceChapters = ChapterOrder.ascending(try await source.chapters(entry)) {
+                ChapterOrder.Key(date: $0.dateUpload, number: $0.chapterNumber, name: $0.name)
             }
             chapterSourceEntry = try? await source.details(entry)
             rebuildNavigable()
