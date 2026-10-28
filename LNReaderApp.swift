@@ -21,16 +21,16 @@ struct LNReaderApp: App {
     @State private var sourceManager = SourceManager()
     @State private var trackingManager: TrackingManager
 
-    /// The v2 store.
+    /// The app store.
     ///
     /// Opened once at launch. A failure here means the store on disk does not
     /// match `SchemaV1`, which is a programming error rather than a user error,
     /// so it fails loudly instead of silently starting with an empty library.
     private static let modelContainer: ModelContainer = {
         do {
-            return try ModelContainerFactory.makeV2()
+            return try ModelContainerFactory.make()
         } catch {
-            fatalError("Could not open the LNReader-v2 store: \(error)")
+            fatalError("Could not open the LNReader store: \(error)")
         }
     }()
 

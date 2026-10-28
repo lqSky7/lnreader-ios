@@ -5,8 +5,8 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 
 ## Ground rules
 
-- **v2 is a hard break.** It opens its own store (`LNReader-v2.store`), never touches v1's
-  `default.store`, and has no migration. Do not write one or a migration doc. [V2_PROGRESS]
+- **v2 is a hard break from v1.** The store is `default.store`, schema `SchemaV1`. The old v1
+  data is discarded and there is no v1 migration; do not write one. [V2_PROGRESS]
 - **On device only, sideloaded.** No server-side source execution; no App Store, so review rules
   do not apply, code signing does. [MANGA_SUPPORT_PLAN]
 - **Built is not verified.** "Built" means it compiles and passes headless checks. "Verified"

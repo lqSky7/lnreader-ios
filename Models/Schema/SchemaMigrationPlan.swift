@@ -3,7 +3,7 @@
 import Foundation
 import SwiftData
 
-/// Migration plan for the v2 store.
+/// Migration plan for the app store.
 ///
 /// There is one version today. Every future change to `SchemaV1` must instead
 /// add a `SchemaV2` plus a `MigrationStage`, so shipped builds never have to

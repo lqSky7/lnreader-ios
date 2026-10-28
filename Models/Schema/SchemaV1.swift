@@ -1,18 +1,12 @@
-// SchemaV1.swift - The v2 SwiftData schema, versioned from day one.
+// SchemaV1.swift - The app's SwiftData schema, versioned from day one.
 //
-// v1 (the pre-rewrite app) had no `VersionedSchema`, novel-only model names and
-// a denormalized `ReadingHistory`. v2 starts a fresh, kind-aware store in its
-// own file (`LNReader-v2.store`) so it never has to read the old one.
-//
-// The models live inside this enum on purpose: the pre-rewrite `Novel`,
-// `Chapter` and `Category` types are still compiled into the app while the UI
-// is ported over, and namespacing keeps both sets unambiguous. Views being
-// ported should use the typealiases at the bottom of this file.
+// The models live inside this enum so a future `SchemaV2` can sit beside them;
+// views use the typealiases at the bottom of this file.
 
 import Foundation
 import SwiftData
 
-/// Version 1 of the v2 schema.
+/// Version 1 of the schema.
 enum SchemaV1: VersionedSchema {
 
     static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
@@ -27,8 +21,8 @@ enum SchemaV1: VersionedSchema {
             ExtensionRepo.self,
             DownloadItem.self,
             PendingTrackUpdate.self,
-            // Account profile. Lives outside the namespace because it predates
-            // v2 and has no schema of its own, but it shares the store.
+            // Account profile. Lives outside the namespace and has no schema of
+            // its own, but it shares the store.
             UserProfile.self,
         ]
     }
@@ -240,7 +234,7 @@ enum SchemaV1: VersionedSchema {
 
     // MARK: - History
 
-    /// Reading history, replacing v1's denormalized `ReadingHistory`.
+    /// Reading history.
     ///
     /// `chapterURL` carries the unique constraint because SwiftData does not
     /// support uniqueness across a relationship; the relationship is still the
@@ -392,8 +386,7 @@ enum SchemaV1: VersionedSchema {
 
 // MARK: - Type aliases
 
-/// Short handles so ported views read naturally (`Entry`, `Chapter`, …) without
-/// clashing with the v1 models that are still in the tree.
+/// Short handles so views read naturally (`Entry`, `Chapter`, …).
 typealias Entry = SchemaV1.Entry
 typealias Chapter = SchemaV1.Chapter
 typealias History = SchemaV1.History

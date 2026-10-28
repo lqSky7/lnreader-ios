@@ -8,10 +8,8 @@ The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end,
 every source behind one protocol (`CatalogSource`). Every source is native Swift, compiled into
 the app; the JavaScript bridge is gone.
 
-Migration from v1 is **deferred by decision**, and nothing implements it: v2 opens its own
-store file (`LNReader-v2.store`) and never touches `default.store`, so v1 data stays
-recoverable on disk. There is no `v1-final` bridge build and no "Export for v2" screen —
-do not write a migration doc until they exist. Fresh installs start empty; `.tachibk`
+Migration from v1 is **dropped by decision**: the v1 store is discarded. The app store is
+`default.store` (the interim `LNReader-v2.store` was folded into it). Fresh installs start empty; `.tachibk`
 import already covers a manga library.
 
 **Built** means it compiles and passes its headless checks. **Verified** means it has also been
@@ -23,7 +21,7 @@ backup/restore and narration are built but have never been exercised on a device
 
 | Area | State | Notes |
 |---|---|---|
-| Data model | **Built** | `SchemaV1`, own store file, v1 models deleted |
+| Data model | **Built** | `SchemaV1`, `default.store`, v1 models deleted |
 | Novel read path | **Verified** | Library, detail, chapter list, web reader, history, updates, stats |
 | Manga read path | **Verified** | Pager + webtoon, cache, prefetch, progress; all reader gestures checked on device |
 | Source abstraction | **Built** | `CatalogSource` / `NovelSource` / `MangaSource`; `SourceManager` registry |
@@ -38,7 +36,7 @@ backup/restore and narration are built but have never been exercised on a device
 | Chapter fetching | **Verified** | Opening an entry no longer refetches; last-fetched time and a Refresh button |
 | Performance | **Pass done** | Library counts cached off-main, reader writes coalesced, covers downsampled; numbers in [PERFORMANCE.md](PERFORMANCE.md), next rewrite in [LIBRARY_QUERY_PLAN.md](LIBRARY_QUERY_PLAN.md) |
 | Extension repos, JS bridge, Kotlin/JS transpiler | **Removed** | Sources are native; adding one is a Swift file in `Services/Sources/Native/` |
-| Migration (v1 → v2) | **Deferred** | User's call; fresh installs start empty. Importing another app's `.tachibk` is the only way in |
+| Migration (v1 → v2) | **Dropped** | User's call; fresh installs start empty. Importing another app's `.tachibk` is the only way in |
 
 ## Roadmap — Mihon / Yokai parity
 
