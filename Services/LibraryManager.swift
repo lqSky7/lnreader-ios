@@ -395,7 +395,7 @@ final class LibraryManager {
 
         var pending: [UpdateWork] = []
         var notInstalled = 0
-        let unreadOnly = UserDefaults.standard.bool(forKey: "updates.unreadOnly")
+        let skipUnread = UserDefaults.standard.bool(forKey: "updates.skipUnread")
         let skipCompleted = UserDefaults.standard.bool(forKey: "updates.skipCompleted")
         let excludedCategories: Set<String>
         if category == nil {
@@ -413,8 +413,8 @@ final class LibraryManager {
             // `hasUnread` faults in every chapter of the entry on the main actor,
             // so only ask when the answer can change the outcome.
             guard LibraryUpdatePolicy.permits(strategy: entry.updateStrategy, hasFetched: entry.lastUpdate != nil,
-                status: entry.status, hasUnread: unreadOnly ? entry.hasUnread : true,
-                unreadOnly: unreadOnly, skipCompleted: skipCompleted) else { continue }
+                status: entry.status, hasUnread: skipUnread ? entry.hasUnread : false,
+                skipUnread: skipUnread, skipCompleted: skipCompleted) else { continue }
             guard let source = sourceManager.source(forKey: entry.sourceKey) else {
                 notInstalled += 1
                 continue

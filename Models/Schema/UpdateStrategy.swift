@@ -25,9 +25,9 @@ enum UpdateStrategy: Int, Codable, CaseIterable, Sendable, Hashable {
 
 enum LibraryUpdatePolicy {
     static func permits(strategy: UpdateStrategy, hasFetched: Bool, status: EntryStatus,
-                        hasUnread: Bool, unreadOnly: Bool, skipCompleted: Bool) -> Bool {
+                        hasUnread: Bool, skipUnread: Bool, skipCompleted: Bool) -> Bool {
         guard strategy != .never, strategy != .onlyFetchOnce || !hasFetched else { return false }
         if skipCompleted && (status == .completed || status == .publishingFinished) { return false }
-        return !unreadOnly || hasUnread
+        return !skipUnread || !hasUnread
     }
 }

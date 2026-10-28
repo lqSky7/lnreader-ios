@@ -47,15 +47,15 @@ import SwiftData
         precondition(merged[0].tracks[0].lastChapterRead == 20)
         try checkOfflineFiles()
         precondition(!LibraryUpdatePolicy.permits(strategy: .never, hasFetched: false, status: .ongoing,
-            hasUnread: true, unreadOnly: false, skipCompleted: false))
+            hasUnread: true, skipUnread: false, skipCompleted: false))
         precondition(!LibraryUpdatePolicy.permits(strategy: .onlyFetchOnce, hasFetched: true, status: .ongoing,
-            hasUnread: true, unreadOnly: false, skipCompleted: false))
+            hasUnread: true, skipUnread: false, skipCompleted: false))
         precondition(LibraryUpdatePolicy.permits(strategy: .onlyFetchOnce, hasFetched: false, status: .ongoing,
-            hasUnread: true, unreadOnly: true, skipCompleted: true))
+            hasUnread: false, skipUnread: true, skipCompleted: true))
         precondition(!LibraryUpdatePolicy.permits(strategy: .always, hasFetched: false, status: .publishingFinished,
-            hasUnread: true, unreadOnly: false, skipCompleted: true))
+            hasUnread: true, skipUnread: false, skipCompleted: true))
         precondition(!LibraryUpdatePolicy.permits(strategy: .always, hasFetched: true, status: .ongoing,
-            hasUnread: false, unreadOnly: true, skipCompleted: false))
+            hasUnread: true, skipUnread: true, skipCompleted: false))
         print("PASS: backup encryption/authentication, wrong-key/tamper rejection, traversal rejection, full-state restore, idempotent non-destructive merge, offline manifests and missing files")
     }
     static func rejects(_ body: () throws -> Void) throws {

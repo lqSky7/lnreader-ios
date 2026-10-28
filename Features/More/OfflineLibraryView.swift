@@ -222,7 +222,7 @@ struct LibraryUpdateSettingsView: View {
     @AppStorage("general.updateOnWifiOnly") private var wifiOnly = true
     @AppStorage("updates.notify") private var notify = false
     @AppStorage("updates.autoDownloadNew") private var autoDownload = false
-    @AppStorage("updates.unreadOnly") private var unreadOnly = false
+    @AppStorage("updates.skipUnread") private var skipUnread = false
     @AppStorage("updates.skipCompleted") private var skipCompleted = false
     @AppStorage("updates.schedulingError") private var schedulingError = ""
     var body: some View {
@@ -234,12 +234,12 @@ struct LibraryUpdateSettingsView: View {
                 Toggle("Check for new chapters", isOn: $enabled)
                 Stepper("Requested interval: \(Int(hours)) hours", value: $hours, in: 1...72, step: 1)
                 Toggle("Wi-Fi only", isOn: $wifiOnly)
-                Toggle("Only titles with unread chapters", isOn: $unreadOnly)
+                Toggle("Only titles without unread chapters", isOn: $skipUnread)
                 Toggle("Skip completed titles", isOn: $skipCompleted)
                 Toggle("Download new chapters", isOn: $autoDownload)
                 Toggle("Notify about new chapters", isOn: $notify)
             } header: {
-                Text("Background refresh")
+                Text("Refresh")
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("iOS chooses when background work runs. Low Power Mode and Background App Refresh settings can delay it.")
