@@ -1,9 +1,18 @@
 // StatisticsView.swift
-// Library and reading activity metrics in a native grouped list, charted with Swift Charts and Gauge.
+// Library and reading activity metrics using muted pastel color schemes and systemGray6 containers.
 
 import Charts
 import SwiftData
 import SwiftUI
+
+// MARK: - Muted Pastel Palette
+private enum Pastel {
+    static let blue = Color(red: 0.62, green: 0.76, blue: 0.88)     // Soft Sky Blue
+    static let purple = Color(red: 0.74, green: 0.68, blue: 0.82)   // Soft Lavender
+    static let green = Color(red: 0.66, green: 0.82, blue: 0.74)    // Soft Mint Green
+    static let orange = Color(red: 0.90, green: 0.76, blue: 0.66)   // Soft Peach/Apricot
+    static let teal = Color(red: 0.62, green: 0.78, blue: 0.78)     // Soft Sage/Teal
+}
 
 // MARK: - Snapshot and chart value types
 
@@ -68,44 +77,40 @@ struct StatisticsView: View {
         stats.lastRead?.timeAgo ?? "Never"
     }
 
-    var body: some View {
-        List {
-            overviewSection
-            weeklyActivitySection
-            readingProgressSection
-            categorySection
-            readingHoursSection
-            sourceSection
-        }
-        .settingsScreen("Statistics")
-        .task { await loadStatistics() }
+    private var columns: [GridItem] {
+        [GridItem(.flexible()), GridItem(.flexible())]
     }
 
-    // MARK: - Overview
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // Summary Overview Grid (systemGray6 cards, flat pastel icons)
+                LazyVGrid(columns: columns, spacing: 16) {
+                    summaryCard(title: "Library", value: "\(stats.libraryCount)", icon: "books.vertical.fill", color: Pastel.blue)
+                    summaryCard(title: "Total Chapters", value: "\(stats.totalChapters)", icon: "list.number", color: Pastel.purple)
+                    summaryCard(title: "Downloaded", value: "\(downloadedCount)", icon: "arrow.down.circle.fill", color: Pastel.green)
+                    summaryCard(title: "Last Read", value: lastReadText, icon: "clock.arrow.circlepath", color: Pastel.orange)
+                }
 
-    private var overviewSection: some View {
-        Section("Overview") {
-            LabeledContent {
-                Text("\(stats.libraryCount)")
-            } label: {
-                Label("Library", systemImage: "books.vertical")
+                // 1. Weekly Reading Activity Card (muted pastel purple)
+                weeklyActivityCard
+
+                // 2. Reading Progress Stacked Card (muted pastel green and purple)
+                readingProgressCard
+
+                // 3. Category Breakdown Card (muted pastel orange progress bars)
+                categoryBreakdownCard
+
+                // 4. Best Reading Hours Card (muted pastel blue bar chart)
+                bestReadingHoursCard
+
+                // 5. Novels by Source Card (muted pastel teal progress rows)
+                novelsBySourceCard
             }
-            LabeledContent {
-                Text("\(stats.totalChapters)")
-            } label: {
-                Label("Total chapters", systemImage: "list.number")
-            }
-            LabeledContent {
-                Text("\(downloadedCount)")
-            } label: {
-                Label("Downloaded", systemImage: "arrow.down.circle")
-            }
-            LabeledContent {
-                Text(lastReadText)
-            } label: {
-                Label("Last read", systemImage: "clock.arrow.circlepath")
-            }
+            .padding()
         }
+        .navigationTitle("Statistics")
+        .task { await loadStatistics() }
     }
 
     // MARK: - Snapshot
@@ -158,7 +163,51 @@ struct StatisticsView: View {
         stats = snapshot
     }
 
-    // MARK: - Weekly activity
+    // MARK: - Card Container
+
+    private struct CardContainer<Content: View>: View {
+        let content: Content
+        
+        init(@ViewBuilder content: () -> Content) {
+            self.content = content()
+        }
+        
+        var body: some View {
+            content
+                .padding()
+                .background(AppTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+        }
+    }
+
+    // MARK: - Summary Card Helper
+
+    private func summaryCard(title: String, value: String, icon: String, color: Color) -> some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: icon)
+                    .font(.headline)
+                    .foregroundStyle(color)
+
+                Text(value)
+                    .font(Typography.title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .foregroundStyle(.primary)
+
+                Text(title)
+                    .font(Typography.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Data Models
+    // The value types live at file scope so the snapshot can hold them.
+
+    // MARK: - 1. Weekly Reading Activity
 
     private var weeklyActivityData: [DayActivity] {
         let calendar = Calendar.current
@@ -184,34 +233,58 @@ struct StatisticsView: View {
         return data
     }
 
-    private var weeklyActivitySection: some View {
-        Section {
-            let activity = weeklyActivityData
-            if activity.map(\.count).reduce(0, +) > 0 {
-                Chart(activity) { day in
-                    BarMark(
-                        x: .value("Day", day.dayLabel),
-                        y: .value("Chapters", day.count)
-                    )
-                    .foregroundStyle(AppTheme.accent)
-                    .cornerRadius(4)
+    private var weeklyActivityCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.bar.fill")
+                        .foregroundStyle(Pastel.purple)
+                    Text("Weekly Activity")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
                 }
-                .frame(height: 120)
-                .chartYAxis {
-                    AxisMarks(values: .automatic(desiredCount: 3))
+                
+                Text("Chapters read per day in the last 7 days")
+                    .font(Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 4)
+                
+                let activity = weeklyActivityData
+                if activity.map(\.count).reduce(0, +) > 0 {
+                    Chart(activity) { day in
+                        BarMark(
+                            x: .value("Day", day.dayLabel),
+                            y: .value("Chapters", day.count)
+                        )
+                        .foregroundStyle(Pastel.purple)
+                        .cornerRadius(4)
+                    }
+                    .frame(height: 120)
+                    .chartYAxis {
+                        AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(AppTheme.hairline)
+                            AxisValueLabel()
+                                .foregroundStyle(.secondary)
+                                .font(.caption2)
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks { _ in
+                            AxisValueLabel()
+                                .foregroundStyle(.secondary)
+                                .font(.caption2)
+                        }
+                    }
+                } else {
+                    noDataView(message: "No reading activity recorded recently")
                 }
-                .padding(.vertical, 4)
-            } else {
-                noData("No reading activity recorded recently")
             }
-        } header: {
-            Text("Weekly activity")
-        } footer: {
-            Text("Chapters read per day in the last 7 days.")
         }
     }
 
-    // MARK: - Reading progress
+    // MARK: - 2. Reading Progress (Stacked Bar)
 
     private var totalChaptersCount: Int {
         max(stats.totalChapters, 0)
@@ -221,54 +294,155 @@ struct StatisticsView: View {
         max(totalChaptersCount - unreadCount, 0)
     }
 
-    private var readingProgressSection: some View {
-        Section {
-            if totalChaptersCount > 0 {
-                Gauge(value: Double(readChaptersCount), in: 0...Double(totalChaptersCount)) {
-                    Text("Read")
+    private var readingProgressCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "percent")
+                        .foregroundStyle(Pastel.green)
+                    Text("Reading Progress")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
                 }
-                .gaugeStyle(.linearCapacity)
-                .tint(AppTheme.accent)
-                .padding(.vertical, 4)
-
-                LabeledContent("Read", value: "\(readChaptersCount) (\(percent(readChaptersCount))%)")
-                LabeledContent("Unread", value: "\(unreadCount) (\(percent(unreadCount))%)")
-            } else {
-                noData("No chapters loaded in library")
+                
+                Text("Split of read vs unread chapters across library")
+                    .font(Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 4)
+                
+                if totalChaptersCount > 0 {
+                    VStack(spacing: 12) {
+                        Chart {
+                            BarMark(
+                                x: .value("Chapters", readChaptersCount)
+                            )
+                            .foregroundStyle(Pastel.green)
+                            .cornerRadius(4)
+                            
+                            BarMark(
+                                x: .value("Chapters", unreadCount),
+                                stacking: .standard
+                            )
+                            .foregroundStyle(Pastel.purple)
+                            .cornerRadius(4)
+                        }
+                        .frame(height: 28)
+                        .chartXAxis(.hidden)
+                        .chartYAxis(.hidden)
+                        
+                        HStack(spacing: 20) {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Pastel.green)
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Read")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Text("\(readChaptersCount) (\(Int(Double(readChaptersCount) / Double(totalChaptersCount) * 100))%)")
+                                        .font(Typography.caption)
+                                        .bold()
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Pastel.purple)
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Unread")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Text("\(unreadCount) (\(Int(Double(unreadCount) / Double(totalChaptersCount) * 100))%)")
+                                        .font(Typography.caption)
+                                        .bold()
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                } else {
+                    noDataView(message: "No chapters loaded in library")
+                }
             }
-        } header: {
-            Text("Reading progress")
-        } footer: {
-            Text("Read versus unread chapters across the library.")
         }
     }
 
-    private func percent(_ count: Int) -> Int {
-        guard totalChaptersCount > 0 else { return 0 }
-        return Int(Double(count) / Double(totalChaptersCount) * 100)
-    }
-
-    // MARK: - Category breakdown
+    // MARK: - 3. Category Breakdown
 
     private var categoryData: [CategoryCount] {
-        Array(stats.categoryCounts.prefix(5))
+        stats.categoryCounts
+            .prefix(5)
+            .map { $0 }
     }
 
-    private var categorySection: some View {
-        Section {
-            if categoryData.isEmpty {
-                noData("No categories defined")
-            } else {
-                rankedChart(categoryData.map { RankedCount(name: $0.name, count: $0.count) })
+    private var maxCategoryNovelCount: Int {
+        categoryData.map(\.count).max() ?? 1
+    }
+
+    private var categoryBreakdownCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.grid.2x2.fill")
+                        .foregroundStyle(Pastel.orange)
+                    Text("Category Breakdown")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                }
+                
+                Text("Distribution of library entries across categories (top 5)")
+                    .font(Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 4)
+                
+                let categoriesList = categoryData
+                if !categoriesList.isEmpty {
+                    VStack(spacing: 12) {
+                        ForEach(categoriesList) { item in
+                            HStack(spacing: 12) {
+                                Text(item.name)
+                                    .font(Typography.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 90, alignment: .leading)
+                                    .lineLimit(1)
+                                
+                                GeometryReader { geometry in
+                                    ZStack(alignment: .leading) {
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(.quaternary)
+                                            .frame(height: 10)
+                                        
+                                        let maxVal = maxCategoryNovelCount
+                                        let progress = maxVal > 0 ? CGFloat(item.count) / CGFloat(maxVal) : 0
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(Pastel.orange)
+                                            .frame(width: geometry.size.width * progress, height: 10)
+                                    }
+                                }
+                                .frame(height: 10)
+                                
+                                Text("\(item.count)")
+                                    .font(Typography.caption)
+                                    .bold()
+                                    .foregroundStyle(Pastel.orange)
+                                    .frame(width: 30, alignment: .trailing)
+                            }
+                        }
+                    }
+                } else {
+                    noDataView(message: "No categories defined")
+                }
             }
-        } header: {
-            Text("Category breakdown")
-        } footer: {
-            Text("Library entries across categories (top 5).")
         }
     }
 
-    // MARK: - Reading hours
+    // MARK: - 4. Best Reading Hours
 
     private var hourlyActivityData: [HourActivity] {
         var hourCounts: [Int: Int] = [:]
@@ -276,116 +450,172 @@ struct StatisticsView: View {
         for date in stats.historyDates {
             hourCounts[calendar.component(.hour, from: date), default: 0] += 1
         }
+        
         return (0..<24).map { hour in
-            HourActivity(hour: hour, hourLabel: Self.hourLabel(hour), count: hourCounts[hour] ?? 0)
+            let label: String
+            if hour == 0 {
+                label = "12am"
+            } else if hour < 12 {
+                label = "\(hour)am"
+            } else if hour == 12 {
+                label = "12pm"
+            } else {
+                label = "\(hour - 12)pm"
+            }
+            return HourActivity(hour: hour, hourLabel: label, count: hourCounts[hour] ?? 0)
         }
     }
 
-    private static func hourLabel(_ hour: Int) -> String {
-        if hour == 0 { return "12am" }
-        if hour < 12 { return "\(hour)am" }
-        if hour == 12 { return "12pm" }
-        return "\(hour - 12)pm"
-    }
-
     private var peakReadingHour: String {
-        if let peak = hourlyActivityData.max(by: { $0.count < $1.count }), peak.count > 0 {
+        let data = hourlyActivityData
+        if let peak = data.max(by: { $0.count < $1.count }), peak.count > 0 {
             return peak.hourLabel
         }
         return "None"
     }
 
-    private var readingHoursSection: some View {
-        Section("Reading hours") {
-            LabeledContent("Peak reading time", value: peakReadingHour)
-
-            let hourlyData = hourlyActivityData
-            if hourlyData.map(\.count).reduce(0, +) > 0 {
-                Chart(hourlyData, id: \.hour) { data in
-                    BarMark(
-                        x: .value("Hour", data.hour),
-                        y: .value("Count", data.count)
-                    )
-                    .foregroundStyle(data.hourLabel == peakReadingHour ? AnyShapeStyle(AppTheme.accent) : AnyShapeStyle(.secondary))
-                    .cornerRadius(2)
+    private var bestReadingHoursCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.fill")
+                        .foregroundStyle(Pastel.blue)
+                    Text("Reading Hours")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
                 }
-                .frame(height: 100)
-                .chartXAxis {
-                    AxisMarks(values: [0, 6, 12, 18]) { value in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let hour = value.as(Int.self) {
-                                Text(Self.hourLabel(hour))
+                
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(peakReadingHour)
+                        .font(.title2)
+                        .bold()
+                        .foregroundStyle(Pastel.blue)
+                    Text("peak reading time")
+                        .font(Typography.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 4)
+                
+                let hourlyData = hourlyActivityData
+                if hourlyData.map(\.count).reduce(0, +) > 0 {
+                    Chart(hourlyData, id: \.hour) { data in
+                        BarMark(
+                            x: .value("Hour", data.hour),
+                            y: .value("Count", data.count)
+                        )
+                        .foregroundStyle(
+                            data.hourLabel == peakReadingHour ? Pastel.blue : Pastel.blue.opacity(0.4)
+                        )
+                        .cornerRadius(2)
+                    }
+                    .frame(height: 80)
+                    .chartXAxis {
+                        AxisMarks(values: [0, 6, 12, 18]) { value in
+                            AxisValueLabel {
+                                if let hour = value.as(Int.self) {
+                                    let label = hour == 0 ? "12am" : (hour < 12 ? "\(hour)am" : (hour == 12 ? "12pm" : "\(hour-12)pm"))
+                                    Text(label)
+                                        .font(.caption2)
+                                }
                             }
                         }
                     }
+                    .chartYAxis(.hidden)
+                } else {
+                    noDataView(message: "No hourly reading data available")
                 }
-                .chartYAxis(.hidden)
-                .padding(.vertical, 4)
-            } else {
-                noData("No hourly reading data available")
             }
         }
     }
 
-    // MARK: - Books by source
+    // MARK: - 5. Books by Source
 
     private func sourceName(for key: String) -> String {
         sourceManager.source(forKey: key)?.name ?? SourceKey.identifier(from: key)
     }
 
-    private var sourceCountData: [RankedCount] {
+    private var sourceCountData: [SourceCount] {
         stats.sourceCounts
+            .map { SourceCount(name: sourceName(for: $0.name), count: $0.count) }
             .prefix(5)
-            .map { RankedCount(name: sourceName(for: $0.name), count: $0.count) }
+            .map { $0 }
     }
 
-    private var sourceSection: some View {
-        Section {
-            let list = sourceCountData
-            if list.isEmpty {
-                noData("No novels added to library")
-            } else {
-                rankedChart(list)
-            }
-        } header: {
-            Text("Books by source")
-        } footer: {
-            Text("Library entries by source.")
-        }
+    private var maxSourceNovelCount: Int {
+        sourceCountData.map(\.count).max() ?? 1
     }
 
-    // MARK: - Helpers
-
-    /// Horizontal bars with the count at the end of each, largest first.
-    private func rankedChart(_ items: [RankedCount]) -> some View {
-        Chart(items) { item in
-            BarMark(
-                x: .value("Titles", item.count),
-                y: .value("Name", item.name)
-            )
-            .foregroundStyle(AppTheme.accent)
-            .cornerRadius(4)
-            .annotation(position: .trailing) {
-                Text("\(item.count)")
-                    .font(Typography.small)
+    private var novelsBySourceCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "globe")
+                        .foregroundStyle(Pastel.teal)
+                    Text("Books by Source")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                }
+                
+                Text("Distribution of library entries by source")
+                    .font(Typography.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.bottom, 4)
+                
+                let sourceList = sourceCountData
+                if !sourceList.isEmpty {
+                    VStack(spacing: 12) {
+                        ForEach(sourceList) { item in
+                            HStack(spacing: 12) {
+                                Text(item.name)
+                                    .font(Typography.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 100, alignment: .leading)
+                                    .lineLimit(1)
+                                
+                                GeometryReader { geometry in
+                                    ZStack(alignment: .leading) {
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(.quaternary)
+                                            .frame(height: 10)
+                                        
+                                        let maxVal = maxSourceNovelCount
+                                        let progress = maxVal > 0 ? CGFloat(item.count) / CGFloat(maxVal) : 0
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(Pastel.teal)
+                                            .frame(width: geometry.size.width * progress, height: 10)
+                                    }
+                                }
+                                .frame(height: 10)
+                                
+                                Text("\(item.count)")
+                                    .font(Typography.caption)
+                                    .bold()
+                                    .foregroundStyle(Pastel.teal)
+                                    .frame(width: 30, alignment: .trailing)
+                            }
+                        }
+                    }
+                } else {
+                    noDataView(message: "No novels added to library")
+                }
             }
         }
-        .chartXAxis(.hidden)
-        .frame(height: CGFloat(items.count) * 36 + 8)
-        .padding(.vertical, 4)
     }
 
-    private func noData(_ message: String) -> some View {
-        Label(message, systemImage: "chart.pie")
-            .font(Typography.caption)
-            .foregroundStyle(.secondary)
-    }
-}
+    // MARK: - No Data View Helper
 
-private struct RankedCount: Identifiable {
-    let id = UUID()
-    let name: String
-    let count: Int
+    private func noDataView(message: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "chart.pie")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(message)
+                .font(Typography.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 100)
+    }
 }
