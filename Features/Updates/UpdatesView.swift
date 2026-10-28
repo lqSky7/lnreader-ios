@@ -37,7 +37,10 @@ struct UpdatesView: View {
                         subtitle: "New chapters from your library will appear here."
                     )
                     .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
+                        // The updates modal shows progress; release the pull indicator.
+                        let context = modelContext, sources = sourceManager
+                        Task { await libraryManager.updateLibrary(context: context, sourceManager: sources) }
+                        try? await Task.sleep(for: .seconds(1.5))
                     }
                 } else {
                     List {
@@ -63,7 +66,10 @@ struct UpdatesView: View {
                     }
                     .listStyle(.plain)
                     .refreshable {
-                        await libraryManager.updateLibrary(context: modelContext, sourceManager: sourceManager)
+                        // The updates modal shows progress; release the pull indicator.
+                        let context = modelContext, sources = sourceManager
+                        Task { await libraryManager.updateLibrary(context: context, sourceManager: sources) }
+                        try? await Task.sleep(for: .seconds(1.5))
                     }
                 }
             }

@@ -258,9 +258,12 @@ struct LibraryView: View {
             return true
         }
         .refreshable {
-            // Pulling down inside a category refreshes just that category.
-            await libraryManager.updateLibrary(
-                context: modelContext, sourceManager: sourceManager, category: selectedCategory?.name)
+            // Pulling down inside a category refreshes just that category. The
+            // updates modal shows progress, so the pull indicator must not
+            // stay pinned for the whole run: start it and let go.
+            let context = modelContext, sources = sourceManager, category = selectedCategory?.name
+            Task { await libraryManager.updateLibrary(context: context, sourceManager: sources, category: category) }
+            try? await Task.sleep(for: .seconds(1.5))
         }
     }
 
