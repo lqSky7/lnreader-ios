@@ -109,3 +109,6 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 - Entry and chapter urls are persisted, so a source keeps returning the shape it always did.
 - The source returns a `URLRequest` for each page image and Swift downloads it.
 - MangaFire's "token" is upstream code ported byte for byte, not a secret.
+- **A multisrc family is one class, not one class per site.** `MasonrySource` (keiyoushi's
+  `lib-multisrc/masonry`) is configured per site: `MasonrySource(id:name:baseURL:)` in
+  `NativeSources.all()`, one line each. Do not copy the file per domain.

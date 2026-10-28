@@ -32,5 +32,8 @@ enum NativeSourceIDs {
         MihonSourceID.make(name: "4KHD", lang: "all"): SourceKey.makeBuiltin(id: "fourkhd"),
         // Upstream's versionId is 2 since the site moved to HeanCms.
         MihonSourceID.make(name: "Omega Scans", lang: "en", versionId: 2): SourceKey.makeBuiltin(id: "omegascans"),
+        // Pinned upstream for the English source.
+        1_459_635_082_044_256_286: SourceKey.makeBuiltin(id: "pornpics"),
+        MihonSourceID.make(name: "Metart Hunter", lang: "all"): SourceKey.makeBuiltin(id: "metarthunter"),
     ]
 }

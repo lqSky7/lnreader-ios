@@ -104,6 +104,20 @@ extension String {
         allowed.remove(charactersIn: "&=+#")
         return addingPercentEncoding(withAllowedCharacters: allowed) ?? self
     }
+
+    /// Mihon's `setUrlWithoutDomain`: path, query and fragment of an absolute url.
+    ///
+    /// Sources persist this form, so a source keeps resolving the entries it always did. A value
+    /// that is already relative comes back with a leading slash and otherwise unchanged.
+    var sourceRelative: String {
+        guard !isEmpty else { return self }
+        guard let parts = URLComponents(string: self) else { return self }
+        var result = parts.percentEncodedPath
+        if let query = parts.percentEncodedQuery { result += "?" + query }
+        if let fragment = parts.percentEncodedFragment { result += "#" + fragment }
+        guard !result.isEmpty else { return self }
+        return result.hasPrefix("/") ? result : "/" + result
+    }
 }
 
 // MARK: - SwiftSoup conveniences
@@ -133,6 +147,13 @@ enum NativeSources {
         [
             NovelFireSource(), NovelPhoenixSource(), FreeWebNovelSource(),
             MangaFireSource(), AllMangaSource(), Manhwa18Source(), FourKHDSource(), OmegaScansSource(),
+            PornPicsSource(),
+            // The `masonry` family. Upstream also ships FemJoy, XArt, FTV, JoyMii, Playboy Playmates
+            // and Elite Babes on this engine; each is one more line here once the site is vetted.
+            MasonrySource(
+                id: "metarthunter", name: "MetArt Hunter",
+                baseURL: "https://www.metarthunter.com", iconAsset: "MetArtIcon"
+            ),
         ]
     }
 }
