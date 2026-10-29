@@ -48,6 +48,11 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 
 ## Performance rules [PERFORMANCE, LIBRARY_QUERY_PLAN]
 
+- **Never do expensive work on the main thread if it can hurt the UX.** Walking relationships
+  across a library, encoding or decoding large payloads, base64, file I/O and big saves go to a
+  background `ModelContext` (pass `PersistentIdentifier`s and `container`, not models) or a
+  detached task. Show progress (a spinner) while it runs and hop back only to publish results.
+  Sync-now froze the app by building its whole upload on the main actor.
 - **Never read a relationship count in a `body`.** Use `LibraryChapterCounts` or a background
   `fetchCount`. `Entry.unreadCount` is only fine in a background pass.
 - **Never `save()` from a scroll or progress callback.** Mutate the model and let

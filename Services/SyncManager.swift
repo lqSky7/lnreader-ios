@@ -271,17 +271,36 @@ final class SyncManager {
             return
         }
 
-        let payload = SyncPayload(
-            profile: SyncProfilePayload(
-                username: currentUser?.username,
-                email: currentUser?.email,
-                name: profile.name,
-                image: profile.avatarData?.base64EncodedString()
-            ),
-            library: library.map { SyncNovelPayload(entry: $0) },
-            sources: sources.map { SyncSourcePayload(source: $0) },
-            clientUpdatedAt: lastSyncedAt.map(Self.wireTimestamp)
+        // Building the payload walks every chapter of every title and base64s the
+        // avatar, so it runs on a background context, never the main thread.
+        let container = context.container
+        let ids = library.map(\.persistentModelID)
+        let profileInfo = SyncProfilePayload(
+            username: currentUser?.username,
+            email: currentUser?.email,
+            name: profile.name,
+            image: nil
         )
+        let avatar = profile.avatarData
+        let sourcePayloads = sources.map { SyncSourcePayload(source: $0) }
+        let clientUpdatedAt = lastSyncedAt.map(Self.wireTimestamp)
+
+        let body: Data
+        do {
+            body = try await Task.detached(priority: .userInitiated) {
+                try Self.encodePayload(
+                    container: container,
+                    ids: ids,
+                    profile: profileInfo,
+                    avatar: avatar,
+                    sources: sourcePayloads,
+                    clientUpdatedAt: clientUpdatedAt
+                )
+            }.value
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
 
         var tookServerCopy = false
 
@@ -290,7 +309,7 @@ final class SyncManager {
                 let data = try await requestRaw(
                     path: "/api/sync",
                     method: "PUT",
-                    bodyData: try JSONEncoder().encode(payload)
+                    bodyData: body
                 )
                 if let result = try? JSONDecoder().decode(PushResult.self, from: data),
                    let syncedAt = Self.date(fromWire: result.updatedAt) {
@@ -310,6 +329,25 @@ final class SyncManager {
         if tookServerCopy {
             lastMessage = "Backend had newer data, so its copy was applied here"
         }
+    }
+
+    /// Off-main: reads the library through its own context and encodes the upload.
+    nonisolated private static func encodePayload(
+        container: ModelContainer,
+        ids: [PersistentIdentifier],
+        profile: SyncProfilePayload,
+        avatar: Data?,
+        sources: [SyncSourcePayload],
+        clientUpdatedAt: String?
+    ) throws -> Data {
+        let context = ModelContext(container)
+        var profile = profile
+        profile.image = avatar?.base64EncodedString()
+        let library = ids.compactMap { context.model(for: $0) as? Entry }
+            .map { SyncNovelPayload(entry: $0) }
+        return try JSONEncoder().encode(
+            SyncPayload(profile: profile, library: library, sources: sources, clientUpdatedAt: clientUpdatedAt)
+        )
     }
 
     /// True when the account already has a document on the server.
