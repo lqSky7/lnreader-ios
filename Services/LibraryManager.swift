@@ -158,6 +158,10 @@ final class LibraryManager {
     /// end, which is why this only touches history and the "recently read"
     /// timestamp.
     func recordHistory(entry: Entry, chapter: Chapter, context: ModelContext) {
+        // Incognito: no history row, and `lastReadAt` stays put so the library
+        // sort cannot reveal that this was opened.
+        guard !IncognitoMode.shared.isOn else { return }
+
         let chapterURL = chapter.url
         let predicate = #Predicate<History> { $0.chapterURL == chapterURL }
         var descriptor = FetchDescriptor(predicate: predicate)
@@ -187,6 +191,7 @@ final class LibraryManager {
         context: ModelContext
     ) {
         ChapterDownloadManager.shared.chapterOpened(chapter)
+        let incognito = IncognitoMode.shared.isOn
         let finished = chapter.read && chapter.progress >= 100
         let clamped = min(max(percent, 0), 100)
         let wasRead = chapter.read
@@ -194,7 +199,10 @@ final class LibraryManager {
         if finished {
             chapter.paragraphIndex = clamped >= Int(Chapter.finishedThreshold) ? 0 : paragraphIndex
         } else if clamped >= Int(Chapter.finishedThreshold) {
-            chapter.read = true
+            // Incognito keeps the position but never flips the chapter to read,
+            // so the library counts, the read fan-out and the tracker all stay
+            // untouched.
+            if !incognito { chapter.read = true }
             chapter.progress = 100
             chapter.paragraphIndex = 0
         } else {
@@ -212,7 +220,7 @@ final class LibraryManager {
             }
         }
 
-        touchTimestamps(chapter)
+        if !incognito { touchTimestamps(chapter) }
         scheduleProgressSave(context)
     }
 
@@ -291,13 +299,14 @@ final class LibraryManager {
         context: ModelContext
     ) {
         ChapterDownloadManager.shared.chapterOpened(chapter)
+        let incognito = IncognitoMode.shared.isOn
         let update = MangaProgress.update(pageIndex: pageIndex, pageCount: pageCount)
         let wasRead = chapter.read
 
         chapter.lastPageRead = update.lastPageRead
         chapter.pagesLeft = update.pagesLeft
         chapter.progress = update.progress
-        if update.finished {
+        if update.finished, !incognito {
             chapter.read = true
         }
 
@@ -310,7 +319,7 @@ final class LibraryManager {
             }
         }
 
-        touchTimestamps(chapter)
+        if !incognito { touchTimestamps(chapter) }
         scheduleProgressSave(context, deferred: true)
     }
 

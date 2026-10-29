@@ -42,6 +42,7 @@ struct LNReaderApp: App {
                 .environment(syncManager)
                 .environment(sourceManager)
                 .environment(trackingManager)
+                .environment(IncognitoMode.shared)
                 .task {
                     libraryManager.tracking = trackingManager
                     LibraryMaintenance.reconcileTwinReads()

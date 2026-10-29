@@ -283,15 +283,19 @@ struct ReaderView: View {
                 .accessibilityHidden(!isCurrentSpeech || !chrome.isControl)
 
             // Focus Status Indicator Overlay (visible when controls and TTS speaking overlay are hidden, and Line Focus mode is active)
-            VStack {
-                if !chrome.isControl && !isCurrentSpeech && lineFocusEnabled {
-                    ReaderFocusIndicator()
+            VStack(spacing: 8) {
+                if !chrome.isControl && !isCurrentSpeech {
+                    if lineFocusEnabled {
+                        ReaderFocusIndicator()
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
+                    IncognitoIndicator()
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
                 Spacer()
             }
             .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(!chrome.isControl && !isCurrentSpeech && lineFocusEnabled)
+            .allowsHitTesting(!chrome.isControl && !isCurrentSpeech)
             .padding(.top, 12)
         }
     }
@@ -796,8 +800,7 @@ struct ReaderView: View {
 }
 
 // MARK: - Focus Indicator View Overlay
-struct ReaderFocusIndicator: View {
-    @ObservedObject var focusManager = FocusModeManager.shared
+struct ReaderFocusIndicator: View {    @ObservedObject var focusManager = FocusModeManager.shared
     @State private var showLabel = false
     /// The old version held a `Timer` and mutated `@State` from its closure. The
     /// timer outlived the view, so it kept writing to a `@State` that was no
@@ -864,6 +867,28 @@ struct ReaderFocusIndicator: View {
                 focusManager.overrideType = options[nextIndex]
                 focusManager.updateFocusStatus()
             }
+        }
+    }
+}
+
+// MARK: - Incognito Indicator
+
+/// Marks a session that is not being recorded.
+///
+/// Shown with the chrome hidden, in the same slot as the Focus indicator, so
+/// incognito cannot be on without something on screen saying so. The History
+/// toolbar carries the same marker while the controls are visible.
+struct IncognitoIndicator: View {
+    var body: some View {
+        if IncognitoMode.shared.isOn {
+            Label("Incognito", systemImage: "eye.slash.fill")
+                .labelStyle(.iconOnly)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(AppTheme.warning)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .glassEffect(.regular, in: .capsule)
+                .accessibilityLabel("Incognito, nothing is being recorded")
         }
     }
 }

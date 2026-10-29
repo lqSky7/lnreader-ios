@@ -6,6 +6,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @Environment(ReaderRouter.self) private var readerRouter
+    @Environment(IncognitoMode.self) private var incognito
     @Namespace private var chapterTransitions
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \History.lastRead, order: .reverse)
@@ -52,27 +53,49 @@ struct HistoryView: View {
             .onChange(of: resumeTrigger) { resumeLatest() }
             .searchable(text: $searchText, prompt: "Search history")
             .toolbar {
-                if !history.isEmpty {
-                    ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    incognitoButton
+
+                    if !history.isEmpty {
                         Button(role: .destructive) {
                             showClearConfirmation = true
                         } label: {
                             Label("Clear History", systemImage: "trash")
                         }
-                        .confirmationDialog(
-                            "Clear all reading history?",
-                            isPresented: $showClearConfirmation,
-                            titleVisibility: .visible
-                        ) {
-                            Button("Clear History", role: .destructive, action: clearAllHistory)
-                            Button("Cancel", role: .cancel) {}
-                        } message: {
-                            Text("This removes every entry from History. Your reading progress is kept.")
-                        }
                     }
                 }
             }
+            // Attached here rather than inside the toolbar item: a dialog owned
+            // by a toolbar button does not reliably present, which is why the
+            // trash button appeared to do nothing.
+            .confirmationDialog(
+                "Clear all reading history?",
+                isPresented: $showClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Clear History", role: .destructive, action: clearAllHistory)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes every entry from History. Your reading progress is kept.")
+            }
         }
+    }
+
+    /// Stays in the toolbar, lit, for as long as nothing is being recorded, so
+    /// incognito is never on without being visible.
+    private var incognitoButton: some View {
+        let on = incognito.isOn
+        return Button {
+            incognito.toggle()
+            Haptics.shared.impact(.light, intensity: 0.8)
+        } label: {
+            Label(
+                on ? "Incognito on" : "Incognito off",
+                systemImage: on ? "eye.slash.fill" : "eye.slash"
+            )
+        }
+        .tint(on ? AppTheme.warning : nil)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     // MARK: - Rows
@@ -179,26 +202,18 @@ struct HistoryView: View {
     }
 
     private func delete(_ items: [History]) {
-        let ids = items.map(\.persistentModelID)
-        let container = modelContext.container
-        Task.detached(priority: .userInitiated) {
-            let context = ModelContext(container)
-            for id in ids {
-                if let item = context.model(for: id) as? History { context.delete(item) }
-            }
-            try? context.save()
-        }
+        // Delete through the view's own context. The old version opened a second
+        // context in a detached task, so `@Query` never saw the change and the
+        // row stayed on screen.
+        for item in items { modelContext.delete(item) }
+        try? modelContext.save()
     }
 
     private func clearAllHistory() {
-        // One batch delete in the store, off the main thread, instead of
-        // faulting in and deleting every row on it.
-        let container = modelContext.container
-        Task.detached(priority: .userInitiated) {
-            let context = ModelContext(container)
-            try? context.delete(model: History.self)
-            try? context.save()
-        }
+        let items = history
+        for item in items { modelContext.delete(item) }
+        try? modelContext.save()
+        expandedRuns.removeAll()
     }
 }
 

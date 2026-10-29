@@ -175,6 +175,7 @@
 		F284113DD4D3BBD22FA26560 /* TTSSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */; };
 		F5748C2F70B0F83B25583038 /* MangaProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = D97993579546ABBFF8B0DF11 /* MangaProgress.swift */; };
 		F8879A418673455C0E62F341 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93193A48DE8D174048C0696 /* SyncManager.swift */; };
+		3A7C1E0000000000000000B4 /* IncognitoMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7C1E0000000000000000C4 /* IncognitoMode.swift */; };
 		F9233EDB83C99B0B48C4448B /* LibrarySort.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175902E92B3E8EC4DB0F4BE0 /* LibrarySort.swift */; };
 		F950BF2E752CF657B8C0E55B /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3F1BA3EBA23C4DD838C9A2 /* HTTPClient.swift */; };
 		FA024401BCB08F7E6C64FBFE /* HistoryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9C09B8F93F66D136B578B /* HistoryRow.swift */; };
@@ -293,6 +294,7 @@
 		9F3233C4DA4D6A036AA55261 /* Date+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+Extensions.swift"; sourceTree = "<group>"; };
 		A6F1A6745E7ACADABB7304F5 /* UpdateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateRow.swift; sourceTree = "<group>"; };
 		A93193A48DE8D174048C0696 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
+		3A7C1E0000000000000000C4 /* IncognitoMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncognitoMode.swift; sourceTree = "<group>"; };
 		ABCD26880000000000000000 /* Services/ChapterDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/ChapterDownloadManager.swift; sourceTree = SOURCE_ROOT; };
 		ABCD26880000000000000001 /* Services/LibraryBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/LibraryBackup.swift; sourceTree = SOURCE_ROOT; };
 		ABCD26880000000000000002 /* Services/LibraryMaintenance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/LibraryMaintenance.swift; sourceTree = SOURCE_ROOT; };
@@ -569,6 +571,7 @@
 				FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */,
 				BD006CC34D0C4C76D36DE78E /* ReaderTTSManager.swift */,
 				A93193A48DE8D174048C0696 /* SyncManager.swift */,
+				3A7C1E0000000000000000C4 /* IncognitoMode.swift */,
 				0F0800F1C8A9CD9E40C97AA4 /* Images */,
 				67D5E46151A19BB7CC7CBFDF /* Network */,
 				A189E877E8F4ED17EF07AC8A /* Sources */,
@@ -944,6 +947,7 @@
 				EEDF92E541FC7528E7BEAA2B /* StatisticsView.swift in Sources */,
 				62C08A004F957CA7BE8565D4 /* String+Extensions.swift in Sources */,
 				F8879A418673455C0E62F341 /* SyncManager.swift in Sources */,
+				3A7C1E0000000000000000B4 /* IncognitoMode.swift in Sources */,
 				F284113DD4D3BBD22FA26560 /* TTSSettingsView.swift in Sources */,
 				964462B69BFEFB77456C4391 /* Theme.swift in Sources */,
 				85CDA37BF617A6E77D899825 /* TinyXMLParser.swift in Sources */,

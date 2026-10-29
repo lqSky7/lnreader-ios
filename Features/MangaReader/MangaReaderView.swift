@@ -147,11 +147,12 @@ struct MangaReaderView: View {
 
             scrollOverlays
 
-            // Same Focus status indicator as the novel reader: it draws nothing
-            // unless a Focus is actually active.
+            // Same Focus and incognito indicators as the novel reader: each draws
+            // nothing unless it has something to say.
             if !chrome.isControl {
-                VStack {
+                VStack(spacing: 8) {
                     ReaderFocusIndicator()
+                    IncognitoIndicator()
                     Spacer()
                 }
                 .ignoresSafeArea(.keyboard)

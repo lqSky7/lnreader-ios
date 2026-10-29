@@ -4,6 +4,8 @@
 import SwiftUI
 
 struct GeneralSettingsView: View {
+    @Environment(SourceManager.self) private var sourceManager
+
     @AppStorage("general.defaultSortOrder") private var defaultSortOrderRaw = SortOrder.lastRead.rawValue
     @AppStorage("general.defaultSortDirection") private var defaultSortDirectionRaw = SortDirection.descending.rawValue
     @AppStorage("general.defaultDisplayMode") private var defaultDisplayModeRaw = DisplayMode.comfortable.rawValue
@@ -55,9 +57,24 @@ struct GeneralSettingsView: View {
                 Toggle("Confirm before remove", isOn: $confirmRemove)
             }
 
+            browseSection
+
             hapticsSection
         }
         .settingsScreen("General")
+    }
+
+    private var browseSection: some View {
+        @Bindable var sourceManager = sourceManager
+
+        return Section {
+            Toggle("Hide 18+ sources", isOn: $sourceManager.hidesAdultSources)
+        } header: {
+            Text("Browse")
+        } footer: {
+            Text("Removes adult sources from Browse, search and every source picker. "
+                + "Titles already in your library keep working.")
+        }
     }
 
     private var hapticsSection: some View {

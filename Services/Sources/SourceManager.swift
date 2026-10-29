@@ -20,6 +20,21 @@ final class SourceManager {
     /// Set while sources are being (re)loaded from disk.
     private(set) var isLoading = false
 
+    static let hideAdultSourcesKey = "browse.hideAdultSources"
+
+    /// Drops adult sources from every listing: Browse, global search and the
+    /// pickers. Lookups (`source(forKey:)`, `novelSource(forKey:)`) still resolve
+    /// them, so a library entry that already points at one keeps working.
+    var hidesAdultSources: Bool {
+        didSet {
+            UserDefaults.standard.set(hidesAdultSources, forKey: Self.hideAdultSourcesKey)
+        }
+    }
+
+    init() {
+        hidesAdultSources = UserDefaults.standard.bool(forKey: Self.hideAdultSourcesKey)
+    }
+
     // MARK: Registration
 
     func register(_ source: any CatalogSource) {
@@ -46,7 +61,11 @@ final class SourceManager {
 
     /// All sources, novels first, then alphabetically inside each kind.
     var allSources: [any CatalogSource] {
-        sources.values.sorted { lhs, rhs in
+        let visible = hidesAdultSources
+            ? sources.values.filter { !$0.isAdult }
+            : Array(sources.values)
+
+        return visible.sorted { lhs, rhs in
             if lhs.kind != rhs.kind { return lhs.kind == .novel }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
