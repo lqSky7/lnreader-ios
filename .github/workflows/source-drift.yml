@@ -1,0 +1,64 @@
+name: Source drift
+
+# Checks whether an upstream source (keiyoushi/extensions-source, lnreader/lnreader-plugins) has
+# moved past the commit the Swift port in Services/Sources/Native/ was written against, and
+# files an issue per drifted source. The baselines live in .github/upstream-sources.json.
+
+on:
+  schedule:
+    # Daily at 04:17 UTC. Off the hour on purpose: GitHub drops or delays jobs queued at :00.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report drift without opening, refreshing or closing issues"
+        type: boolean
+        default: false
+      source:
+        description: "Only check this source id (e.g. weebcentral)"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: source-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Secrets cannot be read in a step `if:`, so resolve the app presence here instead.
+      HAS_APP: ${{ secrets.DRIFT_APP_CLIENT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Issues are opened by the GitHub App, so they are attributed to the bot rather than to
+      # github-actions[bot] and keep working if the repo ever restricts GITHUB_TOKEN.
+      - name: Bot token
+        id: bot
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DRIFT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DRIFT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+
+      - name: Check upstream
+        env:
+          # Falls back to GITHUB_TOKEN until the app's secrets exist.
+          GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          ONLY: ${{ inputs.source }}
+        run: |
+          args=()
+          if [ -n "$ONLY" ]; then
+            args+=(--only "$ONLY")
+          fi
+          python3 .github/scripts/check_source_drift.py "${args[@]}"

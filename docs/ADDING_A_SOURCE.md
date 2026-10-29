@@ -57,3 +57,44 @@ iPhone, read a chapter and download one before calling it working.
 
 Sites behind Cloudflare time out in the headless runner, which has no WebKit solver. That is
 a runner limit; confirm those in the app.
+
+## 4. Record the upstream baseline
+
+`.github/upstream-sources.json` says which upstream commit each port was written against.
+`.github/workflows/source-drift.yml` compares it with upstream once a day and opens one issue
+per source that has moved, so a port cannot rot unnoticed.
+
+```sh
+gh api "repos/<owner>/<repo>/commits?path=<path>&sha=<branch>&per_page=1" --jq '.[0] | .sha, .commit.committer.date'
+```
+
+Add to `sources`:
+
+```json
+{
+  "id": "weebcentral",
+  "name": "Weeb Central",
+  "repo": "keiyoushi/extensions-source",
+  "branch": "main",
+  "path": "src/en/weebcentral",
+  "ported_sha": "<40-char sha from above>",
+  "ported_at": "2026-10-30",
+  "files": ["Services/Sources/Native/WeebCentralSource.swift"]
+}
+```
+
+`id` is the marker in the issue body and the name you pass to `--bump`; `files` is what the
+issue tells you to edit. Manga ports point at `keiyoushi/extensions-source` (`src/<lang>/<name>`
+for one site, `lib-multisrc/<name>` for a family), novel ports at
+`lnreader/lnreader-plugins` (`plugins/multisrc/<template>`). Every port has an entry; a source
+written from scratch would not.
+
+When you have ported a change, record the new commit — the open issue closes itself on the
+next run:
+
+```sh
+python3 .github/scripts/check_source_drift.py --bump weebcentral <sha>
+```
+
+`--dry-run` reports what would happen without touching issues; `--only <id>` checks one entry.
+Locally it needs `GH_TOKEN` (any token with `issues: write`) and `GITHUB_REPOSITORY`.

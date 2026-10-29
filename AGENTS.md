@@ -18,6 +18,11 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
   [V2_PROGRESS]
 - `docs/UI_AUDIT.md` and `docs/TTS_REVAMP_PLAN.md` are historical records. Narration is
   Breeze TTS 2, not Qwen. [V2_PROGRESS]
+- **A ported source has an upstream baseline.** `.github/upstream-sources.json` records the
+  upstream commit each port was written against; `.github/workflows/source-drift.yml` checks it
+  daily and files one issue per drifted source. Do not bump `ported_sha` unless the port really
+  matches upstream — the bump is what closes the issue. A new port adds an entry.
+  [ADDING_A_SOURCE]
 
 ## Build and checks
 
