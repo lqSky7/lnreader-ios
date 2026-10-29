@@ -242,7 +242,10 @@ struct MoreView: View {
         @ViewBuilder destination: @escaping () -> Destination
     ) -> some View {
         NavigationLink {
+            // Fired on push: a tap gesture on the link itself swallows touches
+            // on the label, leaving only the empty part of the row tappable.
             destination()
+                .onAppear { Haptics.shared.impact(haptic) }
         } label: {
             Label {
                 if let subtitle {
@@ -259,9 +262,6 @@ struct MoreView: View {
                 Image(systemName: symbol)
             }
         }
-        .simultaneousGesture(TapGesture().onEnded {
-            Haptics.shared.impact(haptic)
-        })
     }
 }
 
