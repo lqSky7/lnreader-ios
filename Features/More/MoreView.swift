@@ -14,6 +14,7 @@ struct MoreView: View {
 
     @State private var showingEditProfile = false
     @State private var showingAuth = false
+    @State private var showingRestore = false
 
     private var userProfile: UserProfile {
         profiles.first ?? UserProfile(name: "Reader")
@@ -37,6 +38,12 @@ struct MoreView: View {
             }
             .onAppear {
                 ensureProfileExists()
+            }
+            // Signing in or out changes who owns the server copy, so the local
+            // store has to catch up with it before the next push overwrites it.
+            .onChange(of: syncManager.currentUser?.id) { _, id in
+                guard id != nil else { return }
+                Task { await syncManager.pull(into: modelContext, quiet: true) }
             }
         }
     }
@@ -106,7 +113,7 @@ struct MoreView: View {
     // MARK: - Sync
 
     private var syncSection: some View {
-        Section("Cloud sync") {
+        Section {
             syncStatus
 
             if syncManager.currentUser == nil {
@@ -120,7 +127,8 @@ struct MoreView: View {
                         await syncManager.push(
                             profile: userProfile,
                             entries: libraryNovels,
-                            sources: sourceManager.novelSources
+                            sources: sourceManager.novelSources,
+                            context: modelContext
                         )
                     }
                 } label: {
@@ -134,6 +142,13 @@ struct MoreView: View {
                 }
                 .disabled(syncManager.isWorking)
 
+                Button {
+                    showingRestore = true
+                } label: {
+                    Label("Download from backend", systemImage: "arrow.down.circle")
+                }
+                .disabled(syncManager.isWorking)
+
                 Button(role: .destructive) {
                     Task { await syncManager.signOut() }
                 } label: {
@@ -141,7 +156,29 @@ struct MoreView: View {
                 }
                 .disabled(syncManager.isWorking)
             }
+        } header: {
+            Text("Cloud sync")
+        } footer: {
+            if syncManager.currentUser != nil {
+                Text("Sync now sends this device's library to the backend. "
+                    + "Download replaces matching titles with the backend's copy; "
+                    + "titles that only exist on this device are kept.")
+            }
         }
+        .confirmationDialog(
+            "Download your library from the backend?",
+            isPresented: $showingRestore,
+            titleVisibility: .visible
+        ) {
+            Button("Download", action: download)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The backend's copy wins wherever the two disagree. Reading progress made here since the last sync is replaced.")
+        }
+    }
+
+    private func download() {
+        Task { await syncManager.restore(into: modelContext) }
     }
 
     @ViewBuilder
@@ -156,6 +193,10 @@ struct MoreView: View {
                 .foregroundStyle(.secondary)
         } else if syncManager.currentUser == nil {
             Label("Cloud sync offline", systemImage: "cloud.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else if !syncManager.hasSynced {
+            Label("Signed in, nothing synced yet", systemImage: "cloud")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         } else {

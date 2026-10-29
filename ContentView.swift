@@ -78,6 +78,10 @@ struct ContentView: View {
         }
         .task {
             await syncManager.loadSession()
+            // The server is the source of truth, so catch up with it before
+            // anything can push over it. Best effort: a launch on a dead network
+            // must not surface an error or hold up the library.
+            await syncManager.pull(into: modelContext, quiet: true)
             sourceManager.registerNativeSources()
             ChapterDownloadManager.shared.configure(context: modelContext, sources: sourceManager)
             LibraryMaintenance.schedule()

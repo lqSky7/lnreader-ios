@@ -62,6 +62,13 @@ struct SyncPayload: Codable {
     var profile: SyncProfilePayload
     var library: [SyncNovelPayload]
     var sources: [SyncSourcePayload]
+    /// The server timestamp this upload is based on.
+    ///
+    /// The backend compares it with its own `updatedAt` and answers 409 when its
+    /// copy is newer, which is what makes the server authoritative instead of
+    /// whichever device happened to push last. Omitted on a device that has
+    /// never synced, which the backend treats as a legacy write.
+    var clientUpdatedAt: String?
 }
 
 private struct SyncEnvelope: Decodable {
@@ -73,6 +80,21 @@ private struct RemoteSyncData: Decodable {
     let profile: SyncProfilePayload
     let library: [SyncNovelPayload]
     let sources: [SyncSourcePayload]
+    /// When the server last accepted a write. Absent on older backends.
+    let updatedAt: String?
+}
+
+/// `PUT /api/sync` success body.
+private struct PushResult: Decodable {
+    let ok: Bool
+    let updatedAt: String?
+}
+
+/// `PUT /api/sync` 409 body: the write was stale, and this is the copy that won.
+private struct ConflictBody: Decodable {
+    let error: String
+    let serverUpdatedAt: String
+    let data: RemoteSyncData
 }
 
 @Observable
@@ -106,13 +128,69 @@ final class SyncManager {
         UserDefaults.standard.set(value, forKey: "sync.backendURL")
     }
 
+    // MARK: - Sync position
+
+    /// Whether this account has a sync position on this device.
+    ///
+    /// Stored rather than derived from `lastSyncedAt`, because `@Observable`
+    /// only tracks stored properties and the position lives in `UserDefaults`.
+    private(set) var hasSynced = false
+
+    /// The server's `updatedAt` from the last write or pull this device accepted.
+    ///
+    /// Sent back as `clientUpdatedAt` so the backend can tell whether this device
+    /// is working from the current copy or from a stale one. Kept per account so
+    /// signing into a different account cannot inherit another user's position.
+    private var lastSyncedAt: Date? {
+        get {
+            guard let key = lastSyncedKey else { return nil }
+            return UserDefaults.standard.object(forKey: key) as? Date
+        }
+        set {
+            guard let key = lastSyncedKey else { return }
+            if let newValue {
+                UserDefaults.standard.set(newValue, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+            hasSynced = newValue != nil
+        }
+    }
+
+    /// Re-read the position after `currentUser` changes, since the key is per account.
+    private func refreshSyncPosition() {
+        hasSynced = lastSyncedAt != nil
+    }
+
+    private var lastSyncedKey: String? {
+        currentUser.map { "sync.lastSyncedAt.\($0.id)" }
+    }
+
+    /// The backend writes `Date.toISOString()`, which always carries milliseconds.
+    private static let wireFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static func wireTimestamp(_ date: Date) -> String {
+        wireFormatter.string(from: date)
+    }
+
+    private static func date(fromWire value: String?) -> Date? {
+        guard let value else { return nil }
+        return wireFormatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+
     func loadSession() async {
         do {
             let envelope: SyncEnvelope = try await request(path: "/api/sync", method: "GET")
             currentUser = envelope.user
+            refreshSyncPosition()
             lastError = nil
         } catch {
             currentUser = nil
+            refreshSyncPosition()
         }
     }
 
@@ -149,6 +227,7 @@ final class SyncManager {
         await run("Signed out") {
             try await requestRaw(path: "/api/auth/sign-out", method: "POST", bodyData: try jsonData([String: String]()))
             currentUser = nil
+            refreshSyncPosition()
         }
     }
 
@@ -178,7 +257,20 @@ final class SyncManager {
         }
     }
 
-    func push(profile: UserProfile, entries: [Entry], sources: [any CatalogSource]) async {
+    /// Upload the library, deferring to the server when it holds newer data.
+    ///
+    /// The server is the source of truth: a write based on a copy the server has
+    /// since replaced is rejected, and the server's version is applied here
+    /// instead of being overwritten. A device that has never synced also refuses
+    /// to replace a populated server document with an empty one.
+    func push(profile: UserProfile, entries: [Entry], sources: [any CatalogSource], context: ModelContext) async {
+        let library = entries.filter { $0.inLibrary && !$0.isLocal }
+
+        if library.isEmpty, lastSyncedAt == nil, await serverHasData() {
+            await pull(into: context, force: false)
+            return
+        }
+
         let payload = SyncPayload(
             profile: SyncProfilePayload(
                 username: currentUser?.username,
@@ -186,23 +278,85 @@ final class SyncManager {
                 name: profile.name,
                 image: profile.avatarData?.base64EncodedString()
             ),
-            library: entries.filter { $0.inLibrary && !$0.isLocal }.map { SyncNovelPayload(entry: $0) },
-            sources: sources.map { SyncSourcePayload(source: $0) }
+            library: library.map { SyncNovelPayload(entry: $0) },
+            sources: sources.map { SyncSourcePayload(source: $0) },
+            clientUpdatedAt: lastSyncedAt.map(Self.wireTimestamp)
         )
 
+        var tookServerCopy = false
+
         await run("Synced to backend") {
-            try await requestRaw(path: "/api/sync", method: "PUT", bodyData: try JSONEncoder().encode(payload))
+            do {
+                let data = try await requestRaw(
+                    path: "/api/sync",
+                    method: "PUT",
+                    bodyData: try JSONEncoder().encode(payload)
+                )
+                if let result = try? JSONDecoder().decode(PushResult.self, from: data),
+                   let syncedAt = Self.date(fromWire: result.updatedAt) {
+                    lastSyncedAt = syncedAt
+                }
+            } catch SyncError.conflict(let body) {
+                // Someone wrote after this device last read. Applying the winning
+                // copy loses nothing that the server does not already hold.
+                try apply(data: body.data, context: context)
+                if let syncedAt = Self.date(fromWire: body.serverUpdatedAt) {
+                    lastSyncedAt = syncedAt
+                }
+                tookServerCopy = true
+            }
+        }
+
+        if tookServerCopy {
+            lastMessage = "Backend had newer data, so its copy was applied here"
         }
     }
 
-    func restore(into context: ModelContext) async {
-        await run("Restored backend data") {
-            let envelope: SyncEnvelope = try await request(path: "/api/sync", method: "GET")
-            currentUser = envelope.user
-            guard let data = envelope.data else { return }
+    /// True when the account already has a document on the server.
+    private func serverHasData() async -> Bool {
+        struct Meta: Decodable { let updatedAt: String? }
+        guard let meta: Meta = try? await request(path: "/api/sync/meta", method: "GET") else { return false }
+        return meta.updatedAt != nil
+    }
 
-            try apply(data: data, context: context)
+    /// Apply the server's copy when it is newer than the one this device has.
+    ///
+    /// `force` ignores that comparison, for an explicit "Restore" tap. `quiet`
+    /// swallows failures, for the launch path where a network error must not
+    /// surface as an error banner or block the app.
+    @discardableResult
+    func pull(into context: ModelContext, force: Bool = false, quiet: Bool = false) async -> Bool {
+        if quiet {
+            return (try? await performPull(into: context, force: force)) ?? false
         }
+
+        var applied = false
+        await run("Restored backend data") {
+            applied = try await performPull(into: context, force: force)
+        }
+        return applied
+    }
+
+    private func performPull(into context: ModelContext, force: Bool) async throws -> Bool {
+        let envelope: SyncEnvelope = try await request(path: "/api/sync", method: "GET")
+        currentUser = envelope.user
+        refreshSyncPosition()
+
+        guard let data = envelope.data else { return false }
+
+        let serverAt = Self.date(fromWire: data.updatedAt)
+        if !force, let serverAt, let lastSyncedAt, serverAt <= lastSyncedAt {
+            return false
+        }
+
+        try apply(data: data, context: context)
+        lastSyncedAt = serverAt
+        return true
+    }
+
+    /// Pull regardless of position. The explicit "Restore" action.
+    func restore(into context: ModelContext) async {
+        await pull(into: context, force: true)
     }
 
     /// The wire format carries genres as one comma-separated string.
@@ -275,7 +429,8 @@ final class SyncManager {
         try context.save()
     }
 
-    private func run(_ successMessage: String, operation: () async throws -> Void) async {
+    @discardableResult
+    private func run(_ successMessage: String, operation: () async throws -> Void) async -> Bool {
         isWorking = true
         lastError = nil
         defer { isWorking = false }
@@ -283,8 +438,10 @@ final class SyncManager {
         do {
             try await operation()
             lastMessage = successMessage
+            return true
         } catch {
             lastError = error.localizedDescription
+            return false
         }
     }
 
@@ -314,7 +471,15 @@ final class SyncManager {
         }
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+        guard let http = response as? HTTPURLResponse else {
+            throw SyncError.requestFailed("No response from the backend")
+        }
+        guard 200..<300 ~= http.statusCode else {
+            // 409 carries the copy that won, so the caller can adopt it instead
+            // of retrying the write.
+            if http.statusCode == 409, let conflict = try? JSONDecoder().decode(ConflictBody.self, from: data) {
+                throw SyncError.conflict(conflict)
+            }
             let message = String(data: data, encoding: .utf8) ?? "Request failed"
             throw SyncError.requestFailed(message)
         }
@@ -328,10 +493,13 @@ final class SyncManager {
 
 private enum SyncError: LocalizedError {
     case requestFailed(String)
+    /// The server rejected a stale write and returned the copy that won.
+    case conflict(ConflictBody)
 
     var errorDescription: String? {
         switch self {
         case .requestFailed(let message): message
+        case .conflict(let body): body.error
         }
     }
 }
