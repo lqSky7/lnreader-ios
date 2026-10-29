@@ -14,6 +14,7 @@ struct MangaReaderSettingsSheet: View {
     @State private var detent: PresentationDetent = .large
     @AppStorage(Haptics.enabledKey) private var hapticsEnabled = true
     @AppStorage(Haptics.scrollEnabledKey) private var scrollHaptics = true
+    @ObservedObject private var focusManager = FocusModeManager.shared
 
     var body: some View {
         NavigationStack {
@@ -25,6 +26,7 @@ struct MangaReaderSettingsSheet: View {
                 autoScrollSection
                 holdSection
                 hapticsSection
+                focusSection
             }
             .navigationTitle("Reader settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -40,8 +42,7 @@ struct MangaReaderSettingsSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    private var hapticsSection: some View {
-        Section {
+    private var hapticsSection: some View {        Section {
             Toggle("Scroll haptics", isOn: $scrollHaptics)
                 .disabled(!hapticsEnabled)
                 .onChange(of: scrollHaptics) { _, on in
@@ -215,5 +216,39 @@ struct MangaReaderSettingsSheet: View {
                 Slider(value: value, in: range) { Text(title) }
             }
         }
+    }
+
+    // MARK: - Focus
+
+    /// The same Focus integration the novel reader offers, so both readers show
+    /// the active Focus the same way.
+    private var focusSection: some View {
+        Section {
+            Picker("Active Focus display", selection: focusOverride) {
+                Text("Off").tag("none")
+                Text("System auto").tag("auto")
+                Text("Do Not Disturb").tag("dnd")
+                Text("Work Focus").tag("work")
+                Text("Sleep Focus").tag("sleep")
+            }
+            .pickerStyle(.menu)
+
+            if focusManager.overrideType == "auto" {
+                FocusStatusRow(focusManager: focusManager)
+            }
+        } header: {
+            Text("Focus Integration")
+        } footer: {
+            Text("Show the active Focus mode near the top of the page while the controls are hidden.")
+        }
+    }
+
+    private var focusOverride: Binding<String> {
+        Binding(
+            get: { focusManager.overrideType },
+            set: { value in
+                focusManager.overrideType = value
+                focusManager.updateFocusStatus()
+            })
     }
 }

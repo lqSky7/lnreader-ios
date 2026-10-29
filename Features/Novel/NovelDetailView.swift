@@ -65,6 +65,10 @@ struct NovelDetailView: View {
     @State private var isAddingToLibrary = false
     /// Scanlator priority for this entry, loaded from its own defaults key.
     @State private var scanlatorSettings: ScanlatorSettings
+    /// Cover tint, when the user turned it on in Settings › Appearance.
+    @AppStorage(AppearanceTint.enabledKey) private var tintDetails = false
+    @AppStorage(AppearanceTint.strengthKey) private var tintStrength = AppearanceTint.defaultStrength
+    @State private var coverTint: Color?
 
     // MARK: - Initializers
 
@@ -166,6 +170,22 @@ struct NovelDetailView: View {
         .chapterSelectionToolbar(
             selection: chapterSelection, entry: localEntry,
             ordered: pagedChapters, allChapters: allChapters, sourceKey: sourceKey)
+        // `allChapters` is a snapshot of `ChapterDisplay` values, so a read-state
+        // change has to be rebuilt from the store before the rows can show it.
+        .onReceive(NotificationCenter.default.publisher(for: .lnreaderChapterReadChanged)) { _ in
+            refreshChapters()
+        }
+        // One colour from the cover, reused for the page, the chapter card and
+        // the chapter list's buttons. Recomputed only when the cover changes.
+        .task(id: tintDetails ? (displayCover ?? "") : "") {
+            coverTint = tintDetails ? await CoverTint.color(for: displayCover) : nil
+        }
+        .environment(\.coverTint, coverTint)
+        .background {
+            if let coverTint {
+                coverTint.opacity(tintStrength * 0.55).ignoresSafeArea()
+            }
+        }
         .onDisappear { chapterSelection.end() }
         .toolbar(removing: .title)
         .toolbar {

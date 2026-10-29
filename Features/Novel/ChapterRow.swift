@@ -321,11 +321,19 @@ final class ChapterSelection {
     }
 }
 
+extension Notification.Name {
+    /// Posted after the selection toolbar changes a chapter's read state.
+    ///
+    /// The detail screen holds its chapter list as `ChapterDisplay` value
+    /// snapshots, so writing `Chapter.read` and saving re-renders nothing on its
+    /// own. Marking chapters read looked like it did nothing at all.
+    static let lnreaderChapterReadChanged = Notification.Name("LNReaderChapterReadChanged")
+}
+
 /// Selection actions as a system bottom bar: read state, download and a menu for
 /// the rest. Apply with `chapterSelectionToolbar`, so the host's own bottom items
 /// stay untouched while nothing is selected.
-struct ChapterSelectionToolbar: ViewModifier {
-    @Environment(\.modelContext) private var modelContext
+struct ChapterSelectionToolbar: ViewModifier {    @Environment(\.modelContext) private var modelContext
     @Environment(TrackingManager.self) private var tracking
     let selection: ChapterSelection
     let entry: Entry?
@@ -411,6 +419,7 @@ struct ChapterSelectionToolbar: ViewModifier {
         try? modelContext.save()
         if let entry { tracking.readStateChanged(entry: entry) }
         LibraryChapterCounts.shared.invalidate()
+        NotificationCenter.default.post(name: .lnreaderChapterReadChanged, object: entry)
         selection.end()
     }
 

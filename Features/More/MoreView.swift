@@ -171,7 +171,7 @@ struct MoreView: View {
         Section {
             link("Downloads", symbol: "arrow.down.circle") { OfflineLibraryView() }
             link("Library updates", symbol: "arrow.triangle.2.circlepath") { LibraryUpdateSettingsView() }
-            link("Tracking", symbol: "chart.bar") { TrackingSettingsView() }
+            link("Connections", subtitle: "AniList, comments", symbol: "link") { ConnectionsSettingsView() }
             link("Backup & restore", symbol: "externaldrive") { LibraryBackupView() }
         }
     }
@@ -179,6 +179,7 @@ struct MoreView: View {
     private var settingsSection: some View {
         Section("Settings") {
             link("General", subtitle: "Library & defaults", symbol: "gearshape") { GeneralSettingsView() }
+            link("Appearance", subtitle: "Cover tint", symbol: "paintpalette") { AppearanceSettingsView() }
             link("Reader", subtitle: "Typography & layout", symbol: "textformat.size") { ReaderSettingsView() }
             link("TTS", subtitle: "Voices & servers", symbol: "waveform") { TTSSettingsView() }
             link("Advanced", subtitle: "Diagnostics & cache", symbol: "slider.horizontal.3") { AdvancedSettingsView() }

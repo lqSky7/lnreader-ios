@@ -31,6 +31,8 @@ struct ChapterListView: View {
     /// When the list was last fetched, or that it is being fetched now.
     var fetchStatus: String? = nil
     @AppStorage("chapters.ascending") private var ascending = false
+    /// Colour from the open book's cover, when Settings › Appearance turns it on.
+    @Environment(\.coverTint) private var coverTint
     @State private var showSearchField = false
     @State private var showDirectory = false
     @State private var showScanlators = false
@@ -54,26 +56,38 @@ struct ChapterListView: View {
     private var headerButtons: some View {
         GlassEffectContainer(spacing: 8) {
             HStack(spacing: 8) {
-                searchButton
-                filterMenu
+                searchButton.foregroundStyle(iconTint)
+                filterMenu.foregroundStyle(iconTint)
             }
         }
     }
 
+    /// The glyph colour of the two header buttons: the cover's colour when
+    /// tinting is on, primary otherwise.
+    private var iconTint: Color { coverTint ?? AppTheme.primaryFill }
+
+    /// The chapter card. Same surface as everywhere else, with the cover colour
+    /// laid over it when tinting is on — a `Color` cannot be blended with
+    /// another `Color`, so the two are stacked and clipped together.
+    private var chapterCard: some View {
+        ZStack {
+            AppTheme.cardBackground
+            if let coverTint { coverTint.opacity(0.12) }
+        }
+        .clipShape(.rect(cornerRadius: 18))
+    }
+
     private var searchButton: some View {
-        Button {
+        GlassIconButton(
+            symbol: showSearchField ? "xmark" : "magnifyingglass",
+            label: showSearchField ? "Close chapter search" : "Search chapters"
+        ) {
             withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
                 showSearchField.toggle()
                 if !showSearchField { searchText = "" }
             }
             searchFocused = showSearchField
-        } label: {
-            Image(systemName: showSearchField ? "xmark" : "magnifyingglass")
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .accessibilityLabel(showSearchField ? "Close chapter search" : "Search chapters")
     }
 
     /// Every scanlator in the list, for the scanlator sheet.
@@ -89,7 +103,11 @@ struct ChapterListView: View {
     /// The list's only menu: order, filter, and scanlators when there are any.
     /// Entry-wide actions (downloads, tracking) live in `EntryActionBar`.
     private var filterMenu: some View {
-        Menu {
+        GlassMenuButton(
+            symbol: selectedFilter != .all || hasActiveScanlatorRules
+                ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease",
+            label: "Sort and filter chapters"
+        ) {
             Picker("Order", selection: $ascending) {
                 Label("Newest first", systemImage: "arrow.down").tag(false)
                 Label("Oldest first", systemImage: "arrow.up").tag(true)
@@ -104,14 +122,7 @@ struct ChapterListView: View {
                     }
                 }
             }
-        } label: {
-            Image(systemName: selectedFilter != .all || hasActiveScanlatorRules
-                ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .accessibilityLabel("Sort and filter chapters")
     }
 
     var body: some View {
@@ -151,7 +162,7 @@ struct ChapterListView: View {
             if chapters.isEmpty && isLoading {
                 ProgressView("Loading chapters…")
                     .frame(maxWidth: .infinity, minHeight: 88)
-                    .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
+                    .background(chapterCard)
             } else if chapters.isEmpty {
                 ContentUnavailableView(isFiltered ? "No matching chapters" : "No chapters yet", systemImage: "text.magnifyingglass")
             } else {
@@ -168,7 +179,7 @@ struct ChapterListView: View {
                         }
                     }
                 }
-                .background(AppTheme.cardBackground, in: .rect(cornerRadius: 18))
+                .background(chapterCard)
                 .clipShape(.rect(cornerRadius: 18))
             }
 

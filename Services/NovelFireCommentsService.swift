@@ -74,6 +74,19 @@ final class NovelFireCommentsService {
         return UserDefaults.standard.bool(forKey: "comments.authenticated." + site.rawValue) && cookies.contains { site.matches(host: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) && $0.name == site.sessionCookieName && ($0.expiresDate.map { $0 > Date() } ?? true) }
     }
 
+    /// Forget the stored session for `site`.
+    ///
+    /// The flag alone is not enough: a still-valid cookie would be reused the
+    /// next time the site is opened, so the site's cookies go too.
+    func disconnect(from site: CommentSite) {
+        UserDefaults.standard.set(false, forKey: "comments.authenticated." + site.rawValue)
+        let host = CharacterSet(charactersIn: ".")
+        for cookie in HTTPCookieStorage.shared.cookies ?? [] where site.matches(host: cookie.domain.trimmingCharacters(in: host)) {
+            HTTPCookieStorage.shared.deleteCookie(cookie)
+        }
+        metaCache.removeAllObjects()
+    }
+
     // MARK: - Metadata
 
     /// Fetches the raw HTML of the chapter page and extracts the post_id, chapter_id, and csrf-token

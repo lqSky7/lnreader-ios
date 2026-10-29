@@ -37,6 +37,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSFocusStatusUsageDescription</key>
+	<string>LNReader reads whether a Focus is on so the reader can follow it. Focus status is only read, never changed.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record a voice sample to create your own audiobook narrator.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

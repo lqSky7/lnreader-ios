@@ -312,28 +312,12 @@ struct ReaderSettings: View {
             .pickerStyle(.menu)
 
             if localFocusOverride == "auto" {
-                focusAuthorizationRow
+                FocusStatusRow(focusManager: focusManager)
             }
         } header: {
             Text("Focus Integration")
         } footer: {
             Text("Show the active Focus mode (moon, work, sleep) near the top of the reader area.")
-        }
-    }
-
-    @ViewBuilder
-    private var focusAuthorizationRow: some View {
-        let authStatus = focusManager.authorizationStatus
-        if authStatus == 0 { // notDetermined
-            Button("Allow Access to Focus Status") {
-                focusManager.requestAuthorization()
-            }
-        } else if authStatus == 1 { // denied
-            Label("Access to Focus status has been denied. You can enable it in iOS Settings > Privacy & Security > Focus.", systemImage: "exclamationmark.triangle")
-                .font(.footnote)
-                .foregroundStyle(AppTheme.warning)
-        } else if authStatus == 2 { // authorized
-            LabeledContent("Active Focus", value: focusManager.isFocused ? focusManager.currentFocusType.displayName : "None")
         }
     }
 

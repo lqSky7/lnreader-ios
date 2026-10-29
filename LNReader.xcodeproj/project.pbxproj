@@ -48,7 +48,7 @@
 		2AFE5ED6ACB0AF6AE3A9F3BC /* EdgeSwipeDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEF274A8894E93ADF933C84 /* EdgeSwipeDismiss.swift */; };
 		2E020C5BEBCE07642AC4622E /* Tracking/TrackerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5E66120A74B26A910783BDE /* Tracking/TrackerSheet.swift */; };
 		2E8F5AD31674408C90A85423 /* WebtoonCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9384C8929A653604123297C8 /* WebtoonCells.swift */; };
-		2EB6A532C3AB32DCDD0BB853 /* Tracking/TrackingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F3F148E4D1241508B6D797 /* Tracking/TrackingSettingsView.swift */; };
+		2EB6A532C3AB32DCDD0BB853 /* More/Settings/ConnectionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F3F148E4D1241508B6D797 /* More/Settings/ConnectionsSettingsView.swift */; };
 		2EE35F4E3C525E45A1006435 /* ReaderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */; };
 		384A7B595B41617048D1F38E /* LibraryFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B18CC9F23405AA32D6AE0DE /* LibraryFilter.swift */; };
 		41519F5E53EF4ED524B1DCA4 /* ChapterSourceSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */; };
@@ -167,6 +167,9 @@
 		EEDF92E541FC7528E7BEAA2B /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D010962F3B606729E91A2B /* StatisticsView.swift */; };
 		EF87EBF5591600D44C522066 /* ContentKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0D537E48B9B64370920C66 /* ContentKind.swift */; };
 		A1B2C3D4E5F600112233AA01 /* GlassControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F600112233AA02 /* GlassControls.swift */; };
+		3A7C1E0000000000000000B1 /* CoverTint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7C1E0000000000000000C1 /* CoverTint.swift */; };
+		3A7C1E0000000000000000B2 /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7C1E0000000000000000C2 /* AppearanceSettingsView.swift */; };
+		3A7C1E0000000000000000B3 /* FocusStatusRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7C1E0000000000000000C3 /* FocusStatusRow.swift */; };
 		EFAD3576C145DEDFF32B3D98 /* GlassOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */; };
 		F058C4831CC3F14C9B5EDC9B /* Glur in Frameworks */ = {isa = PBXBuildFile; productRef = 0D468E064E87EA8FE7747702 /* Glur */; };
 		F284113DD4D3BBD22FA26560 /* TTSSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */; };
@@ -238,7 +241,7 @@
 		411A922DF6EBC87D54E6D854 /* SchemaV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaV1.swift; sourceTree = "<group>"; };
 		412E463FAEFE042C2A0891BD /* ReaderTTSJavaScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTTSJavaScript.swift; sourceTree = "<group>"; };
 		41D501E72071F4D5F9CBE58C /* ChapterCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterCache.swift; sourceTree = "<group>"; };
-		42F3F148E4D1241508B6D797 /* Tracking/TrackingSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tracking/TrackingSettingsView.swift; sourceTree = "<group>"; };
+		42F3F148E4D1241508B6D797 /* More/Settings/ConnectionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = More/Settings/ConnectionsSettingsView.swift; sourceTree = "<group>"; };
 		44694161C716310552872C25 /* ReaderContentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentBridge.swift; sourceTree = "<group>"; };
 		469869BD61FA61D848066B77 /* LibraryBadgeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBadgeViews.swift; sourceTree = "<group>"; };
 		46FA6A19D9FC62CAFEB6AEC5 /* LNReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LNReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -345,6 +348,9 @@
 		FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireCommentsService.swift; sourceTree = "<group>"; };
 		FA7B6ED88F807CFBE5682DC8 /* TTSSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSSettingsView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F600112233AA02 /* GlassControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassControls.swift; sourceTree = "<group>"; };
+		3A7C1E0000000000000000C1 /* CoverTint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverTint.swift; sourceTree = "<group>"; };
+		3A7C1E0000000000000000C2 /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = More/Settings/AppearanceSettingsView.swift; sourceTree = "<group>"; };
+		3A7C1E0000000000000000C3 /* FocusStatusRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusStatusRow.swift; sourceTree = "<group>"; };
 		FCDA490AB7000042D1AA6DAF /* GlassOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassOverlay.swift; sourceTree = "<group>"; };
 		FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -422,6 +428,7 @@
 				44694161C716310552872C25 /* ReaderContentBridge.swift */,
 				174C8A293062CFE21B69CD54 /* ReaderSettings.swift */,
 				671E0339A11D5257190D9382 /* ReaderToolbar.swift */,
+				3A7C1E0000000000000000C3 /* FocusStatusRow.swift */,
 				003CA6699D27A4A3DCAFD2EF /* ReaderView.swift */,
 				0A83CC9BB2AEC8F3766BF2EC /* ChapterReader.swift */,
 				F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */,
@@ -619,7 +626,8 @@
 		C2797BC198A90979B72E44B3 /* Features */ = {
 			isa = PBXGroup;
 			children = (
-				42F3F148E4D1241508B6D797 /* Tracking/TrackingSettingsView.swift */,
+				42F3F148E4D1241508B6D797 /* More/Settings/ConnectionsSettingsView.swift */,
+				3A7C1E0000000000000000C2 /* More/Settings/AppearanceSettingsView.swift */,
 				B5E66120A74B26A910783BDE /* Tracking/TrackerSheet.swift */,
 				D655B8E5BD588E349872B758 /* Auth */,
 				2AECB580643B38EAA1424ACD /* Browse */,
@@ -699,6 +707,7 @@
 			children = (
 				788EA87FDCBD419221019BB2 /* Constants.swift */,
 				C7F584AC89AA22BCF08D75E5 /* Theme.swift */,
+				3A7C1E0000000000000000C1 /* CoverTint.swift */,
 				06333FFD9AA49A992CECF1BE /* ViewModifiers */,
 			);
 			path = Design;
@@ -882,6 +891,9 @@
 				0D61A49ED5F1D91D3A515A14 /* GeneralSettingsView.swift in Sources */,
 				75995F2F5AE6494AC92E1C43 /* GlassCard.swift in Sources */,
 				A1B2C3D4E5F600112233AA01 /* GlassControls.swift in Sources */,
+				3A7C1E0000000000000000B1 /* CoverTint.swift in Sources */,
+				3A7C1E0000000000000000B2 /* AppearanceSettingsView.swift in Sources */,
+				3A7C1E0000000000000000B3 /* FocusStatusRow.swift in Sources */,
 				EFAD3576C145DEDFF32B3D98 /* GlassOverlay.swift in Sources */,
 				C859B7F21605A326EEC1CC1B /* GlobalSearchView.swift in Sources */,
 				7BF5C5BE164E42B9EA245AFE /* HTMLParser.swift in Sources */,
@@ -893,7 +905,7 @@
 				27353B17C2D4DDE3B62EEF65 /* LibraryManager.swift in Sources */,
 				DD654FDD6537EA03240DCD85 /* LibraryBadgeViews.swift in Sources */,
 				46299A36961922556C6A51CD /* LibraryOptionsSheet.swift in Sources */,
-				2EB6A532C3AB32DCDD0BB853 /* Tracking/TrackingSettingsView.swift in Sources */,
+				2EB6A532C3AB32DCDD0BB853 /* More/Settings/ConnectionsSettingsView.swift in Sources */,
 				2E020C5BEBCE07642AC4622E /* Tracking/TrackerSheet.swift in Sources */,
 				EE7BEE126088EBA743CE8E30 /* Tracking/TrackingManager.swift in Sources */,
 				64C899A63D3CBD6CDBB39BAB /* Tracking/AniListClient.swift in Sources */,

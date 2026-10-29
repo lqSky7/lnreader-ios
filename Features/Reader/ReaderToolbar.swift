@@ -47,7 +47,9 @@ struct ReaderToolbar: View {
                         .lineLimit(1)
                 }
                 .glassEffectID("title", in: topNamespace)
-                .padding(.horizontal, 60)
+                // Both sides of the pill are the same distance from the same
+                // sized control, so the title sits centred between them.
+                .padding(.horizontal, GlassMetrics.edgeInset + GlassMetrics.side + GlassMetrics.pillGap)
                 .accessibilityLabel("Chapters: \(chapterName)")
                 .transition(.asymmetric(insertion: .opacity.combined(with: .scale), removal: .opacity))
 
@@ -57,7 +59,7 @@ struct ReaderToolbar: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, GlassMetrics.edgeInset)
         .padding(.top, 8)
     }
 
@@ -65,7 +67,7 @@ struct ReaderToolbar: View {
         if isPreparingTTS {
             ProgressView()
                 .controlSize(.small)
-                .frame(width: 44, height: 44)
+                .frame(width: GlassMetrics.side, height: GlassMetrics.side)
                 .glassEffect(.regular, in: .circle)
                 .glassEffectID("tts-trigger", in: topNamespace)
         } else {
@@ -83,11 +85,17 @@ struct ReaderToolbar: View {
     private var bottomBar: some View {
         GlassEffectContainer {
             HStack(spacing: 8) {
-                GlassIconButton(symbol: "textformat.size", label: "Reader settings", action: onSettings)
-                    .glassEffectID("settings", in: bottomNamespace)
                 if let onComments {
-                    GlassIconButton(symbol: "bubble.left.and.bubble.right", label: "Comments", action: onComments)
-                        .glassEffectID("comments", in: bottomNamespace)
+                    // Settings and comments act on the same page, so they share
+                    // one capsule instead of floating as two separate circles.
+                    GlassIconGroup(
+                        first: .init(symbol: "textformat.size", label: "Reader settings", action: onSettings),
+                        second: .init(symbol: "bubble.left.and.bubble.right", label: "Comments", action: onComments)
+                    )
+                    .glassEffectID("settings-group", in: bottomNamespace)
+                } else {
+                    GlassIconButton(symbol: "textformat.size", label: "Reader settings", action: onSettings)
+                        .glassEffectID("settings", in: bottomNamespace)
                 }
                 Spacer()
                 GlassStepper(

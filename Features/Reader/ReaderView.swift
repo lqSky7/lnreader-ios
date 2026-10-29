@@ -302,10 +302,10 @@ struct ReaderView: View {
     /// scrolls, and it fades out with the controls.
     private var chromeGlur: some View {
         VStack(spacing: 0) {
-            GlurView(radius: 4, direction: .up)
+            GlurView(radius: 2, direction: .up)
                 .frame(height: 140)
             Spacer(minLength: 0)
-            GlurView(radius: 4, direction: .down)
+            GlurView(radius: 2, direction: .down)
                 .frame(height: 140)
         }
         .ignoresSafeArea()
@@ -799,48 +799,60 @@ struct ReaderView: View {
 struct ReaderFocusIndicator: View {
     @ObservedObject var focusManager = FocusModeManager.shared
     @State private var showLabel = false
-    @State private var labelTimer: Timer? = nil
+    /// The old version held a `Timer` and mutated `@State` from its closure. The
+    /// timer outlived the view, so it kept writing to a `@State` that was no
+    /// longer installed — a SwiftUI runtime fault, not a compile error. A
+    /// cancellable task is torn down with the view instead.
+    @State private var hideTask: Task<Void, Never>? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let activeType = focusManager.currentFocusType
-        if activeType != .none {
-            VStack(spacing: 8) {
-                Button {
-                    // Show label temporarily on tap
-                    withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
-                        showLabel = true
-                    }
-                    // Start timer to hide label
-                    labelTimer?.invalidate()
-                    labelTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
+
+        Group {
+            if activeType != .none {
+                VStack(spacing: 8) {
+                    Button {
                         withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
-                            showLabel = false
+                            showLabel = true
+                        }
+                        hideTask?.cancel()
+                        hideTask = Task {
+                            try? await Task.sleep(for: .seconds(4))
+                            guard !Task.isCancelled else { return }
+                            withAnimation(AppMotion.gentle(reduceMotion: reduceMotion)) {
+                                showLabel = false
+                            }
+                        }
+                    } label: {
+                        if showLabel {
+                            Label(activeType.displayName, systemImage: activeType.iconName)
+                        } else {
+                            Label(activeType.displayName, systemImage: activeType.iconName)
+                                .labelStyle(.iconOnly)
                         }
                     }
-                } label: {
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+                    .font(.caption2.weight(.bold))
+                    .accessibilityLabel("Focus mode: \(activeType.displayName)")
+
+                    // If label is shown, offer a small manual override selector
                     if showLabel {
-                        Label(activeType.displayName, systemImage: activeType.iconName)
-                    } else {
-                        Label(activeType.displayName, systemImage: activeType.iconName)
-                            .labelStyle(.iconOnly)
+                        Button("Change Focus") { cycleOverride() }
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.small)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .controlSize(.small)
-                .font(.caption2.weight(.bold))
-                .accessibilityLabel("Focus mode: \(activeType.displayName)")
-
-                // If label is shown, offer a small manual override selector
-                if showLabel {
-                    Button("Change Focus") { cycleOverride() }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.small)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                }
             }
+        }
+        .onAppear { focusManager.updateFocusStatus() }
+        .onDisappear {
+            hideTask?.cancel()
+            hideTask = nil
         }
     }
 
