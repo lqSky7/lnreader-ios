@@ -546,32 +546,18 @@ final class LibraryManager {
 
     /// Mark every "new chapter" badge as seen.
     ///
-    /// Runs on the caller's context, in batches, yielding between them. The old
-    /// version used a detached context: the rows were cleared in the store but
-    /// the Updates `@Query` never refreshed, so the list looked untouched. Doing
-    /// it all on the main context in one pass froze the app on a large library,
-    /// which is why it is batched instead of moved back wholesale.
-    func clearUpdates(context: ModelContext) async {
-        let predicate = #Predicate<Chapter> { $0.dateFetch != nil }
-        var descriptor = FetchDescriptor(predicate: predicate)
-        descriptor.fetchLimit = 400
-
-        while true {
-            guard let batch = try? context.fetch(descriptor), !batch.isEmpty else { break }
-
-            for chapter in batch { chapter.dateFetch = nil }
-
-            do {
-                try context.save()
-            } catch {
-                // Without the save the same rows come back forever; stop instead
-                // of spinning on a store that will not accept the change.
-                break
-            }
-
-            await Task.yield()
-        }
-
+    /// Runs on a background context: on a large library, touching every chapter
+    /// on the main thread froze the app. A background save does not refresh the
+    /// Updates `@Query` on its own, so the screen hides the rows it showed (see
+    /// `UpdatesView.clearAll`).
+    func clearUpdates(container: ModelContainer) async {
+        await Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            let predicate = #Predicate<Chapter> { $0.dateFetch != nil }
+            guard let chapters = try? context.fetch(FetchDescriptor(predicate: predicate)) else { return }
+            for chapter in chapters { chapter.dateFetch = nil }
+            try? context.save()
+        }.value
         LibraryChapterCounts.shared.invalidate()
     }
 }

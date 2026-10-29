@@ -11,8 +11,16 @@ struct UpdatesView: View {
     @Environment(SourceManager.self) private var sourceManager
     @Environment(LibraryManager.self) private var libraryManager
     @State private var showClearConfirmation = false
+    @State private var isClearing = false
+    /// Chapters cleared in the background. The @Query is not refreshed reliably by a
+    /// background save, so these are hidden here until the store catches up.
+    @State private var clearedIDs: Set<PersistentIdentifier> = []
 
-    @Query private var recentChapters: [Chapter]
+    @Query private var allRecentChapters: [Chapter]
+
+    private var recentChapters: [Chapter] {
+        clearedIDs.isEmpty ? allRecentChapters : allRecentChapters.filter { !clearedIDs.contains($0.persistentModelID) }
+    }
 
     /// Newest-first, capped: grouping and diffing every chapter ever fetched
     /// froze the main thread for over a second on a large library.
@@ -24,7 +32,7 @@ struct UpdatesView: View {
             sortBy: [SortDescriptor(\Chapter.dateFetch, order: .reverse)]
         )
         descriptor.fetchLimit = Self.feedLimit
-        _recentChapters = Query(descriptor)
+        _allRecentChapters = Query(descriptor)
     }
 
     var body: some View {
@@ -80,8 +88,13 @@ struct UpdatesView: View {
                         Button(role: .destructive) {
                             showClearConfirmation = true
                         } label: {
-                            Label("Clear Updates", systemImage: "trash")
+                            if isClearing {
+                                ProgressView()
+                            } else {
+                                Label("Clear Updates", systemImage: "trash")
+                            }
                         }
+                        .disabled(isClearing)
                     }
 
                     Button(action: {
@@ -107,10 +120,23 @@ struct UpdatesView: View {
                 titleVisibility: .visible
             ) {
                 Button("Clear All", role: .destructive) {
-                    Task { await libraryManager.clearUpdates(context: modelContext) }
+                    clearAll()
                 }
                 Button("Cancel", role: .cancel) {}
             }
+        }
+    }
+
+    /// Clears every badge on a background context, with a spinner on the trash
+    /// button meanwhile; nothing is mutated on the main thread.
+    private func clearAll() {
+        let container = modelContext.container
+        let visible = Set(allRecentChapters.map(\.persistentModelID))
+        isClearing = true
+        Task {
+            await libraryManager.clearUpdates(container: container)
+            clearedIDs.formUnion(visible)
+            isClearing = false
         }
     }
 
