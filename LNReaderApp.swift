@@ -24,7 +24,7 @@ struct LNReaderApp: App {
     /// The app store.
     ///
     /// Opened once at launch. A failure here means the store on disk does not
-    /// match `SchemaV1`, which is a programming error rather than a user error,
+    /// match `SchemaV2`, which is a programming error rather than a user error,
     /// so it fails loudly instead of silently starting with an empty library.
     private static let modelContainer: ModelContainer = {
         do {
@@ -46,6 +46,7 @@ struct LNReaderApp: App {
                 .task {
                     libraryManager.tracking = trackingManager
                     LibraryMaintenance.reconcileTwinReads()
+                    LibraryMaintenance.reconcileVisibility()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await trackingManager.flushPending() } }

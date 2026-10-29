@@ -24,6 +24,16 @@ import UserNotifications
         }
         UserDefaults.standard.set(true, forKey: key)
     }
+
+    /// Fill in `Chapter.hidden` from the saved scanlator rules, once, for a store
+    /// migrated from before the column existed. Later changes keep it current
+    /// (`ChapterVisibility`).
+    static func reconcileVisibility() {
+        let key = "maintenance.visibility.v1"
+        guard !UserDefaults.standard.bool(forKey: key), let container else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        Task { await ChapterVisibility.reconcileAll(container: container) }
+    }
     static func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: refreshID, using: .main) { task in
             Task { @MainActor in handle(task, downloadsOnly: false) }
@@ -101,7 +111,7 @@ import UserNotifications
                 }
                 guard !Task.isCancelled else { task.setTaskCompleted(success: false); return }
                 let chapters = (try? context.fetch(FetchDescriptor<Chapter>())) ?? []
-                let added = chapters.filter { ($0.dateFetch ?? .distantPast) >= started && $0.entry?.inLibrary == true }
+                let added = chapters.filter { ($0.dateFetch ?? .distantPast) >= started && $0.entry?.inLibrary == true && !$0.hidden && !$0.read }
                 if UserDefaults.standard.bool(forKey: "updates.notify"), !added.isEmpty {
                     let content = UNMutableNotificationContent()
                     content.title = "New chapters"

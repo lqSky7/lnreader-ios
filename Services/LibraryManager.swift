@@ -454,8 +454,8 @@ final class LibraryManager {
                 let merged = applyUpdate(entry, details: details, chapters: result.chapters,
                                          context: context, saveImmediately: false)
                 unsaved += 1
-                updateProgress?.newChapters += merged.added
-                if merged.added > 0 { updateProgress?.titlesWithNewChapters += 1 }
+                updateProgress?.newChapters += merged.fresh
+                if merged.fresh > 0 { updateProgress?.titlesWithNewChapters += 1 }
             } else {
                 let message = result.error ?? "unknown error"
                 print("Failed to update \(entry.title): \(message)")
@@ -649,7 +649,12 @@ final class LibraryChapterCounts {
     /// two views asking for different extras do not keep evicting each other.
     private var wanted: Extras = []
 
-    private init() {}
+    private init() {
+        // Hiding or showing a scanlator changes every count at once.
+        NotificationCenter.default.addObserver(
+            forName: ChapterVisibility.didChange, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.invalidate() } }
+    }
 
     /// Synchronous read for body code. `nil` means "not known yet".
     func cached(_ id: PersistentIdentifier) -> Counts? {
@@ -683,14 +688,15 @@ final class LibraryChapterCounts {
         let task = Task.detached(priority: .userInitiated) { () -> Counts in
             let context = ModelContext(container)
             do {
+                // Hidden chapters do not exist: every count below skips them.
                 let inEntry = #Predicate<Chapter> {
-                    $0.entry?.persistentModelID == entryID
+                    $0.entry?.persistentModelID == entryID && !$0.hidden
                 }
                 let unreadInEntry = #Predicate<Chapter> {
-                    $0.entry?.persistentModelID == entryID && !$0.read
+                    $0.entry?.persistentModelID == entryID && !$0.hidden && !$0.read
                 }
                 let downloadedInEntry = #Predicate<Chapter> {
-                    $0.entry?.persistentModelID == entryID
+                    $0.entry?.persistentModelID == entryID && !$0.hidden
                         && $0.downloadItem?.state == completedState
                 }
                 let total = try context.fetchCount(FetchDescriptor<Chapter>(predicate: inEntry))
@@ -700,7 +706,7 @@ final class LibraryChapterCounts {
                 if computing.contains(.newCount) {
                     let newInEntry = #Predicate<Chapter> {
                         $0.entry?.persistentModelID == entryID
-                            && !$0.read && $0.dateFetch != nil
+                            && !$0.hidden && !$0.read && $0.dateFetch != nil
                     }
                     counts.new = try context.fetchCount(FetchDescriptor<Chapter>(predicate: newInEntry))
                     counts.loaded.insert(.newCount)
@@ -708,14 +714,14 @@ final class LibraryChapterCounts {
                 if computing.contains(.dates) {
                     var upload = FetchDescriptor<Chapter>(
                         predicate: #Predicate<Chapter> {
-                            $0.entry?.persistentModelID == entryID && $0.dateUpload != nil
+                            $0.entry?.persistentModelID == entryID && !$0.hidden && $0.dateUpload != nil
                         },
                         sortBy: [SortDescriptor(\Chapter.dateUpload, order: .reverse)]
                     )
                     upload.fetchLimit = 1
                     var fetch = FetchDescriptor<Chapter>(
                         predicate: #Predicate<Chapter> {
-                            $0.entry?.persistentModelID == entryID && $0.dateFetch != nil
+                            $0.entry?.persistentModelID == entryID && !$0.hidden && $0.dateFetch != nil
                         },
                         sortBy: [SortDescriptor(\Chapter.dateFetch, order: .reverse)]
                     )

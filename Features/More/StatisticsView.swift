@@ -124,9 +124,9 @@ struct StatisticsView: View {
             snapshot.libraryCount =
                 (try? context.fetchCount(FetchDescriptor<Entry>(predicate: #Predicate { $0.inLibrary }))) ?? 0
             snapshot.totalChapters =
-                (try? context.fetchCount(FetchDescriptor<Chapter>())) ?? 0
+                (try? context.fetchCount(FetchDescriptor<Chapter>(predicate: #Predicate { !$0.hidden }))) ?? 0
             snapshot.unreadChapters =
-                (try? context.fetchCount(FetchDescriptor<Chapter>(predicate: #Predicate { $0.read == false }))) ?? 0
+                (try? context.fetchCount(FetchDescriptor<Chapter>(predicate: #Predicate { !$0.hidden && $0.read == false }))) ?? 0
             // Download rows are few (one per downloaded chapter), and a
             // predicate cannot compare an enum case, so count them here.
             let downloads = (try? context.fetch(FetchDescriptor<DownloadItem>())) ?? []

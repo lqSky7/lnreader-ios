@@ -249,7 +249,7 @@ final class ChapterDownloadManager {
               chapter.chapterNumber >= 0,
               aheadTriggered.insert(chapter.persistentModelID).inserted else { return }
         var seen = Set<Double>()
-        let window = entry.chapters
+        let window = entry.visibleChapters
             .filter { $0.chapterNumber > chapter.chapterNumber }
             .sorted { $0.chapterNumber < $1.chapterNumber }
             .filter { seen.insert($0.chapterNumber).inserted }
@@ -313,7 +313,7 @@ final class ChapterDownloadManager {
     /// The next `count` unread chapters that are not already downloaded, oldest first;
     /// `nil` means every unread one.
     func enqueueUnread(_ count: Int?, in entry: Entry) {
-        let candidates = entry.chapters
+        let candidates = entry.visibleChapters
             .filter { !$0.read && !$0.isDownloaded }
             .sorted { $0.chapterNumber == $1.chapterNumber ? $0.sourceOrder < $1.sourceOrder : $0.chapterNumber < $1.chapterNumber }
         enqueue(count.map { Array(candidates.prefix($0)) } ?? candidates)

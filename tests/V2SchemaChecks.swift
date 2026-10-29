@@ -12,7 +12,7 @@ import SwiftData
 struct V2SchemaChecks {
 
     static func main() throws {
-        let schema = Schema(versionedSchema: SchemaV1.self)
+        let schema = Schema(versionedSchema: SchemaV2.self)
         let container = try ModelContainer(
             for: schema,
             migrationPlan: LNReaderSchemaMigrationPlan.self,
@@ -26,12 +26,48 @@ struct V2SchemaChecks {
         try checkHistoryCascade(context)
         try checkDownloadQueue(context)
         try checkEntryUniqueConstraint(container)
+        try checkMigrationFromV1()
 
         print("PASS: v2 schema — library round-trip, chapter state, categories, "
-            + "history cascade, download queue, entry uniqueness")
+            + "history cascade, download queue, entry uniqueness, V1 → V2 store migration")
     }
 
     // MARK: Library
+
+    /// A store written by the V1 schema opens through the plan, keeps its rows and
+    /// gives them the new column's default.
+    private static func checkMigrationFromV1() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "V2Migration-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "migrate.store")
+
+        do {
+            let old = Schema(versionedSchema: SchemaV1.self)
+            let container = try ModelContainer(for: old, configurations: ModelConfiguration(schema: old, url: file))
+            let context = ModelContext(container)
+            let entry = SchemaV1.Entry(kind: .manga, sourceKey: "mihon:1", url: "/m", title: "Old")
+            context.insert(entry)
+            let chapter = SchemaV1.Chapter(url: "c1", name: "Chapter 1", chapterNumber: 1)
+            context.insert(chapter)
+            chapter.entry = entry
+            chapter.read = true
+            try context.save()
+        }
+
+        let current = Schema(versionedSchema: SchemaV2.self)
+        let container = try ModelContainer(
+            for: current, migrationPlan: LNReaderSchemaMigrationPlan.self,
+            configurations: ModelConfiguration(schema: current, url: file))
+        let context = ModelContext(container)
+        let chapters = try context.fetch(FetchDescriptor<Chapter>())
+        precondition(chapters.count == 1 && chapters[0].read && chapters[0].entry?.title == "Old", "rows survive the migration")
+        precondition(!chapters[0].hidden, "migrated rows start visible")
+        chapters[0].hidden = true
+        try context.save()
+        let visible = try context.fetchCount(FetchDescriptor<Chapter>(predicate: #Predicate { !$0.hidden }))
+        precondition(visible == 0, "the column is queryable")
+    }
 
     private static func checkLibraryRoundTrip(_ context: ModelContext) throws {
         let entry = Entry(kind: .manga, sourceKey: "mihon:42", url: "/manga/solo", title: "Solo Leveling")
@@ -108,7 +144,7 @@ struct V2SchemaChecks {
 
     private static func checkCategories(_ context: ModelContext) throws {
         let entry = try unwrap(context.fetch(FetchDescriptor<Entry>()).first)
-        let category = SchemaV1.Category(name: "Favourites", order: 1)
+        let category = SchemaV2.Category(name: "Favourites", order: 1)
         context.insert(category)
         category.entries.append(entry)
         try context.save()
@@ -122,7 +158,7 @@ struct V2SchemaChecks {
         try context.save()
         precondition(entry.categories.isEmpty)
         try expectCount(context, Entry.self, 1)
-        try expectCount(context, SchemaV1.Category.self, 1)
+        try expectCount(context, SchemaV2.Category.self, 1)
     }
 
     // MARK: History
@@ -132,19 +168,19 @@ struct V2SchemaChecks {
         let chapters = entry.chapters.sorted { $0.sourceOrder < $1.sourceOrder }
         let chapter = chapters[1]
 
-        let history = SchemaV1.History(chapterURL: chapter.url, lastRead: .now)
+        let history = SchemaV2.History(chapterURL: chapter.url, lastRead: .now)
         history.chapter = chapter
         history.timeRead = 120
         context.insert(history)
         try context.save()
 
-        try expectCount(context, SchemaV1.History.self, 1)
+        try expectCount(context, SchemaV2.History.self, 1)
         precondition(chapter.history?.timeRead == 120)
 
         // Deleting a chapter takes its history row with it.
         context.delete(chapter)
         try context.save()
-        try expectCount(context, SchemaV1.History.self, 0)
+        try expectCount(context, SchemaV2.History.self, 0)
 
         // Deleting the entry cascades to the remaining chapters.
         context.delete(entry)

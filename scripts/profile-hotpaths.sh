@@ -17,6 +17,7 @@ xcrun swiftc -O -parse-as-library -swift-version 5 -disable-sandbox \
   Models/Schema/UpdateStrategy.swift \
   Models/Schema/DownloadState.swift \
   Models/Schema/SchemaV1.swift \
+  Models/Schema/SchemaV2.swift \
   Models/Schema/SchemaMigrationPlan.swift \
   Models/UserProfile.swift \
   Services/Sources/SourceKey.swift \

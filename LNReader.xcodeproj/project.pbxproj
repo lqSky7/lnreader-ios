@@ -53,6 +53,7 @@
 		2EE35F4E3C525E45A1006435 /* ReaderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1C9A0EDEC76B66E2A28B5A /* ReaderSettingsView.swift */; };
 		384A7B595B41617048D1F38E /* LibraryFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B18CC9F23405AA32D6AE0DE /* LibraryFilter.swift */; };
 		41519F5E53EF4ED524B1DCA4 /* ChapterSourceSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */; };
+		41519F5E53EF4ED524B12302 /* ChapterVisibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D612A49F26CFA7C7D72302 /* ChapterVisibility.swift */; };
 		4166A7FC148CCAA3EBE3DB68 /* NovelFireCommentsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */; };
 		418CF02C133A84A95E87AFCA /* MangaReaderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6370955C5BC3A2447F107BA1 /* MangaReaderControls.swift */; };
 		42E350E7BA9C567B9484C78C /* TTSOfflineLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = D629A9BAEAE61A89C750A012 /* TTSOfflineLibrary.swift */; };
@@ -105,6 +106,7 @@
 		9CF012421DB38DE5A2B3FDF9 /* PageDecode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFE594875EB5DFB38A5601CF /* PageDecode.swift */; };
 		9E3ED16AD43AC4A98B214B9C /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F3C57396225E76D5E328F96 /* UserProfile.swift */; };
 		A20AEBDF82B2FBE78CFA23F2 /* SchemaV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411A922DF6EBC87D54E6D854 /* SchemaV1.swift */; };
+		A20AEBDF82B2FBE78CFA2301 /* SchemaV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411A922DF6EBC87D54E62301 /* SchemaV2.swift */; };
 		A4FBFDFEFA8DAB3E3F26B5AE /* DisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BAC8A5A6A4148EFD000C5E /* DisplayMode.swift */; };
 		A68075468E239F35711B5DA1 /* ReaderTTSJavaScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412E463FAEFE042C2A0891BD /* ReaderTTSJavaScript.swift */; };
 		A7C9F15B2D4E4D5099B98101 /* GlurBackdrop in Frameworks */ = {isa = PBXBuildFile; productRef = A7C9F15B2D4E4D5099B98102 /* GlurBackdrop */; };
@@ -243,6 +245,7 @@
 		3D8EDB55C13E2185ADDC743F /* SourceIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceIconView.swift; sourceTree = "<group>"; };
 		3F49621AC64A71C72F9450BE /* ChapterTransitionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterTransitionCard.swift; sourceTree = "<group>"; };
 		411A922DF6EBC87D54E6D854 /* SchemaV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaV1.swift; sourceTree = "<group>"; };
+		411A922DF6EBC87D54E62301 /* SchemaV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaV2.swift; sourceTree = "<group>"; };
 		412E463FAEFE042C2A0891BD /* ReaderTTSJavaScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTTSJavaScript.swift; sourceTree = "<group>"; };
 		41D501E72071F4D5F9CBE58C /* ChapterCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterCache.swift; sourceTree = "<group>"; };
 		42F3F148E4D1241508B6D797 /* More/Settings/ConnectionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = More/Settings/ConnectionsSettingsView.swift; sourceTree = "<group>"; };
@@ -332,6 +335,7 @@
 		D629A9BAEAE61A89C750A012 /* TTSOfflineLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSOfflineLibrary.swift; sourceTree = "<group>"; };
 		D97993579546ABBFF8B0DF11 /* MangaProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangaProgress.swift; sourceTree = "<group>"; };
 		D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterSourceSync.swift; sourceTree = "<group>"; };
+		D9D612A49F26CFA7C7D72302 /* ChapterVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/ChapterVisibility.swift; sourceTree = SOURCE_ROOT; };
 		DAAEBBACB7F3008512E5F5C8 /* UpdatesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesView.swift; sourceTree = "<group>"; };
 		DD1ED2CBFBA44AE1B6E75001 /* ReaderAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderAppearance.swift; sourceTree = "<group>"; };
 		DE1DF540805D2C722F69C437 /* DateParsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateParsing.swift; sourceTree = "<group>"; };
@@ -463,6 +467,7 @@
 				2BA30AB4E3157E05E08B3470 /* ModelContainerFactory.swift */,
 				8B349DA56B56781BD2C10072 /* SchemaMigrationPlan.swift */,
 				411A922DF6EBC87D54E6D854 /* SchemaV1.swift */,
+				411A922DF6EBC87D54E62301 /* SchemaV2.swift */,
 				2F271CE6759A7893EA806D65 /* UpdateStrategy.swift */,
 			);
 			path = Schema;
@@ -601,6 +606,7 @@
 				D4791B24D0A82CDF0AF58D62 /* CatalogSource.swift */,
 				08FFA9F783FE74CFB5D0A992 /* ChapterRecognition.swift */,
 				D9D612A49F26CFA7C7D7007C /* ChapterSourceSync.swift */,
+				D9D612A49F26CFA7C7D72302 /* ChapterVisibility.swift */,
 				32DFC42772907A1432627098 /* SourceFilters.swift */,
 				BC517C802BAFA82D76F87B6E /* SourceKey.swift */,
 				A1F0C0DE00000000000F1178 /* SourceFilterStore.swift */,
@@ -989,6 +995,7 @@
 				C78C4F0A0CF920BC95529973 /* ModelContainerFactory.swift in Sources */,
 				07FCB178D5F580F8FBF8E825 /* SchemaMigrationPlan.swift in Sources */,
 				A20AEBDF82B2FBE78CFA23F2 /* SchemaV1.swift in Sources */,
+				A20AEBDF82B2FBE78CFA2301 /* SchemaV2.swift in Sources */,
 				981453E96D42E44C044DF6A6 /* UpdateStrategy.swift in Sources */,
 				DE4A5907E56E2BAB4FECEACB /* ChapterCache.swift in Sources */,
 				645A99EB5EDA9544AD70AE3F /* PageLoader.swift in Sources */,
@@ -1000,6 +1007,7 @@
 				5C023D334F10B32E66445716 /* CatalogSource.swift in Sources */,
 				9820DF3D67143443C3905EB9 /* ChapterRecognition.swift in Sources */,
 				41519F5E53EF4ED524B1DCA4 /* ChapterSourceSync.swift in Sources */,
+				41519F5E53EF4ED524B12302 /* ChapterVisibility.swift in Sources */,
 				2220BBC5FB756854B1B4A9A9 /* SourceFilters.swift in Sources */,
 				04D74105186AEBE9879341B0 /* SourceKey.swift in Sources */,
 				A1F0C0DE00000000000F1177 /* SourceFilterStore.swift in Sources */,

@@ -106,7 +106,9 @@ struct MangaReaderView: View {
 
     private var chapterChoices: [SourceChapter] {
         if !storedChapters.isEmpty {
-            return storedChapters.map {
+            // The open chapter stays reachable even if its scanlator was hidden
+            // after it was opened.
+            return storedChapters.filter { !$0.hidden || $0.url == chapterURL }.map {
                 SourceChapter(url: $0.url, name: $0.name, chapterNumber: $0.chapterNumber,
                               scanlator: $0.scanlator, dateUpload: $0.dateUpload)
             }
@@ -204,6 +206,9 @@ struct MangaReaderView: View {
             }
         }
         .onChange(of: scanlatorSettings.value) { rebuildNavigable() }
+        .onReceive(NotificationCenter.default.publisher(for: ChapterVisibility.didChange)) { _ in
+            loadStoredChapters()
+        }
         .onChange(of: mode) { _, _ in
             // Re-run the layout without refetching the page list. The strip
             // starts again from the chapter that is open.
@@ -890,6 +895,8 @@ struct MangaReaderView: View {
 
     private func rebuildNavigable() {
         let choices = chapterChoices
+        // Saved chapters already carry the decision (`Chapter.hidden`).
+        guard storedChapters.isEmpty else { navigable = choices; return }
         let items = choices.map {
             ScanlatorRules.Item(number: $0.chapterNumber > 0 ? $0.chapterNumber : nil, scanlator: $0.scanlator)
         }

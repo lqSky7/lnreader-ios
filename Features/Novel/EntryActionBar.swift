@@ -89,7 +89,7 @@ struct EntryActionBar: View {
             Button("Next 25 chapters") { ChapterDownloadManager.shared.enqueueUnread(25, in: entry) }
             Divider()
             Button("All unread chapters") { ChapterDownloadManager.shared.enqueueUnread(nil, in: entry) }
-            Button("All chapters") { ChapterDownloadManager.shared.enqueue(entry.chapters) }
+            Button("All chapters") { ChapterDownloadManager.shared.enqueue(entry.visibleChapters) }
             Divider()
             Button("Delete downloads", systemImage: "trash", role: .destructive) { confirmDeleteDownloads = true }
         } label: {

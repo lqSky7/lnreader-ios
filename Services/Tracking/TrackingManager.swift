@@ -269,9 +269,9 @@ final class TrackingManager {
     private func earliestRead(in entry: Entry) -> Date? {
         guard let context = entry.modelContext else { return nil }
         let id = entry.persistentModelID
-        var descriptor = FetchDescriptor<SchemaV1.History>(
+        var descriptor = FetchDescriptor<SchemaV2.History>(
             predicate: #Predicate { $0.chapter?.entry?.persistentModelID == id },
-            sortBy: [SortDescriptor(\SchemaV1.History.lastRead)])
+            sortBy: [SortDescriptor(\SchemaV2.History.lastRead)])
         descriptor.fetchLimit = 1
         return (try? context.fetch(descriptor))?.first?.lastRead
     }

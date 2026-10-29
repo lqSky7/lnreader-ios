@@ -187,5 +187,7 @@ enum SyncApplier {
         }
 
         try context.save()
+        // Synced chapters and rules decide what exists.
+        Task { await ChapterVisibility.reconcileAll(container: context.container) }
     }
 }

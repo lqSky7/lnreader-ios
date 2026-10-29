@@ -278,17 +278,17 @@ enum MihonBackup {
 
         // Categories.
         var categories = Dictionary(
-            try context.fetch(FetchDescriptor<SchemaV1.Category>()).map { ($0.name, $0) },
+            try context.fetch(FetchDescriptor<SchemaV2.Category>()).map { ($0.name, $0) },
             uniquingKeysWith: { first, _ in first })
         var nextOrder = (categories.values.map(\.order).max() ?? -1) + 1
-        var categoryByBackupOrder: [Int64: SchemaV1.Category] = [:]
+        var categoryByBackupOrder: [Int64: SchemaV2.Category] = [:]
         for category in backup.categories.sorted(by: { $0.order < $1.order }) {
             let name = category.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
             if let existing = categories[name] {
                 categoryByBackupOrder[Int64(category.order)] = existing
             } else {
-                let created = SchemaV1.Category(name: name, order: nextOrder)
+                let created = SchemaV2.Category(name: name, order: nextOrder)
                 nextOrder += 1
                 context.insert(created)
                 categories[name] = created
@@ -341,6 +341,7 @@ enum MihonBackup {
         }
 
         try context.save()
+        Task { await ChapterVisibility.reconcileAll(container: container) }
         return summary
     }
 
@@ -362,7 +363,7 @@ enum MihonBackup {
         var inserted = 0
 
         for item in manga.chapters where !item.url.isEmpty && byURL[item.url] == nil {
-            let chapter = SchemaV1.Chapter(
+            let chapter = SchemaV2.Chapter(
                 url: item.url,
                 name: item.name,
                 chapterNumber: item.number.isFinite ? Double(item.number) : -1,
@@ -395,7 +396,7 @@ enum MihonBackup {
                 history.lastRead = max(history.lastRead, when)
                 history.timeRead = max(history.timeRead, seconds)
             } else {
-                let history = SchemaV1.History(chapterURL: item.chapterURL, lastRead: when)
+                let history = SchemaV2.History(chapterURL: item.chapterURL, lastRead: when)
                 history.timeRead = seconds
                 context.insert(history)
                 history.chapter = chapter
@@ -413,7 +414,7 @@ enum MihonBackup {
                 existing.lastChapterRead = max(existing.lastChapterRead, Double(item.lastChapterRead))
                 continue
             }
-            let track = SchemaV1.Track(syncId: item.syncId, remoteId: item.mediaId, title: item.title)
+            let track = SchemaV2.Track(syncId: item.syncId, remoteId: item.mediaId, title: item.title)
             context.insert(track)
             track.entry = entry
             track.libraryId = item.libraryId == 0 ? nil : item.libraryId

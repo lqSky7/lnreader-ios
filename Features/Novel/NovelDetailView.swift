@@ -175,6 +175,9 @@ struct NovelDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .lnreaderChapterReadChanged)) { _ in
             refreshChapters()
         }
+        .onReceive(NotificationCenter.default.publisher(for: ChapterVisibility.didChange)) { _ in
+            refreshChapters()
+        }
         // One colour from the cover, reused for the page, the chapter card and
         // the chapter list's buttons. Recomputed only when the cover changes.
         .task(id: tintDetails ? (displayCover ?? "") : "") {
@@ -360,7 +363,11 @@ struct NovelDetailView: View {
     private func rebuildOrderedChapters() {
         // Merge and hide by scanlator before ordering, so the list shows what
         // the user actually asked for.
-        let base = ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
+        // A saved entry carries the decision (`Chapter.hidden`); only a browse
+        // result, which has no stored rows, still applies the rules itself.
+        let base = localEntry != nil
+            ? allChapters.filter { !$0.hidden }
+            : ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
         let oldestFirst = ChapterOrder.ascending(base, key: \.orderKey)
         orderedChapters = oldestFirst.reversed()
         resumeChapter = Self.resumeChapter(

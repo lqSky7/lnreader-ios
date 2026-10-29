@@ -209,6 +209,8 @@ enum LibraryBackup {
                 UserDefaults.standard.set(value, forKey: key)
             }
         }
+        // Restored chapters and restored scanlator rules decide what exists.
+        Task { await ChapterVisibility.reconcileAll(container: container) }
         return snapshot.entries.count
     }
 }

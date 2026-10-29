@@ -248,6 +248,9 @@ struct ChapterDisplay: Identifiable, Hashable {
     /// Which reader opens this chapter. Needed because a browse result has no
     /// stored entry to ask.
     let kind: ContentKind
+    /// Stored chapters only: `Chapter.hidden`. A source chapter has no stored
+    /// decision yet, so `ScanlatorRules` is applied to those at the call site.
+    let hidden: Bool
 
     /// Shared so a row does not rebuild a format style per access.
     private static let releaseStyle = Date.FormatStyle()
@@ -276,6 +279,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.sourceKey = chapter.entry?.sourceKey ?? ""
         self.entryURL = chapter.entry?.url
         self.kind = chapter.entry?.kind ?? .novel
+        self.hidden = chapter.hidden
     }
 
     init(
@@ -305,6 +309,7 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.sourceKey = sourceKey
         self.entryURL = entryURL
         self.kind = kind
+        self.hidden = false
     }
 }
 

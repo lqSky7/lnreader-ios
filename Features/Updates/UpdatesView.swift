@@ -30,7 +30,7 @@ struct UpdatesView: View {
 
     init() {
         var descriptor = FetchDescriptor<Chapter>(
-            predicate: #Predicate { $0.dateFetch != nil },
+            predicate: #Predicate { $0.dateFetch != nil && !$0.hidden },
             sortBy: [SortDescriptor(\Chapter.dateFetch, order: .reverse)]
         )
         descriptor.fetchLimit = Self.feedLimit

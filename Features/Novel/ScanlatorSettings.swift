@@ -74,19 +74,17 @@ final class ScanlatorSettings {
         guard updated != value else { return }
         value = updated
         if let data = try? JSONEncoder().encode(updated) {
-            defaults.set(data, forKey: Self.defaultsKey(key))
+            defaults.set(data, forKey: ScanlatorPreference.defaultsKey(key))
+        }
+        // Every chapter of the entry is hidden or shown by this, in the store
+        // as well as in the list.
+        if let container = LibraryMaintenance.container {
+            ChapterVisibility.refresh(key: key, container: container)
         }
     }
 
-    private static func defaultsKey(_ key: String) -> String {
-        "scanlators.\(key)"
-    }
-
     private static func load(key: String, defaults: UserDefaults) -> ScanlatorPreference {
-        guard let data = defaults.data(forKey: defaultsKey(key)),
-              let decoded = try? JSONDecoder().decode(ScanlatorPreference.self, from: data)
-        else { return ScanlatorPreference() }
-        return decoded
+        ScanlatorPreference.load(key: key, defaults: defaults)
     }
 }
 

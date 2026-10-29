@@ -14,7 +14,7 @@ import SwiftData
 struct SyncApplyChecks {
 
     static func main() throws {
-        let schema = Schema(versionedSchema: SchemaV1.self)
+        let schema = Schema(versionedSchema: SchemaV2.self)
         let container = try ModelContainer(
             for: schema,
             migrationPlan: LNReaderSchemaMigrationPlan.self,

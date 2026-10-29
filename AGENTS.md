@@ -74,6 +74,15 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 - Manga sources return the whole chapter list; novels keep the windowed preview.
 - Scanlator rules live in UserDefaults keyed `sourceKey::url`. Hiding and priority are
   independent.
+- **A hidden or merged-away chapter does not exist.** `Chapter.hidden` is the one answer,
+  written only by `ChapterVisibility` from `ScanlatorRules`. Anything that counts, lists,
+  queues or navigates chapters filters `!hidden` (in the predicate where there is one, or
+  `Entry.visibleChapters`); never re-run the scanlator rules in a view. A new consumer of
+  chapters has to do the same, or the next "Updates still shows it" bug is yours. A copy of
+  an already-read chapter is marked read by `ChapterTwins`, which also drops its `dateFetch`
+  so it never enters Updates.
+- The schema is `SchemaV2`; `SchemaV1.swift` is frozen for the migration. Further model
+  changes add a `SchemaV3` and a stage.
 - Per-series manga settings are optional overrides (`MangaReaderOverrides`) stored under
   `mangareader.<sourceKey>::<url>`, so a new setting never breaks saved data.
 - Opening an entry does not refetch. Only a browse result or an entry with no `lastUpdate`

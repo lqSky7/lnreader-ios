@@ -25,6 +25,16 @@ struct ScanlatorPreference: Codable, Equatable {
 
     var disabledSet: Set<String> { Set(disabled) }
 
+    /// The saved preference for `key` (`sourceKey::url`), or the default.
+    static func load(key: String, defaults: UserDefaults = .standard) -> ScanlatorPreference {
+        guard let data = defaults.data(forKey: defaultsKey(key)),
+              let decoded = try? JSONDecoder().decode(ScanlatorPreference.self, from: data)
+        else { return ScanlatorPreference() }
+        return decoded
+    }
+
+    static func defaultsKey(_ key: String) -> String { "scanlators.\(key)" }
+
     /// Any rule is in effect. Drives the toolbar indicator.
     var hasActiveRules: Bool { priorityEnabled || !disabled.isEmpty }
 

@@ -21,7 +21,7 @@ struct ReaderChapterListSheet: View {
     }
 
     private func load() {
-        let sorted = entry?.chapters.sorted { $0.sourceOrder < $1.sourceOrder } ?? []
+        let sorted = entry?.visibleChapters.sorted { $0.sourceOrder < $1.sourceOrder } ?? []
         chapters = sorted.map { ChapterDisplay(chapter: $0) }
         chapterByPath = Dictionary(sorted.map { ($0.url, $0) }, uniquingKeysWith: { first, _ in first })
     }

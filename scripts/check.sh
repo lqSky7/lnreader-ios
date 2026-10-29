@@ -82,6 +82,7 @@ run() {
         Models/Schema/UpdateStrategy.swift \
         Models/Schema/DownloadState.swift \
         Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaV2.swift \
         Models/Schema/SchemaMigrationPlan.swift \
         Models/UserProfile.swift \
         Services/Sources/SourceKey.swift \
@@ -94,12 +95,15 @@ run() {
         Models/Schema/UpdateStrategy.swift \
         Models/Schema/DownloadState.swift \
         Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaV2.swift \
         Models/Schema/SchemaMigrationPlan.swift \
         Models/UserProfile.swift \
         Services/Sources/SourceKey.swift \
         Services/Sources/SourceModels.swift \
         Services/Sources/ChapterRecognition.swift \
         Services/Sources/ChapterSourceSync.swift \
+        Services/ChapterVisibility.swift \
+        Features/Novel/ScanlatorRules.swift \
         tests/V2ChapterSyncChecks.swift
       ;;
     page-pipeline)
@@ -164,10 +168,13 @@ run() {
         Models/Schema/UpdateStrategy.swift \
         Models/Schema/DownloadState.swift \
         Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaV2.swift \
         Models/UserProfile.swift \
         Services/Sources/SourceKey.swift \
         Services/Sources/SourceModels.swift \
         Services/LibraryBackup.swift \
+        Services/ChapterVisibility.swift \
+        Features/Novel/ScanlatorRules.swift \
         Services/OfflineChapters.swift \
         tests/OfflineLibraryChecks.swift
       ;;
@@ -178,12 +185,15 @@ run() {
         Models/Schema/UpdateStrategy.swift \
         Models/Schema/DownloadState.swift \
         Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaV2.swift \
         Models/Schema/SchemaMigrationPlan.swift \
         Models/UserProfile.swift \
         Services/Sources/SourceKey.swift \
         Services/Sources/Native/NativeSourceIDs.swift \
         Services/Backup/ProtobufReader.swift \
         Services/Backup/MihonBackup.swift \
+        Services/ChapterVisibility.swift \
+        Features/Novel/ScanlatorRules.swift \
         Utilities/Gzip.swift \
         tests/MihonBackupChecks.swift
       ;;
@@ -202,11 +212,14 @@ run() {
         Models/Schema/UpdateStrategy.swift \
         Models/Schema/DownloadState.swift \
         Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaV2.swift \
         Models/Schema/SchemaMigrationPlan.swift \
         Models/UserProfile.swift \
         Services/Sources/SourceKey.swift \
         Utilities/DateParsing.swift \
         Services/SyncApply.swift \
+        Services/ChapterVisibility.swift \
+        Features/Novel/ScanlatorRules.swift \
         tests/SyncApplyChecks.swift
       ;;
     player)

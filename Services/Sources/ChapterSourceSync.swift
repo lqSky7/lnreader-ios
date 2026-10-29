@@ -12,6 +12,9 @@ struct ChapterSyncResult: Equatable {
     var added = 0
     var updated = 0
     var removed = 0
+    /// Of the added chapters, the ones that count as new: not hidden and not a
+    /// duplicate of a chapter already read. What Updates and the banner show.
+    var fresh = 0
 
     var isNoOp: Bool { added == 0 && updated == 0 && removed == 0 }
 }
@@ -42,6 +45,7 @@ enum ChapterSourceSync {
         // Dedupe the incoming list: sources occasionally repeat a chapter URL,
         // and the first occurrence is the one the source itself lists first.
         var seen = Set<String>()
+        var addedChapters: [Chapter] = []
         var unique: [SourceChapter] = []
         unique.reserveCapacity(incoming.count)
         for chapter in incoming where !chapter.url.isEmpty {
@@ -74,6 +78,7 @@ enum ChapterSourceSync {
                 chapter.dateFetch = .now
                 chapter.entry = entry
                 context.insert(chapter)
+                addedChapters.append(chapter)
                 result.added += 1
             }
         }
@@ -87,9 +92,14 @@ enum ChapterSourceSync {
             }
         }
 
-        // A new upload of a chapter the user already read, from another
-        // scanlator, is not new.
-        if result.added > 0 { ChapterTwins.reconcile(entry) }
+        // Decide what exists (hidden scanlators, merged duplicates), then what
+        // is new: a new upload of a chapter the user already read, from another
+        // scanlator, is not.
+        if !result.isNoOp { ChapterVisibility.reconcile(entry) }
+        if result.added > 0 {
+            ChapterTwins.reconcile(entry)
+            result.fresh = addedChapters.count { !$0.hidden && !$0.read }
+        }
 
         return result
     }
@@ -176,6 +186,8 @@ enum ChapterTwins {
             && other.url != chapter.url
             && other.read != read {
             other.read = read
+            // A copy of a chapter the user has read is not an update.
+            if read { other.dateFetch = nil }
             other.progress = read ? 100 : 0
             other.paragraphIndex = read ? 0 : nil
             if !read {
@@ -199,6 +211,7 @@ enum ChapterTwins {
         var count = 0
         for chapter in chapters where !chapter.read && readNumbers.contains(chapter.chapterNumber) {
             chapter.read = true
+            chapter.dateFetch = nil
             chapter.progress = 100
             chapter.paragraphIndex = 0
             count += 1

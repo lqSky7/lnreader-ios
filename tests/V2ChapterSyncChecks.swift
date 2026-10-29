@@ -18,8 +18,9 @@ struct V2ChapterSyncChecks {
         try checkMissingChapterGuard()
         try checkReaddedChapterKeepsState()
         try checkTwinReads()
+        try checkVisibility()
         print("PASS: chapter recognition (Yokai cases), chapter order (date, then numbers) and source sync "
-            + "(add/update/remove, delete guard, re-add keeps read state, same chapter from another scanlator)")
+            + "(add/update/remove, delete guard, re-add keeps read state, same chapter from another scanlator, hidden and merged chapters, no \"new\" for a copy of a read one)")
     }
 
     // MARK: - Chapter numbers
@@ -136,7 +137,7 @@ struct V2ChapterSyncChecks {
     // MARK: - Merge
 
     private static func makeContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: SchemaV1.self)
+        let schema = Schema(versionedSchema: SchemaV2.self)
         return try ModelContainer(
             for: schema,
             migrationPlan: LNReaderSchemaMigrationPlan.self,
@@ -342,6 +343,62 @@ struct V2ChapterSyncChecks {
         let s1 = try unwrap(solo.chapters.first { $0.url == "s1" })
         s1.read = true
         precondition(ChapterTwins.fanOut(from: s1, read: true).isEmpty, "single-scanlator entries are untouched")
+    }
+
+    /// Hidden and merged-away chapters do not exist, and a copy of a read chapter
+    /// is not new.
+    private static func checkVisibility() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let entry = Entry(kind: .manga, sourceKey: "mihon:3", url: "/manga/v", title: "V")
+        context.insert(entry)
+        // Rules are looked up by `sourceKey::url`; use a private suite.
+        let suite = UserDefaults(suiteName: "V2ChapterSyncChecks.visibility")!
+        suite.removePersistentDomain(forName: "V2ChapterSyncChecks.visibility")
+        func rules(_ preference: ScanlatorPreference) {
+            suite.set(try? JSONEncoder().encode(preference), forKey: ScanlatorPreference.defaultsKey("mihon:3::/manga/v"))
+        }
+        func chapter(_ url: String, _ n: Double, _ group: String) -> SourceChapter {
+            SourceChapter(url: url, name: "Chapter \(Int(n))", chapterNumber: n, scanlator: group)
+        }
+        ChapterSourceSync.merge(
+            [chapter("a1", 1, "A"), chapter("b1", 1, "B"), chapter("a2", 2, "A"), chapter("b2", 2, "B")],
+            into: entry, context: context)
+        func hidden() -> Set<String> { Set(entry.chapters.filter(\.hidden).map(\.url)) }
+
+        precondition(hidden().isEmpty && entry.unreadCount == 4, "no rules: everything exists")
+
+        var preference = ScanlatorPreference()
+        preference.disabled = ["B"]
+        rules(preference)
+        precondition(ChapterVisibility.reconcile(entry, preference: ScanlatorPreference.load(key: "mihon:3::/manga/v", defaults: suite)) == 2)
+        precondition(hidden() == ["b1", "b2"], "a hidden scanlator's chapters are hidden")
+        precondition(entry.unreadCount == 2 && entry.totalChapterCount == 2 && entry.hasUnread, "counts skip hidden")
+        precondition(entry.latestChapter?.url == "a2")
+
+        // Show it again and merge by priority instead: one copy per number.
+        preference = ScanlatorPreference()
+        preference.priorityEnabled = true
+        preference.priority = ["B", "A"]
+        ChapterVisibility.reconcile(entry, preference: preference)
+        precondition(hidden() == ["a1", "a2"], "priority keeps the top scanlator, hides the rest")
+        precondition(entry.unreadCount == 2)
+
+        // Nothing changed -> nothing to write.
+        precondition(ChapterVisibility.reconcile(entry, preference: preference) == 0, "reconcile is idempotent")
+        ChapterVisibility.reconcile(entry, preference: ScanlatorPreference())
+        precondition(hidden().isEmpty, "clearing the rules shows everything")
+
+        // A copy of a read chapter is not new, and a hidden one is not new either.
+        entry.chapters.first { $0.url == "a1" }?.read = true
+        ChapterSourceSync.merge(
+            [chapter("a1", 1, "A"), chapter("b1", 1, "B"), chapter("a2", 2, "A"), chapter("b2", 2, "B"),
+             chapter("c1", 1, "C"), chapter("c3", 3, "C")],
+            into: entry, context: context)
+        let c1 = try unwrap(entry.chapters.first { $0.url == "c1" })
+        let c3 = try unwrap(entry.chapters.first { $0.url == "c3" })
+        precondition(c1.read && c1.dateFetch == nil, "twin of a read chapter never enters Updates")
+        precondition(!c3.read && c3.dateFetch != nil, "a genuinely new chapter does")
     }
 
     private static func unwrap<T>(_ value: T?) throws -> T {

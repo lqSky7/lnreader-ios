@@ -1,7 +1,8 @@
 // SchemaV1.swift - The app's SwiftData schema, versioned from day one.
 //
-// The models live inside this enum so a future `SchemaV2` can sit beside them;
-// views use the typealiases at the bottom of this file.
+// Frozen: the shape of the first shipped store, kept so `SchemaV2` can migrate
+// from it. Nothing else should use these models; the typealiases live in
+// `SchemaV2.swift`.
 
 import Foundation
 import SwiftData
@@ -383,15 +384,3 @@ enum SchemaV1: VersionedSchema {
         }
     }
 }
-
-// MARK: - Type aliases
-
-/// Short handles so views read naturally (`Entry`, `Chapter`, …).
-typealias Entry = SchemaV1.Entry
-typealias Chapter = SchemaV1.Chapter
-typealias History = SchemaV1.History
-typealias Category = SchemaV1.Category
-typealias Track = SchemaV1.Track
-typealias ExtensionRepo = SchemaV1.ExtensionRepo
-typealias DownloadItem = SchemaV1.DownloadItem
-typealias PendingTrackUpdate = SchemaV1.PendingTrackUpdate
