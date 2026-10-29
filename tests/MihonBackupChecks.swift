@@ -185,7 +185,14 @@ struct MihonBackupChecks {
         expect(NativeSourceIDs.mihon[6_084_907_896_154_116_083] == "builtin:mangafire", "MangaFire id")
         expect(NativeSourceIDs.mihon[4_709_139_914_729_853_090] == "builtin:allmanga", "AllManga id")
         expect(MihonSourceID.make(name: "allanime", lang: "en") == 4_709_139_914_729_853_090, "AllManga id derives from allanime")
-        expect(NativeSourceIDs.mihon.count == 5, "five native manga sources carry a Mihon id")
+        // Named rather than counted: adding a source updates this list once, and a
+        // missing mapping cannot hide behind a total that still adds up.
+        expect(
+            Set(NativeSourceIDs.mihon.values) == [
+                "builtin:mangafire", "builtin:allmanga", "builtin:manhwa18", "builtin:fourkhd",
+                "builtin:omegascans", "builtin:pornpics", "builtin:metarthunter",
+            ],
+            "every native manga source carries a Mihon id")
 
         let context = ModelContext(container)
         let entries = try context.fetch(FetchDescriptor<Entry>())
