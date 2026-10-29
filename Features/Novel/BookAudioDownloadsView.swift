@@ -160,6 +160,7 @@ struct VoiceReferencePassageView: View {
 struct BookAudioDownloadsView: View {
     @Environment(SourceManager.self) private var sourceManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.coverTint) private var coverTint
     @ObservedObject private var library = TTSOfflineLibrary.shared
     let bookId: String
     let bookTitle: String
@@ -193,9 +194,19 @@ struct BookAudioDownloadsView: View {
         let end = min(max(throughChapter - 1, start), chapters.count - 1)
         return Array(chapters[start...end])
     }
+    /// Chapters this book actually has audio records for.
+    ///
+    /// This screen manages downloads, it does not browse chapters: a chapter
+    /// nobody has asked for has nothing to show here. Anything with a record —
+    /// ready, preparing or failed — stays, so progress and retries remain
+    /// reachable.
     private var visibleAll: [TTSChapterChoice] {
         let indexed = groups
-        return chapters.filter { matches($0, records: indexed[$0.path] ?? []) }
+        return chapters.filter { chapter in
+            let records = indexed[chapter.path] ?? []
+            guard !records.isEmpty else { return false }
+            return matches(chapter, records: records)
+        }
     }
     private var pageCount: Int { max(1, (visibleAll.count + 99) / 100) }
     private var currentPage: Int { min(chapterPage, pageCount - 1) }
@@ -221,8 +232,6 @@ struct BookAudioDownloadsView: View {
                 Section {
                     dashboard.listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 2, trailing: 0))
                         .listRowBackground(Color.clear).listRowSeparator(.hidden)
-                    actionRow.listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 8, trailing: 16))
-                        .listRowBackground(Color.clear).listRowSeparator(.hidden)
                 }
                 if preparing || error != nil || library.errorMessage != nil || library.engineState?.needsAttention == true {
                     Section {
@@ -241,10 +250,18 @@ struct BookAudioDownloadsView: View {
                     ForEach(Array(visible.dropFirst(page * 100).prefix(100))) { chapter in
                         chapterRow(chapter, records: indexed[chapter.path] ?? [])
                     }
-                    if visible.isEmpty { ContentUnavailableView("No chapters", systemImage: "headphones", description: Text("Try another search or filter.")) }
+                    if visible.isEmpty {
+                        ContentUnavailableView(
+                            "Nothing downloaded",
+                            systemImage: "headphones",
+                            description: Text(search.isEmpty && stateFilter == "All"
+                                ? "Use the buttons above to download this chapter, the next ten, or a range."
+                                : "Try another search or filter.")
+                        )
+                    }
                 } header: {
                     HStack {
-                        Text("Chapters · \(chapters.count)")
+                        Text("Downloaded · \(visibleAll.count)")
                         Spacer()
                         Menu {
                             Picker("Status", selection: $stateFilter) {
@@ -257,6 +274,10 @@ struct BookAudioDownloadsView: View {
                         } label: { Label(stateFilter, systemImage: "line.3.horizontal.decrease") }
                     }
                 }
+            }
+            .scrollContentBackground(.hidden)
+            .background {
+                if let coverTint { coverTint.opacity(0.16).ignoresSafeArea() }
             }
             .navigationTitle("Audio")
             .navigationBarTitleDisplayMode(.large)
@@ -332,30 +353,9 @@ struct BookAudioDownloadsView: View {
         let preferred = library.selectedVoice(bookId: bookId, chapterId: initialChapter ?? "")
         return selectedVoices.contains(preferred) ? preferred : selectedVoices.sorted().first ?? preferred
     }
-    /// Compact primary action and search, side by side. Tapping search expands the
-    /// field in place with a spring and hides the download action; the field carries
-    /// its own close button so the row can collapse again.
-    private var actionRow: some View {
-        let playable = selectedChapters.count == 1 ? primaryRecord(groups[selectedChapters.first?.path ?? ""] ?? []) : nil
-        let pending = playable.map { ["waiting", "downloading"].contains($0.state) && !canPlay($0) } == true
-        let retry = playable.map { ["failed", "paused"].contains($0.state) && !canPlay($0) } == true
-        let title = playable.map(canPlay) == true ? "Play this chapter" : pending ? "Preparing…" : retry ? "Retry this chapter" : selectedChapters.count == 1 ? "Download this chapter" : "Download \(selectedChapters.count) chapters"
-        let symbol = playable.map(canPlay) == true ? "play.fill" : pending ? "waveform" : retry ? "arrow.clockwise" : "arrow.down.circle.fill"
-        let blocked = preparing || pending || selectedVoices.isEmpty || selectedChapters.isEmpty
-        return Button {
-            if let playable, canPlay(playable) { playAudio(playable) }
-            else if let playable, retry { Task { await library.retry(playable.id) } }
-            else { prepareSelected() }
-        } label: {
-            Label(title, systemImage: symbol)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.glassProminent)
-        .buttonBorderShape(.capsule)
-        .controlSize(.large)
-        .disabled(blocked)
-    }
+    /// Cover, narrator and the three download actions, in one block above the
+    /// list. The wash behind it is the book's own colour, so the sheet reads as
+    /// part of this book rather than a generic settings screen.
     private var dashboard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 14) {
@@ -374,14 +374,95 @@ struct BookAudioDownloadsView: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Choose narrator voice")
                 Spacer(minLength: 0)
-                Menu {
-                    Button("This chapter") { fromChapter = (chapters.firstIndex { $0.path == initialChapter } ?? 0) + 1; throughChapter = fromChapter }
-                    Button("Next 10") { throughChapter = min(chapters.count, fromChapter + 9) }
-                    Button("Choose range…") { showRange = true }
-                } label: { Label(selectedChapters.count == 1 ? "This chapter" : "\(selectedChapters.count) chapters", systemImage: "books.vertical").font(.subheadline.weight(.medium)) }
+                if let currentChoice {
+                    Text("Chapter \(currentChoice.position + 1)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
-        }.padding(.horizontal, 16).padding(.vertical, 4)
+
+            downloadControls
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background {
+            // Same cover wash the entry screen uses, so the sheet belongs to the
+            // book instead of looking like a generic settings list.
+            if let coverTint {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(coverTint.opacity(0.12))
+            }
+        }
     }
+
+    /// Three direct actions. The set is short and fixed, so hiding it behind a
+    /// dropdown only cost a tap.
+    private var downloadControls: some View {
+        VStack(spacing: 10) {
+            Button(action: downloadCurrent) {
+                Label("Download this chapter", systemImage: "arrow.down.circle.fill")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .primaryActionStyle()
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .disabled(downloadBlocked)
+
+            HStack(spacing: 10) {
+                Button { downloadNext(10) } label: {
+                    Label("Next 10", systemImage: "arrow.down.circle")
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .disabled(downloadBlocked)
+
+                Button { showRange = true } label: {
+                    Label("Range…", systemImage: "slider.horizontal.3")
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .disabled(chapters.isEmpty)
+            }
+        }
+    }
+
+    private var downloadBlocked: Bool {
+        preparing || selectedVoices.isEmpty || currentChapterIndex == nil
+    }
+
+    /// The chapter the sheet was opened from, or the first one when it was not
+    /// opened from a chapter at all.
+    private var currentChapterIndex: Int? {
+        if let initialChapter,
+           let index = chapters.firstIndex(where: { $0.path == initialChapter }) {
+            return index
+        }
+        return chapters.isEmpty ? nil : 0
+    }
+
+    private func downloadCurrent() {
+        guard let index = currentChapterIndex else { return }
+        fromChapter = index + 1
+        throughChapter = fromChapter
+        prepareSelected()
+    }
+
+    /// `count` chapters starting at the current one, matching the old "Next 10".
+    private func downloadNext(_ count: Int) {
+        guard let index = currentChapterIndex else { return }
+        fromChapter = index + 1
+        throughChapter = min(chapters.count, fromChapter + count - 1)
+        prepareSelected()
+    }
+    /// The third of the three direct actions. Its own confirm button starts the
+    /// download, so the range is the last thing the user picks — dismissing with
+    /// "Done" and then hunting for another button made the old flow a two-step.
     private var rangePicker: some View {
         NavigationStack {
             Form {
@@ -390,14 +471,30 @@ struct BookAudioDownloadsView: View {
                     LabeledContent("Through") { TextField("Through", value: $throughChapter, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing) }
                     Button("All remaining chapters") { throughChapter = chapters.count }
                 }
-                Section { } footer: { Text("Select voices separately. You can keep and manage several voices for each chapter.") }
-            }.navigationTitle("Choose chapters").navigationBarTitleDisplayMode(.large)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") {
-                    fromChapter = min(max(1, fromChapter), max(1, chapters.count))
-                    throughChapter = min(max(fromChapter, throughChapter), chapters.count)
-                    showRange = false
-                } } }
-        }.presentationDetents([.medium])
+                Section {
+                    LabeledContent("Chapters", value: "\(selectedChapters.count)")
+                } footer: {
+                    Text("Selected voices: \(selectedVoices.count). Each chapter is prepared in every selected voice and kept on this phone.")
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background { if let coverTint { coverTint.opacity(0.16).ignoresSafeArea() } }
+            .navigationTitle("Choose range")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showRange = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Download") {
+                        fromChapter = min(max(1, fromChapter), max(1, chapters.count))
+                        throughChapter = min(max(fromChapter, throughChapter), chapters.count)
+                        showRange = false
+                        prepareSelected()
+                    }
+                    .disabled(selectedChapters.isEmpty || selectedVoices.isEmpty || preparing)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
     private func chapterSummary(_ records: [TTSDownloadRecord]) -> String {
         if records.isEmpty { return "No audio downloaded" }
@@ -873,7 +970,13 @@ private struct RowActionStyle: ViewModifier {
     let prominent: Bool
     func body(content: Content) -> some View {
         if prominent {
-            content.buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
+            // Same pairing as `primaryActionStyle`, for the non-glass bordered
+            // style: a bare prominent fill is white-on-white in dark mode.
+            content
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.primaryFill)
+                .foregroundStyle(AppTheme.onPrimaryFill)
+                .buttonBorderShape(.capsule)
         } else {
             content.buttonStyle(.bordered).buttonBorderShape(.capsule)
         }

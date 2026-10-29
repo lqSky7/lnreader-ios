@@ -157,7 +157,10 @@ struct TTSPlaybackControls: View {
                     .font(.title3.weight(.bold))
             }
         }
-        .buttonStyle(.glassProminent)
+        // `glassProminent` fills with the accent colour, and the accent is white
+        // in dark mode, so an untinted prominent button is a white glyph on a
+        // white circle. `primaryActionStyle` pairs the fill with its contrast.
+        .primaryActionStyle()
         .buttonBorderShape(.circle)
         .controlSize(.large)
         .accessibilityLabel(isBuffering ? "Buffering" : (isPlaying ? "Pause" : "Play"))

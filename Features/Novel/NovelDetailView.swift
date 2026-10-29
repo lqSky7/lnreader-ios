@@ -207,6 +207,9 @@ struct NovelDetailView: View {
                 chapters: allChapters.map { TTSChapterChoice($0) },
                 coverURL: displayCover
             )
+            // Applied to the sheet content directly: the sheet is chained after
+            // the `.environment(\.coverTint,…)` above, so it does not inherit it.
+            .environment(\.coverTint, coverTint)
         }
         // The reader is a full-screen window of its own; this screen only
         // decides which chapter to open.

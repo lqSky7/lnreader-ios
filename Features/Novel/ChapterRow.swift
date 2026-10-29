@@ -335,6 +335,10 @@ extension Notification.Name {
 /// stay untouched while nothing is selected.
 struct ChapterSelectionToolbar: ViewModifier {    @Environment(\.modelContext) private var modelContext
     @Environment(TrackingManager.self) private var tracking
+    /// Passed on to the audio sheet by hand. The sheet is attached here, below
+    /// the detail screen's `.environment(\.coverTint,…)`, so whether it inherits
+    /// depends on modifier order — reading it here makes that independent.
+    @Environment(\.coverTint) private var coverTint
     let selection: ChapterSelection
     let entry: Entry?
     /// The list the selection was made in, in display order.
@@ -408,6 +412,7 @@ struct ChapterSelectionToolbar: ViewModifier {    @Environment(\.modelContext) p
                 bookId: TTSBookIdentity.make(pluginId: sourceKey, novelPath: bookPath),
                 bookTitle: entry?.displayTitle ?? chapter.name, sourceKey: sourceKey, entryURL: bookPath,
                 chapters: [TTSChapterChoice(chapter)], coverURL: entry?.displayThumbnailURL, initialChapter: chapter.path)
+                .environment(\.coverTint, coverTint)
         }
     }
 
