@@ -33,6 +33,10 @@ Consequences:
 - **Refresh** is a visible toolbar button: it is a common action, so it is never in a menu, and
   never pull to refresh, because pulling down dismisses the screen. While it runs, the button is
   the spinner. When the entry was last fetched is shown under the chapter count.
+- **Migrate** is the second toolbar button, next to Refresh (`migrateButton`, library entries
+  from sources only). It was briefly the single item of a `…` menu, which hid the one action
+  you go looking for when a source breaks — and a menu that opens onto one item is just a
+  slower button.
 - **Action buttons are glass over the hero**, not cards in the content below it. State shows in
   the symbol (filled when on), never as an outline or a different fill, so no secondary action
   competes with the primary button.
@@ -42,9 +46,10 @@ Consequences:
 
 1. Does it show state the user should see at a glance (on/off, a status)? Make it a tile in
    `EntryActionBar`, if fewer than four are showing for that kind. Otherwise:
-2. Put it in a toolbar `…` menu after the refresh button in `NovelDetailView`. The menu does not
-   exist yet because nothing needs it; **Migrate** is the action that adds it. Do not ship an
-   empty menu, and do not move Refresh into it.
+2. Give it its own toolbar button in `NovelDetailView`, next to Refresh. **Migrate**
+   (`migrateButton`, library entries from sources only) is the one there today. Do not put a
+   single action inside a `…` menu: an overflow menu earns its place only once it holds
+   several.
 3. If it acts on chapters, it belongs to the chapter header's menu, not to either of the above.
 
 Tiles per kind today: novel in library 4 (Library, Tracking, Download, Audio), manga in library 3,

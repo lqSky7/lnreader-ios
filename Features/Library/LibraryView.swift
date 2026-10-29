@@ -122,8 +122,13 @@ struct LibraryView: View {
                 Text("Are you sure you want to remove '\(novel.displayTitle)' from your library?")
             }
             .navigationDestination(for: Entry.self) { novel in
-                NovelDetailView(entry: novel)
-                    .bookZoom(from: novel.persistentModelID, in: bookTransitions)
+                // A migrated entry takes the place of the one that left the
+                // library, so Back goes here rather than to a dead page.
+                NovelDetailView(entry: novel) { replacement in
+                    if !navigationPath.isEmpty { navigationPath.removeLast() }
+                    navigationPath.append(replacement)
+                }
+                .bookZoom(from: novel.persistentModelID, in: bookTransitions)
             }
             .fileImporter(
                 isPresented: $showFileImporter,

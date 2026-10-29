@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		ABCD27010000000000000005 /* Features/Migration/BulkMigrateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD27000000000000000005 /* Features/Migration/BulkMigrateView.swift */; };
+		ABCD27010000000000000004 /* Features/Migration/MigrationPickerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD27000000000000000004 /* Features/Migration/MigrationPickerViews.swift */; };
+		ABCD27010000000000000003 /* Features/Migration/MigrationSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD27000000000000000003 /* Features/Migration/MigrationSearch.swift */; };
+		ABCD27010000000000000002 /* Services/EntryMigrationApply.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD27000000000000000002 /* Services/EntryMigrationApply.swift */; };
+		ABCD27010000000000000001 /* Services/EntryMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD27000000000000000001 /* Services/EntryMigration.swift */; };
 		3FD8ED1A52F11F14302BEC1C /* WebViewCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D7107F537AFC5915A42C0BC /* WebViewCapture.swift */; };
 		0E81C8622310F65C28D7D9B4 /* OmegaScansSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFC737D4CC39E892D03BD2F /* OmegaScansSource.swift */; };
 		6F29897283D90B2944E3D69B /* NovelPhoenixSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B5697954043B01F054A9A5 /* NovelPhoenixSource.swift */; };
@@ -187,6 +192,11 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		ABCD27000000000000000005 /* Features/Migration/BulkMigrateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Migration/BulkMigrateView.swift; sourceTree = SOURCE_ROOT; };
+		ABCD27000000000000000004 /* Features/Migration/MigrationPickerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Migration/MigrationPickerViews.swift; sourceTree = SOURCE_ROOT; };
+		ABCD27000000000000000003 /* Features/Migration/MigrationSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Migration/MigrationSearch.swift; sourceTree = SOURCE_ROOT; };
+		ABCD27000000000000000002 /* Services/EntryMigrationApply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/EntryMigrationApply.swift; sourceTree = SOURCE_ROOT; };
+		ABCD27000000000000000001 /* Services/EntryMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/EntryMigration.swift; sourceTree = SOURCE_ROOT; };
 		8D7107F537AFC5915A42C0BC /* WebViewCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewCapture.swift; sourceTree = "<group>"; };
 		FCFC737D4CC39E892D03BD2F /* OmegaScansSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmegaScansSource.swift; sourceTree = "<group>"; };
 		E2B5697954043B01F054A9A5 /* NovelPhoenixSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelPhoenixSource.swift; sourceTree = "<group>"; };
@@ -521,6 +531,11 @@
 				ABCD26880000000000000200 /* Features/Updates/LibraryUpdateBanner.swift */,
 				ABCD26880000000000000003 /* Features/More/OfflineLibraryView.swift */,
 				ABCD26880000000000000002 /* Services/LibraryMaintenance.swift */,
+				ABCD27000000000000000005 /* Features/Migration/BulkMigrateView.swift */,
+				ABCD27000000000000000004 /* Features/Migration/MigrationPickerViews.swift */,
+				ABCD27000000000000000003 /* Features/Migration/MigrationSearch.swift */,
+				ABCD27000000000000000002 /* Services/EntryMigrationApply.swift */,
+				ABCD27000000000000000001 /* Services/EntryMigration.swift */,
 				ABCD26880000000000000001 /* Services/LibraryBackup.swift */,
 				ABCD26880000000000000000 /* Services/ChapterDownloadManager.swift */,
 				0BACDEFA4D3A76B48456098C /* AboutView.swift */,
@@ -872,6 +887,11 @@
 				ABCD26890000000000000004 /* Services/OfflineChapters.swift in Sources */,
 				ABCD26890000000000000003 /* Features/More/OfflineLibraryView.swift in Sources */,
 				ABCD26890000000000000002 /* Services/LibraryMaintenance.swift in Sources */,
+				ABCD27010000000000000005 /* Features/Migration/BulkMigrateView.swift in Sources */,
+				ABCD27010000000000000004 /* Features/Migration/MigrationPickerViews.swift in Sources */,
+				ABCD27010000000000000003 /* Features/Migration/MigrationSearch.swift in Sources */,
+				ABCD27010000000000000002 /* Services/EntryMigrationApply.swift in Sources */,
+				ABCD27010000000000000001 /* Services/EntryMigration.swift in Sources */,
 				ABCD26890000000000000001 /* Services/LibraryBackup.swift in Sources */,
 				ABCD26890000000000000000 /* Services/ChapterDownloadManager.swift in Sources */,
 				295E3A3C6DA5D18305CFC473 /* TTSPlaybackControls.swift in Sources */,

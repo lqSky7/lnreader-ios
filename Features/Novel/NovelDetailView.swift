@@ -15,6 +15,7 @@ struct NovelDetailView: View {
     @Environment(ReaderRouter.self) private var readerRouter
     @Environment(TrackingManager.self) private var tracking
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
 
     /// Stored entry, when opened from the library or from a search hit that is
     /// already in the library.
@@ -22,6 +23,9 @@ struct NovelDetailView: View {
     /// Source-side entry, when opened from browse/search.
     let sourceEntry: SourceEntry?
     let sourceKey: String
+    /// Swap this screen for another entry, supplied by the stack that pushed it.
+    /// `nil` where there is nothing to swap (a browse result).
+    let onReplace: ((Entry) -> Void)?
 
     @Namespace private var chapterTransition
     @State private var localEntry: Entry? = nil
@@ -42,6 +46,9 @@ struct NovelDetailView: View {
     // Search + navigation state
     @State private var chapterSearch = ""
     @State private var showTracker = false
+    @State private var showMigrate = false
+    /// The entry a migration produced, waiting for the sheet to finish closing.
+    @State private var migratedInto: Entry?
     /// Chapter order for the detail list and the full directory (`ChapterListView` owns the menu).
     @AppStorage("chapters.ascending") private var chaptersAscending = false
     @State private var navigateToChapter: ChapterDisplay? = nil
@@ -73,10 +80,17 @@ struct NovelDetailView: View {
     // MARK: - Initializers
 
     /// View a saved library entry.
-    init(entry: Entry) {
+    ///
+    /// - Parameter onReplace: how the stack that pushed this screen swaps it for
+    ///   another entry. Migration uses it: the old entry leaves the library, so
+    ///   showing the new one *in its place* keeps Back pointing at the library
+    ///   instead of at a book that is no longer in it. A stack that does not pass
+    ///   one gets the old behaviour, a plain pop.
+    init(entry: Entry, onReplace: ((Entry) -> Void)? = nil) {
         self.entry = entry
         self.sourceEntry = nil
         self.sourceKey = entry.sourceKey
+        self.onReplace = onReplace
         self._localEntry = State(initialValue: entry)
         self._scanlatorSettings = State(
             initialValue: ScanlatorSettings(key: "\(entry.sourceKey)::\(entry.url)")
@@ -88,6 +102,7 @@ struct NovelDetailView: View {
         self.entry = nil
         self.sourceEntry = sourceEntry
         self.sourceKey = sourceEntry.sourceKey
+        self.onReplace = nil
         self._localEntry = State(initialValue: nil)
         self._scanlatorSettings = State(
             initialValue: ScanlatorSettings(key: "\(sourceEntry.sourceKey)::\(sourceEntry.url)")
@@ -192,10 +207,34 @@ struct NovelDetailView: View {
         .onDisappear { chapterSelection.end() }
         .toolbar(removing: .title)
         .toolbar {
-            // Refresh is a toolbar button, not pull to refresh: pulling down
-            // dismisses this screen.
-            if canRefetch {
-                ToolbarItem(placement: .topBarTrailing) { refreshButton }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                // Both are visible buttons. Migrate used to be the only item in a
+                // `…` menu, which hid the one action a broken source makes you
+                // look for.
+                if let localEntry, localEntry.inLibrary, !localEntry.isLocal {
+                    migrateButton
+                }
+                // Refresh is a toolbar button, not pull to refresh: pulling down
+                // dismisses this screen.
+                if canRefetch {
+                    refreshButton
+                }
+            }
+        }
+        // The sheet reports the new entry; this screen closes it, and only once the
+        // sheet is gone does it ask the stack to show that entry in its place. The
+        // entry on screen is no longer in the library, so it is not worth going
+        // back to.
+        .sheet(isPresented: $showMigrate, onDismiss: {
+            guard let newEntry = migratedInto else { return }
+            migratedInto = nil
+            if let onReplace { onReplace(newEntry) } else { dismiss() }
+        }) {
+            if let localEntry {
+                MigrateEntrySheet(entry: localEntry) { newEntry in
+                    migratedInto = newEntry
+                    showMigrate = false
+                }
             }
         }
         .sheet(isPresented: $showTracker) {
@@ -268,8 +307,7 @@ struct NovelDetailView: View {
     /// Refetches details and chapters. Turns into the spinner while it runs,
     /// so the refresh shows where it was started.
     ///
-    /// Occasional entry actions (migrate, edit info) go in a `…` menu after
-    /// this button once there is one; see docs/DETAIL_SCREEN.md.
+    /// Migrate is its own button next to it; see docs/DETAIL_SCREEN.md.
     private var refreshButton: some View {
         Button {
             Task { await fetchDetails(force: true) }
@@ -282,6 +320,16 @@ struct NovelDetailView: View {
         }
         .disabled(isRefetching)
         .accessibilityLabel(isRefetching ? "Refreshing" : "Refresh")
+    }
+
+    /// Move this entry to another source. Its own button rather than an item in a
+    /// menu: it is what you come here for when a source breaks, and a menu with a
+    /// single item is a door with one room behind it.
+    private var migrateButton: some View {
+        Button { showMigrate = true } label: {
+            Label("Migrate to another source", systemImage: "arrow.triangle.swap")
+        }
+        .accessibilityLabel("Migrate to another source")
     }
 
     // MARK: - Chapter Computation

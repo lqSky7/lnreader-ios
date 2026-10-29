@@ -87,7 +87,11 @@ struct UpdatesView: View {
             }
             .navigationTitle("Updates")
             .navigationDestination(for: Entry.self) { entry in
-                NovelDetailView(entry: entry)
+                // A migrated entry takes the place of the one that left the library.
+                NovelDetailView(entry: entry) { replacement in
+                    if !path.isEmpty { path.removeLast() }
+                    path.append(replacement)
+                }
             }
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {

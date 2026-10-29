@@ -98,10 +98,27 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 - **Swipe right from the left edge goes back.** Full-screen surfaces that hide the back button
   must add `EdgeSwipeDismiss` and ignore it while a sheet is open.
 - **On the detail screen a control lives with what it acts on.** Hero: one primary button.
-  `EntryActionBar`: up to four stateful entry tiles. Toolbar: a visible Refresh button (no pull
-  to refresh; pulling down goes back), then a `…` menu for occasional actions such as migrate.
+  `EntryActionBar`: up to four stateful entry tiles. Toolbar: visible Refresh and Migrate
+  buttons (no pull to refresh; pulling down goes back). Do not bury a real action in a
+  one-item `…` menu; an overflow menu earns its place once it holds several.
   Chapter header: search and one sort/filter menu. [DETAIL_SCREEN]
+- **A migrated entry replaces the screen it came from.** After a single migration
+  `NovelDetailView(entry:onReplace:)` calls `onReplace` with the new entry; the stacks that push
+  it (Library, Updates, History) swap the top of their `NavigationPath`, so Back goes to the
+  library instead of to a book that just left it. A new stack that pushes the detail should pass
+  a closure too — without one the screen just pops, which is the old behaviour. Do not route this
+  through a shared environment object: every stack that exists would answer the request, and a
+  background tab would push into its own path.
 - **Chapter lists select by holding.** No context menu on chapter rows; it shares the long press.
+- **A bulk action lives with the thing it acts on.** Migrating many entries is a property of
+  their source, so it starts by holding a source in Browse (`MigrateSourceSheet`); there is no
+  library-wide bulk entry point, and adding one back means two flows to keep in step. One entry
+  migrates from its detail toolbar. Anything that walks a list of entries against sources goes
+  through `MigrationPacer` (one request per source at a time, spaced, backoff, cool-down) rather
+  than firing a burst. The source row is a button with a `LongPressGesture`, not a
+  `NavigationLink` with a `.contextMenu`: the system menu lifts the row into a preview and fades
+  that overlay out on dismissal, which reads as the screen sticking after you back out. Same
+  hold as `InteractiveListRow` and `ChapterRow`.
 - Settings screens use `.settingsScreen(_:)` for their sentence-case title.
 - **Grey means secondary, never tappable.** The `AccentColor` asset is primary, so buttons and
   links read as primary text; only metadata is `.secondary`. Switches get the `controlFill`

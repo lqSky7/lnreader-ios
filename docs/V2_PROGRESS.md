@@ -1,8 +1,8 @@
 # v2 rewrite — status
 
-**Updated** 2026-10-25 · **Branch** `main` · **Version** 2.0.0 (build 3)
-· **Latest update** Browse rebuilt (native search, glass switcher), webtoon strip as a
-collection view with chapter stitching, device profiling script
+**Updated** 2026-10-29 · **Branch** `main` · **Version** 2.0.0 (build 3)
+· **Latest update** Source migration reworked (one sheet, source-scoped bulk run, rate-limited
+with backoff), Browse shows how many entries each source has
 
 The rewrite replaces the v1 store with `SchemaV1`, adds a manga path end to end, and puts
 every source behind one protocol (`CatalogSource`). Every source is native Swift, compiled into
@@ -56,7 +56,7 @@ filters and incognito all read it.
 | R9 | Categories: per-category sort, display, update scope | **Verified** | R7, R8 |
 | R10 | Library badges | **Verified** | — |
 | R11 | Duplicate detection | Planned | — |
-| R12 | Migrate manga / novel to another source | Planned | R11 |
+| R12 | Migrate manga / novel to another source, one or in bulk | Built, not verified | R11 |
 | R13 | Incognito mode | Planned | — |
 | R14 | Download UI/UX polish | **Built**, not used on a device | — |
 
@@ -110,10 +110,35 @@ Pure rules live in `Features/MangaReader/MangaReaderControls.swift`, checked hea
 
 - **R11 duplicates.** On add-to-library, match by normalized title (and alt titles) across
   sources and warn with a "view existing / add anyway" choice. Index once, not per keystroke.
-- **R12 migrate.** Pick a destination source, search it, choose the match, then carry over
-  chapters read, bookmarks, categories, added date and tracking, and offer to keep or remove
-  the old entry. Match chapters by number (reuse `ChapterRecognition`). One background
-  transaction so a failed migrate leaves the old entry intact. Works for manga and novels.
+- **R12 migrate.** Built, not used on a device. **One entry:** the detail toolbar's Migrate
+  button (its own button, next to Refresh — it was the only item of a `…` menu) → search the
+  chosen sources (the source it is in is never searched) → confirm, which shows from → to, how
+  many read chapters have a counterpart, and the carry options → the screen reports what carried
+  over instead of closing over it, and Done opens the entry it created: the stack swaps its top
+  for the new one (`NovelDetailView(entry:onReplace:)`), so Back goes to the library rather than
+  to a book that just left it. **Bulk:** hold a source in Browse (0.4 s, the same hold the
+  library and chapter lists use; it opens the sheet directly — no context menu, whose dismissal
+  overlay hangs on screen for a beat) → the source, its entry count and the destination order →
+  "Find matches" → review (live progress, untick anything, tap a row to change its match) →
+  migrate. The source is the unit, so there is one bulk entry point; the library has none.
+  **Destination order is one preference per content kind** (`migration.sources.<kind>` in
+  UserDefaults), shared by every migration of that kind: set it once, it applies to the next
+  entry and the next bulk run. It is stored whole and the current source is filtered per run, so
+  editing the order while moving away from a source does not drop that source from the
+  preference.
+  Bulk takes the first source with a close title match (`MigrationMatcher.autoAcceptScore`);
+  weaker hits start unticked. Chapters match by number (unnumbered ones by name) and carry read,
+  bookmark, position and history; categories, tracking and per-series manga settings follow. A
+  hidden chapter carries nothing. The old entry leaves the library but is never deleted
+  (chapters and history stay); an option also deletes its downloads.
+  **Politeness:** every search and chapter fetch goes through `MigrationPacer` — one request at
+  a time per source, 1.2 s apart, `MigrationBackoff` retries (1.5 s doubling to a 20 s cap, ±jitter,
+  three tries) and a source that uses up its tries rests 45 s so the remaining entries skip it
+  instead of each waiting on it. Failed rows say which source did not answer and can be retried
+  in place. Logic is in `Services/EntryMigration.swift` (checked by `check.sh migration`) and
+  `EntryMigrationApply.swift`; screens in `Features/Migration/`. Not done: matching by cover or
+  author, scanlator rules do not carry (names differ per source), and the bulk run is sequential
+  per entry (two in flight), so forty entries take a few minutes by design.
 - **R13 incognito.** A global toggle that suppresses history writes, reading progress and
   `lastReadAt`. Must be visible (banner or icon) so it is never on by accident, and must be
   respected by both readers and the downloader's auto-mark-read.

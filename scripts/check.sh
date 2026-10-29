@@ -40,7 +40,7 @@ compile_and_run_plain() {
 # first, so a break in the foundation shows up before the expensive ones run.
 PLAIN_CHECKS="foundation schema chapter-sync page-pipeline scanlators \
 reader-settings haptics filters sorts categories badges offline mihon-backup tts-contracts \
-sync"
+sync migration"
 
 usage() {
   cat <<'USAGE'
@@ -52,7 +52,7 @@ all                run every check that takes no arguments
 
 Checks: foundation schema chapter-sync page-pipeline scanlators reader-settings
         haptics filters sorts categories badges offline mihon-backup tts-contracts
-        sync native-comments player
+        sync migration native-comments player
 
 Checks needing setup, not part of `all`:
   native-comments   needs the SwiftSoup checkout or network access, and a normal
@@ -105,6 +105,25 @@ run() {
         Services/ChapterVisibility.swift \
         Features/Novel/ScanlatorRules.swift \
         tests/V2ChapterSyncChecks.swift
+      ;;
+    migration)
+      compile_and_run migration \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Models/Schema/UpdateStrategy.swift \
+        Models/Schema/DownloadState.swift \
+        Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaV2.swift \
+        Models/Schema/SchemaMigrationPlan.swift \
+        Models/UserProfile.swift \
+        Services/Sources/SourceKey.swift \
+        Services/Sources/SourceModels.swift \
+        Services/Sources/ChapterRecognition.swift \
+        Services/Sources/ChapterSourceSync.swift \
+        Services/ChapterVisibility.swift \
+        Features/Novel/ScanlatorRules.swift \
+        Services/EntryMigration.swift \
+        tests/MigrationChecks.swift
       ;;
     page-pipeline)
       compile_and_run page-pipeline \

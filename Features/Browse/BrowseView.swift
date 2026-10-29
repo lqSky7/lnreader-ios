@@ -4,6 +4,7 @@
 // Every source is built into the app, so each catalogue is just the registry filtered by kind.
 // A native segmented control in a glass top bar switches between them in place.
 
+import SwiftData
 import SwiftUI
 
 /// Which catalogue the browse screen is showing.
@@ -35,9 +36,22 @@ struct BrowseView: View {
 
     @AppStorage("browse.kind") private var kindRaw = BrowseKind.novels.rawValue
     @State private var searchText = ""
+    /// The source whose entries are being migrated, if any.
+    @State private var migratingSource: MigratingSource?
+    /// The source whose catalogue is open.
+    @State private var openSource: SourceTarget?
+
+    /// Library entries, only to count them per source: a source row says how many
+    /// of its books are in the library, and offers to migrate them.
+    @Query(filter: #Predicate<Entry> { $0.inLibrary }) private var libraryEntries: [Entry]
 
     private var kind: BrowseKind {
         BrowseKind(rawValue: kindRaw) ?? .novels
+    }
+
+    /// How many library entries came from each source.
+    private var libraryCounts: [String: Int] {
+        Dictionary(grouping: libraryEntries, by: \.sourceKey).mapValues(\.count)
     }
 
     var body: some View {
@@ -53,6 +67,11 @@ struct BrowseView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .toolbar { toolbarContent }
+                // Holding a source with entries offers to move all of them, which
+                // is the only bulk migration there is: the source is the unit.
+                .sheet(item: $migratingSource) { source in
+                    MigrateSourceSheet(sourceKey: source.key) { migratingSource = nil }
+                }
         }
     }
 
@@ -110,6 +129,11 @@ struct BrowseView: View {
         // scroll view (and the nav bar tracking it) alive, so it stays cheap.
         .animation(AppMotion.tabSwitch(reduceMotion: reduceMotion), value: kindRaw)
         .simultaneousGesture(kindSwipe)
+        // Rows are buttons, not links: the hold needs to own the touch (see
+        // `SourceRow`), so navigation goes through a destination instead.
+        .navigationDestination(item: $openSource) { target in
+            SourceDetailView(sourceKey: target.key, title: target.name)
+        }
     }
 
     /// Steps between catalogues on a clearly horizontal swipe. Only reacts when
@@ -139,36 +163,124 @@ struct BrowseView: View {
             }
             .listRowBackground(Color.clear)
         } else {
+            // Counted once for the whole list rather than per row.
+            let counts = libraryCounts
             Section("Sources · \(visibleSources.count)") {
                 ForEach(visibleSources, id: \.key) { source in
-                    NavigationLink {
-                        SourceDetailView(sourceKey: source.key, title: source.name)
-                    } label: {
-                        sourceRow(source)
-                    }
+                    SourceRow(
+                        source: source,
+                        inLibrary: counts[source.key] ?? 0,
+                        onOpen: { openSource = SourceTarget(key: source.key, name: source.name) },
+                        onMigrate: { migratingSource = MigratingSource(key: source.key) }
+                    )
                 }
             }
         }
     }
 
-    private func sourceRow(_ source: any CatalogSource) -> some View {
-        HStack(spacing: 12) {
-            SourceIconView(source: source, size: 44)
+    // MARK: - Filtering
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(source.name)
-                        .font(.body.weight(.medium))
+    private var visibleSources: [any CatalogSource] {
+        let all = sourceManager.sources(of: kind.contentKind)
+        guard !searchText.isEmpty else { return all }
+        return all.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+}
+
+/// A source selected for bulk migration. A `String` key is not `Identifiable`,
+/// and the sheet needs one.
+struct MigratingSource: Identifiable {
+    let key: String
+    var id: String { key }
+}
+
+/// A source to push the catalogue for. The rows are buttons, so navigation needs
+/// a value to push rather than a `NavigationLink`.
+private struct SourceTarget: Identifiable, Hashable {
+    let key: String
+    let name: String
+    var id: String { key }
+}
+
+// MARK: - Row
+
+/// One source: tap opens its catalogue, hold moves its library entries elsewhere.
+///
+/// Deliberately not a `NavigationLink` with a `.contextMenu`: the system menu
+/// lifts the row into a preview and fades that whole overlay out on dismissal,
+/// which reads as the screen sticking for a beat after you back out of it. A hold
+/// that opens the sheet directly has nothing to fade. Same shape as
+/// `InteractiveListRow` in the library, which is where this pattern comes from.
+private struct SourceRow: View {
+    let source: any CatalogSource
+    let inLibrary: Int
+    let onOpen: () -> Void
+    let onMigrate: () -> Void
+
+    /// Set when a hold fires, so the tap that ends the same touch does not also
+    /// open the catalogue. Cleared on a timer as well, because a hold that opens a
+    /// sheet may never report a tap at all.
+    @State private var didHold = false
+
+    var body: some View {
+        Button {
+            if didHold { didHold = false } else { onOpen() }
+        } label: {
+            HStack(spacing: 12) {
+                SourceIconView(source: source, size: 44)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(source.name)
+                            .font(.body.weight(.medium))
+                            .lineLimit(1)
+                        if source.isAdult { adultChip }
+                    }
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if source.isAdult { adultChip }
                 }
-                Text(sourceSubtitle(source))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                // The rows are buttons, so the disclosure chevron is ours.
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                guard inLibrary > 0 else { return }
+                Haptics.shared.impact(.medium)
+                didHold = true
+                Task { try? await Task.sleep(for: .milliseconds(600)); didHold = false }
+                onMigrate()
+            }
+        )
+        .accessibilityHint(inLibrary > 0
+            ? "Hold to migrate \(inLibrary) \(inLibrary == 1 ? "entry" : "entries")"
+            : "")
+        // The hold is a gesture, so VoiceOver needs the same action by name.
+        .accessibilityActions {
+            if inLibrary > 0 {
+                Button(inLibrary == 1 ? "Migrate entry" : "Migrate \(inLibrary) entries") {
+                    onMigrate()
+                }
             }
         }
-        .padding(.vertical, 2)
+    }
+
+    private var subtitle: String {
+        var parts: [String] = []
+        if !source.lang.isEmpty { parts.append(source.lang.uppercased()) }
+        if !source.supportsLatest { parts.append("Popular only") }
+        if inLibrary > 0 { parts.append("\(inLibrary) in library") }
+        return parts.joined(separator: " · ")
     }
 
     private var adultChip: some View {
@@ -179,20 +291,5 @@ struct BrowseView: View {
             .padding(.vertical, 1)
             .background(AppTheme.destructive.opacity(0.15), in: Capsule())
             .accessibilityLabel("Adult content")
-    }
-
-    private func sourceSubtitle(_ source: any CatalogSource) -> String {
-        var parts: [String] = []
-        if !source.lang.isEmpty { parts.append(source.lang.uppercased()) }
-        if !source.supportsLatest { parts.append("Popular only") }
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: - Filtering
-
-    private var visibleSources: [any CatalogSource] {
-        let all = sourceManager.sources(of: kind.contentKind)
-        guard !searchText.isEmpty else { return all }
-        return all.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 }
