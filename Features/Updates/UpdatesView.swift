@@ -82,17 +82,6 @@ struct UpdatesView: View {
                         } label: {
                             Label("Clear Updates", systemImage: "trash")
                         }
-                        .confirmationDialog(
-                            "Are you sure you want to clear all updates?",
-                            isPresented: $showClearConfirmation,
-                            titleVisibility: .visible
-                        ) {
-                            Button("Clear All", role: .destructive) {
-                                let container = modelContext.container
-                                Task { await libraryManager.clearUpdates(container: container) }
-                            }
-                            Button("Cancel", role: .cancel) {}
-                        }
                     }
 
                     Button(action: {
@@ -108,6 +97,19 @@ struct UpdatesView: View {
                     }
                     .disabled(libraryManager.isUpdating)
                 }
+            }
+            // Owned by the screen, not the toolbar button: a dialog attached
+            // inside a toolbar item does not reliably present, which is why the
+            // trash button appeared to do nothing.
+            .confirmationDialog(
+                "Are you sure you want to clear all updates?",
+                isPresented: $showClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Clear All", role: .destructive) {
+                    Task { await libraryManager.clearUpdates(context: modelContext) }
+                }
+                Button("Cancel", role: .cancel) {}
             }
         }
     }
