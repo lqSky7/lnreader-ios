@@ -35,5 +35,9 @@ enum NativeSourceIDs {
         // Pinned upstream for the English source.
         1_459_635_082_044_256_286: SourceKey.makeBuiltin(id: "pornpics"),
         MihonSourceID.make(name: "Metart Hunter", lang: "all"): SourceKey.makeBuiltin(id: "metarthunter"),
+        // Upstream's versionId is 2 since the JSON API rewrite.
+        MihonSourceID.make(name: "Atsumaru", lang: "en", versionId: 2): SourceKey.makeBuiltin(id: "atsumaru"),
+        MihonSourceID.make(name: "Weeb Central", lang: "en"): SourceKey.makeBuiltin(id: "weebcentral"),
+        MihonSourceID.make(name: "Kagane", lang: "en"): SourceKey.makeBuiltin(id: "kagane"),
     ]
 }

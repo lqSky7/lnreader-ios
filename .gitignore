@@ -18,6 +18,8 @@ DerivedData/
 
 # Reference checkout (Tachiyomi/Mihon fork) used for the v2 rewrite
 /yokai/
+# Reference checkout of keiyoushi's extensions, read when porting a source
+/extensions-source/
 .workbuddy-ai
 
 # Xcode schemes are per-developer

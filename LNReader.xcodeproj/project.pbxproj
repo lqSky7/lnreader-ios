@@ -29,6 +29,9 @@
 		A1B2C3D40000000000000001 /* PornPicsSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000002 /* PornPicsSource.swift */; };
 		A1B2C3D40000000000000003 /* MasonrySource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000004 /* MasonrySource.swift */; };
 		E1862F6B429891BDEA7595EF /* AllMangaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBCFC0E87CBAED479A79A57 /* AllMangaSource.swift */; };
+		A1B2C3D40000000000000012 /* AtsumaruSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000011 /* AtsumaruSource.swift */; };
+		A1B2C3D40000000000000014 /* WeebCentralSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000013 /* WeebCentralSource.swift */; };
+		A1B2C3D40000000000000016 /* KaganeSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000015 /* KaganeSource.swift */; };
 		04C6FC56B9070F98F8B4B3A6 /* ScanlatorRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19BE8C9EDED69C07CE5F18A /* ScanlatorRules.swift */; };
 		04D74105186AEBE9879341B0 /* SourceKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC517C802BAFA82D76F87B6E /* SourceKey.swift */; };
 		0518E7BC7FF5DA15E6F1CB52 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2B650856C28BA6DD64543A24 /* AppIcon.icon */; };
@@ -215,6 +218,9 @@
 		A1B2C3D40000000000000002 /* PornPicsSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PornPicsSource.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000004 /* MasonrySource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasonrySource.swift; sourceTree = "<group>"; };
 		1DBCFC0E87CBAED479A79A57 /* AllMangaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllMangaSource.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000011 /* AtsumaruSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtsumaruSource.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000013 /* WeebCentralSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeebCentralSource.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000015 /* KaganeSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaganeSource.swift; sourceTree = "<group>"; };
 		003CA6699D27A4A3DCAFD2EF /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
 		037C592FB524AD4F9A9F370F /* NovelFireLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireLoginView.swift; sourceTree = "<group>"; };
 		08FFA9F783FE74CFB5D0A992 /* ChapterRecognition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterRecognition.swift; sourceTree = "<group>"; };
@@ -767,6 +773,9 @@
 			isa = PBXGroup;
 			children = (
 				1DBCFC0E87CBAED479A79A57 /* AllMangaSource.swift */,
+				A1B2C3D40000000000000011 /* AtsumaruSource.swift */,
+				A1B2C3D40000000000000015 /* KaganeSource.swift */,
+				A1B2C3D40000000000000013 /* WeebCentralSource.swift */,
 				C90511029E43D13820528AE5 /* FourKHDSource.swift */,
 				A1B2C3D40000000000000004 /* MasonrySource.swift */,
 				A1B2C3D40000000000000002 /* PornPicsSource.swift */,
@@ -883,6 +892,9 @@
 				A1B2C3D40000000000000003 /* MasonrySource.swift in Sources */,
 				A1B2C3D40000000000000001 /* PornPicsSource.swift in Sources */,
 				E1862F6B429891BDEA7595EF /* AllMangaSource.swift in Sources */,
+				A1B2C3D40000000000000012 /* AtsumaruSource.swift in Sources */,
+				A1B2C3D40000000000000014 /* WeebCentralSource.swift in Sources */,
+				A1B2C3D40000000000000016 /* KaganeSource.swift in Sources */,
 				ABCD26890000000000000101 /* Services/Backup/ProtobufReader.swift in Sources */,
 				ABCD26890000000000000102 /* Services/Backup/MihonBackup.swift in Sources */,
 				ABCD26890000000000000103 /* Utilities/Gzip.swift in Sources */,
