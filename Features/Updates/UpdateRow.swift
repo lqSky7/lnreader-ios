@@ -5,19 +5,31 @@ import SwiftUI
 
 struct UpdateRow: View {
     let chapter: Chapter
+    /// The cover opens the book; the rest of the row opens the chapter. Same
+    /// split as `HistoryRow`, through the same `RowCoverButton`.
+    var onOpenEntry: () -> Void = {}
+    var onOpenChapter: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 12) {
             // Book cover thumbnail
             if let entry = chapter.entry {
-                NovelCoverView(
-                    url: entry.displayThumbnailURL,
-                    aspectRatio: LayoutConstants.coverAspectRatio
-                )
-                .frame(width: 44, height: 63)
-                .clipShape(.rect(cornerRadius: 6))
+                RowCoverButton(entry: entry, action: onOpenEntry)
             }
 
+            details
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onOpenChapter)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityValue(chapter.read ? "Read" : "Unread")
+                .accessibilityHint("Opens the chapter")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var details: some View {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 // Book title
                 if let entry = chapter.entry {
@@ -51,8 +63,5 @@ struct UpdateRow: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(chapter.read ? "Read" : "Unread")
     }
 }

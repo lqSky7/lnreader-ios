@@ -408,6 +408,19 @@ final class TTSOfflineLibrary: NSObject, ObservableObject {
             records[index].state = "waiting"; records[index].error = nil; save(); await refresh()
         } catch { errorMessage = error.localizedDescription }
     }
+    /// Retry every failed rendition of one book.
+    ///
+    /// Sequential on purpose: each retry re-uploads the voice reference and then
+    /// touches the queue, and firing them together is what makes the server
+    /// reject half of them. Paused renditions are left alone — the user stopped
+    /// those deliberately.
+    func retryAllFailed(bookId: String) async {
+        let ids = records
+            .filter { $0.rendition.bookId == bookId && !$0.isAvailable && $0.state == "failed" }
+            .map(\.id)
+        guard !ids.isEmpty else { return }
+        for id in ids { await retry(id) }
+    }
     func pause(_ id: String) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         let transferID = records[index].transferID

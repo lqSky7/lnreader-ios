@@ -17,6 +17,8 @@ struct UpdatesView: View {
     @State private var clearedIDs: Set<PersistentIdentifier> = []
 
     @Query private var allRecentChapters: [Chapter]
+    /// Tapping a cover pushes the book onto this stack, the way History does.
+    @State private var path = NavigationPath()
 
     private var recentChapters: [Chapter] {
         clearedIDs.isEmpty ? allRecentChapters : allRecentChapters.filter { !clearedIDs.contains($0.persistentModelID) }
@@ -36,7 +38,7 @@ struct UpdatesView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if recentChapters.isEmpty {
                     EmptyStateView(
@@ -55,19 +57,21 @@ struct UpdatesView: View {
                         ForEach(groupedUpdates, id: \.key) { date, chapters in
                             Section(date) {
                                 ForEach(chapters) { chapter in
-                                    Button {
-                                        readerRouter.open(
-                                            sourceKey: chapter.entry?.sourceKey ?? "",
-                                            entryURL: chapter.entry?.url,
-                                            kind: chapter.entry?.kind ?? .novel,
-                                            chapterURL: chapter.url,
-                                            chapterName: chapter.name
-                                        )
-                                    } label: {
-                                        UpdateRow(chapter: chapter)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
+                                    UpdateRow(
+                                        chapter: chapter,
+                                        onOpenEntry: {
+                                            if let entry = chapter.entry { path.append(entry) }
+                                        },
+                                        onOpenChapter: {
+                                            readerRouter.open(
+                                                sourceKey: chapter.entry?.sourceKey ?? "",
+                                                entryURL: chapter.entry?.url,
+                                                kind: chapter.entry?.kind ?? .novel,
+                                                chapterURL: chapter.url,
+                                                chapterName: chapter.name
+                                            )
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -82,6 +86,9 @@ struct UpdatesView: View {
                 }
             }
             .navigationTitle("Updates")
+            .navigationDestination(for: Entry.self) { entry in
+                NovelDetailView(entry: entry)
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     if !recentChapters.isEmpty {

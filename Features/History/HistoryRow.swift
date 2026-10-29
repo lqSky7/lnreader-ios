@@ -26,11 +26,7 @@ struct HistoryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onOpenEntry) {
-                cover
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(entry?.displayTitle ?? "entry")")
+            RowCoverButton(entry: entry, stacked: earlierCount > 0 && !isExpanded, action: onOpenEntry)
 
             HStack(spacing: 12) {
                 details
@@ -50,27 +46,6 @@ struct HistoryRow: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    /// A folded run shows its cover as a small stack, so the row reads as
-    /// more than one read before the pill is noticed.
-    private var cover: some View {
-        let shape = RoundedRectangle(cornerRadius: 6)
-        let stacked = earlierCount > 0 && !isExpanded
-        return NovelCoverView(
-            url: entry?.displayThumbnailURL,
-            aspectRatio: LayoutConstants.coverAspectRatio
-        )
-        .frame(width: 44, height: 63)
-        .clipShape(shape)
-        .background(alignment: .top) {
-            if stacked {
-                shape
-                    .fill(.quaternary)
-                    .frame(width: 36, height: 63)
-                    .offset(y: -4)
-            }
-        }
     }
 
     private var details: some View {

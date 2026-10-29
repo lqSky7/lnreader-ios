@@ -1334,7 +1334,7 @@ extension ReaderContent {
             }
         };
 
-        window.reportReadingPosition = function() {
+        window.reportReadingPosition = function(ignoreBottom) {
             if (!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollParagraph)) return;
             var paragraphs = window.getParagraphs();
             if (!paragraphs.length) return;
@@ -1344,7 +1344,11 @@ extension ReaderContent {
                 if (lastAttr) lastIndex = parseInt(lastAttr);
             }
             var root = document.scrollingElement || document.documentElement;
-            var atBottom = window.scrollY + window.innerHeight >= root.scrollHeight - 48;
+            // `ignoreBottom` is for the report taken when the chapter opens. A
+            // chapter that fits on one screen is "at the bottom" before the
+            // reader has read a word of it, so the shortcut below would record
+            // it as finished the moment it was opened.
+            var atBottom = !ignoreBottom && (window.scrollY + window.innerHeight >= root.scrollHeight - 48);
             var topIndex = -1;
             if (atBottom) {
                 topIndex = lastIndex;
@@ -1369,12 +1373,12 @@ extension ReaderContent {
             window.__scrollTimeout = setTimeout(window.reportReadingPosition, 300);
         });
 
-        // A chapter that fits on one screen never scrolls, so report it once as fully read.
+        // Record where the chapter was opened. This used to fire only for a
+        // chapter that fit on one screen, and reported it as fully read; the
+        // effect was that opening a short chapter completed it. Reporting the
+        // top paragraph instead leaves it in progress until it is actually read.
         window.addEventListener("load", function() {
-            setTimeout(function() {
-                var root = document.scrollingElement || document.documentElement;
-                if (root.scrollHeight <= window.innerHeight + 48 && !window.__restoreIndex) window.reportReadingPosition();
-            }, 800);
+            setTimeout(function() { window.reportReadingPosition(true); }, 800);
         });
 
         \(ReaderTTSJavaScript.interaction)

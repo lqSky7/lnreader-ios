@@ -381,6 +381,10 @@ struct BookAudioDownloadsView: View {
             }
 
             downloadControls
+
+            if !failedRecords.isEmpty {
+                retryAllButton
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -430,6 +434,35 @@ struct BookAudioDownloadsView: View {
                 .disabled(chapters.isEmpty)
             }
         }
+    }
+
+    /// Only failed renditions for this book. Paused ones are excluded: the user
+    /// stopped those on purpose, so retrying them is not what "retry all" means.
+    private var failedRecords: [TTSDownloadRecord] {
+        groups.values
+            .flatMap { $0 }
+            .filter { !$0.isAvailable && $0.state == "failed" }
+    }
+
+    /// Appears only when this book has something to retry, so the sheet does not
+    /// carry a permanently dead button.
+    private var retryAllButton: some View {
+        Button {
+            Haptics.shared.impact(.light, intensity: 0.8)
+            Task { await library.retryAllFailed(bookId: bookId) }
+        } label: {
+            Label(
+                failedRecords.count == 1 ? "Retry 1 failed chapter" : "Retry \(failedRecords.count) failed chapters",
+                systemImage: "arrow.clockwise"
+            )
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .disabled(preparing)
+        .accessibilityHint("Queues every failed narration for this book again")
     }
 
     private var downloadBlocked: Bool {
