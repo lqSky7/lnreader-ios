@@ -114,7 +114,7 @@ final class MangaFireSource: MangaSource {
         var lastPage = 1
         repeat {
             let response: ListResponse<ChapterDTO> = try await api("/titles/\(hid)/chapters", [
-                ("language", langCode), ("limit", "200"), ("order", "desc"),
+                ("language", langCode), ("limit", "200"), ("order", "asc"),
                 ("page", String(page)), ("sort", "number"),
             ])
             for item in response.items {

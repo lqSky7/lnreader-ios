@@ -355,11 +355,8 @@ struct NovelDetailView: View {
         }
     }
 
-    /// Newest first: by upload time, then by number (`ChapterOrder`).
-    ///
-    /// `sourceOrder` is whatever the source listed — MangaFire hands back
-    /// newest-first while most novel sources go oldest-first — so it cannot be
-    /// used to sort.
+    /// Newest first: the source's own order, reversed. Sources list oldest
+    /// first (`CatalogSource.chapters`), so a chapter fixed later keeps its place.
     private func rebuildOrderedChapters() {
         // Merge and hide by scanlator before ordering, so the list shows what
         // the user actually asked for.
@@ -368,7 +365,7 @@ struct NovelDetailView: View {
         let base = localEntry != nil
             ? allChapters.filter { !$0.hidden }
             : ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
-        let oldestFirst = ChapterOrder.ascending(base, key: \.orderKey)
+        let oldestFirst = base.sorted { $0.position < $1.position }
         orderedChapters = oldestFirst.reversed()
         resumeChapter = Self.resumeChapter(
             oldestFirst: oldestFirst,

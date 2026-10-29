@@ -524,12 +524,9 @@ struct ReaderView: View {
             var descriptor = FetchDescriptor<Chapter>(predicate: predicate, sortBy: [SortDescriptor(\.sourceOrder)])
             descriptor.relationshipKeyPathsForPrefetching = []
             if let fetched = try? modelContext.fetch(descriptor) {
-                // Previous/next follow the chapter list's order, not the source's.
-                // Hidden chapters do not exist for previous/next, except the one
-                // that is open.
-                self.cachedChapters = ChapterOrder.ascending(fetched.filter { !$0.hidden || $0.url == requestedPath }) {
-                    ChapterOrder.Key(date: $0.dateUpload, number: $0.chapterNumber, name: $0.name)
-                }
+                // Source order, oldest first. Hidden chapters do not exist for
+                // previous/next, except the one that is open.
+                self.cachedChapters = fetched.filter { !$0.hidden || $0.url == requestedPath }
             }
         }
         if let manifest = ttsManager.manifest, manifest.bookId == audioBookId, manifest.chapterId == currentChapterPath {

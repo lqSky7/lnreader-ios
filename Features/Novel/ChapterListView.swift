@@ -42,7 +42,7 @@ struct ChapterListView: View {
     private var directoryChapters: [ChapterDisplay] {
         // `visibleChapters` is already in reading order, newest first.
         let newestFirst = visibleChapters
-            ?? Array(ChapterOrder.ascending(allChapters.isEmpty ? chapters : allChapters, key: \.orderKey).reversed())
+            ?? (allChapters.isEmpty ? chapters : allChapters).sorted { $0.position > $1.position }
         return ascending ? Array(newestFirst.reversed()) : newestFirst
     }
 
@@ -241,8 +241,6 @@ struct ChapterDisplay: Identifiable, Hashable {
     /// MangaFire returns newest-first, most novel sources oldest-first, so
     /// `position` is not comparable across sources — the number is.
     let sortNumber: Double
-    /// Upload time, then numbers; see `ChapterOrder`.
-    let orderKey: ChapterOrder.Key
     let sourceKey: String
     let entryURL: String?
     /// Which reader opens this chapter. Needed because a browse result has no
@@ -275,7 +273,6 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.sortNumber = chapter.chapterNumber >= 0
             ? chapter.chapterNumber
             : Double((position ?? chapter.sourceOrder) + 1)
-        self.orderKey = ChapterOrder.Key(date: chapter.dateUpload, number: chapter.chapterNumber, name: chapter.name)
         self.sourceKey = chapter.entry?.sourceKey ?? ""
         self.entryURL = chapter.entry?.url
         self.kind = chapter.entry?.kind ?? .novel
@@ -305,7 +302,6 @@ struct ChapterDisplay: Identifiable, Hashable {
             ? sourceChapter.chapterNumber
             : ChapterRecognition.parseChapterNumber(sourceChapter.name)
         self.sortNumber = parsed >= 0 ? parsed : Double(position + 1)
-        self.orderKey = ChapterOrder.Key(date: sourceChapter.dateUpload, number: parsed, name: sourceChapter.name)
         self.sourceKey = sourceKey
         self.entryURL = entryURL
         self.kind = kind

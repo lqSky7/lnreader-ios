@@ -70,7 +70,9 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 - `Entry.lastReadAt` is a cached column (predicates cannot walk chapters → history).
   `Entry.lastReadAt` and `History.lastRead` refresh at most once a minute.
 - `Chapter.isDownloaded` is computed, never stored.
-- **Order chapters by number, never `sourceOrder`.** Sources disagree on what the index means.
+- **Order chapters by `sourceOrder`, never by number, date or title.** A source's `chapters()` returns
+  oldest first and the app trusts it (a chapter fixed later keeps its place); the list shows it
+  reversed, newest first. A source that lists newest-first reverses itself.
 - Manga sources return the whole chapter list; novels keep the windowed preview.
 - Scanlator rules live in UserDefaults keyed `sourceKey::url`. Hiding and priority are
   independent.
