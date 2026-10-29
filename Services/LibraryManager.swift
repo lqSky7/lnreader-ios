@@ -133,7 +133,10 @@ final class LibraryManager {
         into entry: Entry,
         context: ModelContext
     ) {
-        for (index, sourceChapter) in chapters.enumerated() {
+        // The boundary again: `sourceOrder` counts from the oldest chapter, so an
+        // entry added straight from a browse list stores the same order a sync
+        // would have written.
+        for (index, sourceChapter) in ChapterOrder.normalized(chapters).enumerated() {
             let number = sourceChapter.chapterNumber > -1
                 ? sourceChapter.chapterNumber
                 : ChapterRecognition.parseChapterNumber(sourceChapter.name, mangaTitle: entry.title)

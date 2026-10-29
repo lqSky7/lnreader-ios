@@ -38,7 +38,7 @@ compile_and_run_plain() {
 
 # The checks that take no arguments, in dependency order: the cheap layers
 # first, so a break in the foundation shows up before the expensive ones run.
-PLAIN_CHECKS="foundation schema chapter-sync page-pipeline scanlators \
+PLAIN_CHECKS="foundation schema chapter-sync chapter-order page-pipeline scanlators \
 reader-settings haptics filters sorts categories badges offline mihon-backup tts-contracts \
 sync migration"
 
@@ -50,7 +50,7 @@ No argument        list the checks
 all                run every check that takes no arguments
 <check>            run one check
 
-Checks: foundation schema chapter-sync page-pipeline scanlators reader-settings
+Checks: foundation schema chapter-sync chapter-order page-pipeline scanlators reader-settings
         haptics filters sorts categories badges offline mihon-backup tts-contracts
         sync migration native-comments player
 
@@ -101,10 +101,26 @@ run() {
         Services/Sources/SourceKey.swift \
         Services/Sources/SourceModels.swift \
         Services/Sources/ChapterRecognition.swift \
+        Services/ChapterOrder.swift \
         Services/Sources/ChapterSourceSync.swift \
         Services/ChapterVisibility.swift \
         Features/Novel/ScanlatorRules.swift \
         tests/V2ChapterSyncChecks.swift
+      ;;
+    chapter-order)
+      compile_and_run chapter-order \
+        Models/Schema/ContentKind.swift \
+        Models/Schema/EntryStatus.swift \
+        Models/Schema/UpdateStrategy.swift \
+        Models/Schema/DownloadState.swift \
+        Models/Schema/SchemaV1.swift \
+        Models/Schema/SchemaV2.swift \
+        Models/Schema/SchemaMigrationPlan.swift \
+        Models/UserProfile.swift \
+        Services/Sources/SourceKey.swift \
+        Services/Sources/SourceModels.swift \
+        Services/ChapterOrder.swift \
+        tests/ChapterOrderChecks.swift
       ;;
     migration)
       compile_and_run migration \
@@ -120,6 +136,7 @@ run() {
         Services/Sources/SourceModels.swift \
         Services/Sources/ChapterRecognition.swift \
         Services/Sources/ChapterSourceSync.swift \
+        Services/ChapterOrder.swift \
         Services/ChapterVisibility.swift \
         Features/Novel/ScanlatorRules.swift \
         Services/EntryMigration.swift \
@@ -192,6 +209,7 @@ run() {
         Services/Sources/SourceKey.swift \
         Services/Sources/SourceModels.swift \
         Services/LibraryBackup.swift \
+        Services/ChapterOrder.swift \
         Services/ChapterVisibility.swift \
         Features/Novel/ScanlatorRules.swift \
         Services/OfflineChapters.swift \
@@ -211,6 +229,8 @@ run() {
         Services/Sources/Native/NativeSourceIDs.swift \
         Services/Backup/ProtobufReader.swift \
         Services/Backup/MihonBackup.swift \
+        Services/Sources/SourceModels.swift \
+        Services/ChapterOrder.swift \
         Services/ChapterVisibility.swift \
         Features/Novel/ScanlatorRules.swift \
         Utilities/Gzip.swift \
@@ -235,8 +255,10 @@ run() {
         Models/Schema/SchemaMigrationPlan.swift \
         Models/UserProfile.swift \
         Services/Sources/SourceKey.swift \
+        Services/Sources/SourceModels.swift \
         Utilities/DateParsing.swift \
         Services/SyncApply.swift \
+        Services/ChapterOrder.swift \
         Services/ChapterVisibility.swift \
         Features/Novel/ScanlatorRules.swift \
         tests/SyncApplyChecks.swift

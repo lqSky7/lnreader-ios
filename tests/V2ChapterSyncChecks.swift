@@ -14,6 +14,7 @@ struct V2ChapterSyncChecks {
     static func main() throws {
         checkChapterRecognition()
         try checkMerge()
+        try checkNewestFirstSourceIsNormalized()
         try checkMissingChapterGuard()
         try checkReaddedChapterKeepsState()
         try checkTwinReads()
@@ -201,6 +202,38 @@ struct V2ChapterSyncChecks {
         precondition(fifth.added == 1)
         let parsed = entry.chapters.first { $0.url == "5" }
         precondition(parsed?.chapterNumber == 12, "number parsed from the title")
+    }
+
+    /// A source that lists newest-first must still store `sourceOrder` 0 = oldest,
+    /// or every screen that trusts it shows the book backwards.
+    private static func checkNewestFirstSourceIsNormalized() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let entry = Entry(kind: .manga, sourceKey: "mihon:2", url: "/manga/y", title: "Y")
+        context.insert(entry)
+
+        ChapterSourceSync.merge(
+            [
+                sourceChapter("5", "Chapter 5", number: 5),
+                sourceChapter("4", "Chapter 4", number: 4),
+                sourceChapter("3", "Chapter 3", number: 3),
+                sourceChapter("2", "Chapter 2", number: 2),
+                sourceChapter("1", "Chapter 1", number: 1),
+            ],
+            into: entry,
+            context: context
+        )
+        try context.save()
+
+        let byURL = Dictionary(entry.chapters.map { ($0.url, $0.sourceOrder) }, uniquingKeysWith: { first, _ in first })
+        precondition(byURL["1"] == 0, "chapter 1 is the oldest, got \(String(describing: byURL["1"]))")
+        precondition(byURL["5"] == 4, "chapter 5 is the newest, got \(String(describing: byURL["5"]))")
+
+        // What the list shows: newest first, chapter 5 at the top.
+        let newestFirst = ChapterOrder.newestFirst(entry.chapters).map(\.url)
+        precondition(newestFirst == ["5", "4", "3", "2", "1"], "newest first shows 5, 4, 3, 2, 1 — got \(newestFirst)")
+        precondition(ChapterOrder.oldestFirst(entry.chapters).map(\.url) == ["1", "2", "3", "4", "5"])
     }
 
     private static func checkMissingChapterGuard() throws {

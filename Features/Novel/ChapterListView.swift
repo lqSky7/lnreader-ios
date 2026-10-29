@@ -30,7 +30,7 @@ struct ChapterListView: View {
     @Binding var searchText: String
     /// When the list was last fetched, or that it is being fetched now.
     var fetchStatus: String? = nil
-    @AppStorage("chapters.ascending") private var ascending = false
+    @AppStorage(ChapterOrder.ascendingKey) private var ascending = false
     /// Colour from the open book's cover, when Settings › Appearance turns it on.
     @Environment(\.coverTint) private var coverTint
     @State private var showSearchField = false
@@ -39,18 +39,22 @@ struct ChapterListView: View {
     @FocusState private var searchFocused: Bool
 
     /// The whole list in the chosen order, built when the directory opens.
+    ///
+    /// `visibleChapters` arrives newest-first from the screen; `allChapters` may
+    /// be unsorted, and a browse result's `position` is the source's index. One
+    /// call sorts either, and applies the user's order once.
     private var directoryChapters: [ChapterDisplay] {
-        // `visibleChapters` is already in reading order, newest first.
-        let newestFirst = visibleChapters
-            ?? (allChapters.isEmpty ? chapters : allChapters).sorted { $0.position > $1.position }
-        return ascending ? Array(newestFirst.reversed()) : newestFirst
+        let source = visibleChapters ?? (allChapters.isEmpty ? chapters : allChapters)
+        return ChapterOrder.display(source, ascending: ascending)
     }
 
     private var isFiltered: Bool { selectedFilter != .all || !searchText.isEmpty }
     private var rangeDescription: String {
         if showsAllChapters { return "\(totalCount) chapters" }
         guard let first = chapters.first, let last = chapters.last else { return "No chapters" }
-        return "\(first.position + 1)–\(last.position + 1) of \(totalCount)"
+        // The window is newest-first, so `first` is the higher number.
+        let ends = (min(first.position, last.position) + 1, max(first.position, last.position) + 1)
+        return "\(ends.0)–\(ends.1) of \(totalCount)"
     }
 
     private var headerButtons: some View {
@@ -307,6 +311,13 @@ struct ChapterDisplay: Identifiable, Hashable {
         self.kind = kind
         self.hidden = false
     }
+}
+
+/// A row's `position` is its index in the source's list, `0` = oldest — the same
+/// invariant `ChapterOrder` keeps for a stored chapter's `sourceOrder`.
+extension ChapterDisplay: ChapterOrdered {
+    var orderIndex: Int { position }
+    var orderIdentity: String { path }
 }
 
 /// Bounded chapter pages keep navigation manageable even for very long novels.

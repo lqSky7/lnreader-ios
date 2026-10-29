@@ -81,7 +81,7 @@ final class ChapterDownloadManager {
             var lastOrder = FetchDescriptor<DownloadItem>(sortBy: [SortDescriptor(\.order, order: .reverse)])
             lastOrder.fetchLimit = 1
             var order = (try context.fetch(lastOrder)).first?.order ?? 0
-            for incoming in chapters.sorted(by: { $0.chapterNumber == $1.chapterNumber ? $0.sourceOrder < $1.sourceOrder : $0.chapterNumber < $1.chapterNumber }) {
+            for incoming in ChapterOrder.oldestFirst(chapters) {
                 guard let chapter = context.model(for: incoming.persistentModelID) as? Chapter,
                       chapter.entry?.isLocal == false else { continue }
                 if let item = chapter.downloadItem {
@@ -313,9 +313,9 @@ final class ChapterDownloadManager {
     /// The next `count` unread chapters that are not already downloaded, oldest first;
     /// `nil` means every unread one.
     func enqueueUnread(_ count: Int?, in entry: Entry) {
-        let candidates = entry.visibleChapters
-            .filter { !$0.read && !$0.isDownloaded }
-            .sorted { $0.chapterNumber == $1.chapterNumber ? $0.sourceOrder < $1.sourceOrder : $0.chapterNumber < $1.chapterNumber }
+        let candidates = ChapterOrder.oldestFirst(
+            entry.visibleChapters.filter { !$0.read && !$0.isDownloaded }
+        )
         enqueue(count.map { Array(candidates.prefix($0)) } ?? candidates)
     }
 

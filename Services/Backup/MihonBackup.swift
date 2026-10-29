@@ -362,12 +362,34 @@ enum MihonBackup {
         var byURL = Dictionary(entry.chapters.map { ($0.url, $0) }, uniquingKeysWith: { first, _ in first })
         var inserted = 0
 
+        // Mihon numbers `source_order` from the first chapter its source listed,
+        // and manga sources list newest first; this app numbers from the oldest.
+        // Normalising the imported list here is what stops a restored library
+        // from showing chapter 0, 1, 2 at the top with "Newest first" selected.
+        let imported = ChapterOrder.normalized(
+            manga.chapters
+                .filter { !$0.url.isEmpty }
+                .sorted { $0.sourceOrder < $1.sourceOrder }
+                .map {
+                    SourceChapter(
+                        url: $0.url,
+                        name: $0.name,
+                        chapterNumber: $0.number.isFinite ? Double($0.number) : -1,
+                        scanlator: $0.scanlator.isEmpty ? nil : $0.scanlator,
+                        dateUpload: $0.dateUpload > 0 ? date($0.dateUpload) : nil
+                    )
+                }
+        )
+        var order: [String: Int] = [:]
+        order.reserveCapacity(imported.count)
+        for (index, chapter) in imported.enumerated() { order[chapter.url] = index }
+
         for item in manga.chapters where !item.url.isEmpty && byURL[item.url] == nil {
             let chapter = SchemaV2.Chapter(
                 url: item.url,
                 name: item.name,
                 chapterNumber: item.number.isFinite ? Double(item.number) : -1,
-                sourceOrder: item.sourceOrder)
+                sourceOrder: order[item.url] ?? item.sourceOrder)
             context.insert(chapter)
             chapter.entry = entry
             chapter.scanlator = item.scanlator.isEmpty ? nil : item.scanlator

@@ -26,6 +26,8 @@ struct MangaReaderView: View {
     // Observed so a changed global default re-renders a series that follows it.
     @AppStorage(MangaReaderSettingsKey.readingMode) private var defaultModeRaw = MangaReadingMode.pager.rawValue
     @AppStorage(MangaReaderSettingsKey.direction) private var defaultDirectionRaw = MangaPagingDirection.leftToRight.rawValue
+    /// The chapter sheet's order, the same setting the detail screen writes.
+    @AppStorage(ChapterOrder.ascendingKey) private var chapterOrderAscending = false
 
     @State private var chapterURL: String
     @State private var chapterName: String
@@ -509,7 +511,7 @@ struct MangaReaderView: View {
             predicate: predicate,
             sortBy: [SortDescriptor(\.sourceOrder)]
         )
-        storedChapters = (try? modelContext.fetch(descriptor)) ?? []
+        storedChapters = ChapterOrder.oldestFirst((try? modelContext.fetch(descriptor)) ?? [])
         rebuildNavigable()
     }
 
@@ -521,7 +523,8 @@ struct MangaReaderView: View {
         defer { isLoadingChapters = false }
         do {
             let entry = SourceEntry(sourceKey: sourceKey, kind: .manga, url: entryURL, title: "")
-            sourceChapters = try await source.chapters(entry)
+            // The boundary: `navigable` is oldest-first from here on.
+            sourceChapters = ChapterOrder.normalized(try await source.chapters(entry))
             chapterSourceEntry = try? await source.details(entry)
             rebuildNavigable()
         } catch {
@@ -878,13 +881,15 @@ struct MangaReaderView: View {
 
     private var directoryChapters: [ChapterDisplay] {
         let stored = Dictionary(storedChapters.map { ($0.url, $0) }, uniquingKeysWith: { first, _ in first })
-        return navigableChapters.enumerated().map { index, chapter in
+        // `navigable` is oldest-first, so `position` is the reading index.
+        let rows = navigableChapters.enumerated().map { index, chapter in
             if let saved = stored[chapter.url] {
                 return ChapterDisplay(chapter: saved, position: index)
             }
             return ChapterDisplay(sourceChapter: chapter, position: index, sourceKey: sourceKey,
                                   entryURL: entryURL, kind: .manga)
         }
+        return ChapterOrder.display(rows, ascending: chapterOrderAscending)
     }
 
     private var navigableChapters: [SourceChapter] { navigable }

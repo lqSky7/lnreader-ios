@@ -50,10 +50,10 @@ struct NovelDetailView: View {
     /// The entry a migration produced, waiting for the sheet to finish closing.
     @State private var migratedInto: Entry?
     /// Chapter order for the detail list and the full directory (`ChapterListView` owns the menu).
-    @AppStorage("chapters.ascending") private var chaptersAscending = false
+    @AppStorage(ChapterOrder.ascendingKey) private var chaptersAscending = false
     @State private var navigateToChapter: ChapterDisplay? = nil
     @State private var allChapters: [ChapterDisplay] = []
-    /// `allChapters` after scanlator rules and number ordering.
+    /// `allChapters` after scanlator rules, in newest-first display order.
     ///
     /// Kept as state, not a computed property: the sort compares localized
     /// titles and the scanlator pass rebuilds the array, so recomputing it on
@@ -376,13 +376,7 @@ struct NovelDetailView: View {
                     print("⚠️ Failed to fetch chapters on background context: \(error)")
                     await MainActor.run {
                         let mapped = localEntry.chapters.map { ChapterDisplay(chapter: $0) }
-                        self.allChapters = mapped.sorted { lhs, rhs in
-                            if lhs.position != rhs.position { return lhs.position < rhs.position }
-                            if let num1 = lhs.chapterNumber, let num2 = rhs.chapterNumber {
-                                return num1 < num2
-                            }
-                            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                        }
+                        self.allChapters = ChapterOrder.oldestFirst(mapped)
                         self.rebuildOrderedChapters()
                     }
                 }
@@ -403,8 +397,12 @@ struct NovelDetailView: View {
         }
     }
 
-    /// Newest first: the source's own order, reversed. Sources list oldest
-    /// first (`CatalogSource.chapters`), so a chapter fixed later keeps its place.
+    /// Newest first: the source's own order, reversed.
+    ///
+    /// Sources list oldest first (`CatalogSource.chapters`, enforced by
+    /// `ChapterOrder.normalized`), so `sourceOrder` counts from the oldest
+    /// chapter and the list is that, reversed. `ChapterOrder` is the only place
+    /// that decides this; the screen never sorts chapters itself.
     private func rebuildOrderedChapters() {
         // Merge and hide by scanlator before ordering, so the list shows what
         // the user actually asked for.
@@ -413,8 +411,8 @@ struct NovelDetailView: View {
         let base = localEntry != nil
             ? allChapters.filter { !$0.hidden }
             : ScanlatorRules.apply(scanlatorSettings.value, to: allChapters)
-        let oldestFirst = base.sorted { $0.position < $1.position }
-        orderedChapters = oldestFirst.reversed()
+        let oldestFirst = ChapterOrder.oldestFirst(base)
+        orderedChapters = ChapterOrder.newestFirst(base)
         resumeChapter = Self.resumeChapter(
             oldestFirst: oldestFirst,
             lastOpened: lastOpenedPath.flatMap { path in allChapters.first { $0.path == path } }
@@ -595,7 +593,8 @@ struct NovelDetailView: View {
             let chapters = try await pendingChapters
 
             details = fetchedDetails
-            sourceChapters = chapters
+            // The boundary: a source may list newest-first, `sourceOrder` may not.
+            sourceChapters = ChapterOrder.normalized(chapters)
             fetchedAt = .now
             if let localEntry {
                 libraryManager.applyUpdate(localEntry, details: fetchedDetails, chapters: chapters, context: modelContext)

@@ -70,9 +70,14 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
 - `Entry.lastReadAt` is a cached column (predicates cannot walk chapters → history).
   `Entry.lastReadAt` and `History.lastRead` refresh at most once a minute.
 - `Chapter.isDownloaded` is computed, never stored.
-- **Order chapters by `sourceOrder`, never by number, date or title.** A source's `chapters()` returns
-  oldest first and the app trusts it (a chapter fixed later keeps its place); the list shows it
-  reversed, newest first. A source that lists newest-first reverses itself.
+- **Chapter order lives in `Services/ChapterOrder.swift`; do not sort chapters inline.** One
+  invariant: `sourceOrder` 0 is the **oldest** chapter. `ChapterOrder.normalized` enforces it at
+  the boundary (a source's list is reversed once if it counts down — numbers decide, dates when
+  the numbers are unusable), `oldestFirst` / `newestFirst` are the only sorts, and
+  `display(_:ascending:)` is the only place the user's `chapters.ascending` setting is applied.
+  Nine call sites used to sort for themselves and disagreed about which end was newest, so the
+  list could show chapter 0, 1, 2 at the top with "Newest first" selected. A new consumer calls
+  this file; it does not write its own `.sorted`.
 - Manga sources return the whole chapter list; novels keep the windowed preview.
 - Scanlator rules live in UserDefaults keyed `sourceKey::url`. Hiding and priority are
   independent.

@@ -8,6 +8,8 @@ struct ReaderChapterListSheet: View {
     let onDismiss: () -> Void
     @State private var chapters: [ChapterDisplay] = []
     @State private var chapterByPath: [String: Chapter] = [:]
+    /// The same setting the detail screen's menu writes.
+    @AppStorage(ChapterOrder.ascendingKey) private var ascending = false
 
     var body: some View {
         ChapterDirectoryView(entry: entry, chapters: chapters, sourceKey: entry?.sourceKey ?? "",
@@ -21,7 +23,10 @@ struct ReaderChapterListSheet: View {
     }
 
     private func load() {
-        let sorted = entry?.visibleChapters.sorted { $0.sourceOrder < $1.sourceOrder } ?? []
+        // `visibleChapters` is a relationship, so its order is whatever the store
+        // hands back. This sheet used to sort it oldest-first and ignore the
+        // setting, which is why it disagreed with the list behind it.
+        let sorted = ChapterOrder.display(entry?.visibleChapters ?? [], ascending: ascending)
         chapters = sorted.map { ChapterDisplay(chapter: $0) }
         chapterByPath = Dictionary(sorted.map { ($0.url, $0) }, uniquingKeysWith: { first, _ in first })
     }

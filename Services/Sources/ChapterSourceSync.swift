@@ -24,7 +24,8 @@ enum ChapterSourceSync {
     /// Merge `incoming` into `entry.chapters`.
     ///
     /// Rules:
-    /// - Chapters match by URL. The incoming list's order becomes `sourceOrder`.
+    /// - Chapters match by URL. The incoming list's order, normalised to
+    ///   oldest-first (`ChapterOrder.normalized`), becomes `sourceOrder`.
     /// - A chapter the source no longer lists is deleted **only** when the user
     ///   has no stake in it: unread, unbookmarked and without history. Deleting
     ///   those would throw away reading progress for a chapter the site merely
@@ -42,13 +43,18 @@ enum ChapterSourceSync {
     ) -> ChapterSyncResult {
         var result = ChapterSyncResult()
 
+        // One boundary for a source's list: `ChapterOrder` puts it oldest-first,
+        // whatever direction the source counted in, so the index written below
+        // means the same thing for every source.
+        let ordered = ChapterOrder.normalized(incoming)
+
         // Dedupe the incoming list: sources occasionally repeat a chapter URL,
         // and the first occurrence is the one the source itself lists first.
         var seen = Set<String>()
         var addedChapters: [Chapter] = []
         var unique: [SourceChapter] = []
-        unique.reserveCapacity(incoming.count)
-        for chapter in incoming where !chapter.url.isEmpty {
+        unique.reserveCapacity(ordered.count)
+        for chapter in ordered where !chapter.url.isEmpty {
             if seen.insert(chapter.url).inserted {
                 unique.append(chapter)
             }

@@ -44,8 +44,9 @@ protocol CatalogSource: Identifiable, Sendable {
 
     /// Full metadata for one entry.
     func details(_ entry: SourceEntry) async throws -> SourceEntry
-    /// Chapter list, oldest first. The app trusts this order and never re-sorts it,
-    /// so a source that lists newest-first reverses it here.
+    /// Chapter list, oldest first. `ChapterOrder.normalized` fixes up a source
+    /// that lists newest-first before the order is stored, so a source may hand
+    /// back either direction; see `Services/ChapterOrder.swift`.
     func chapters(_ entry: SourceEntry) async throws -> [SourceChapter]
 }
 

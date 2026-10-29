@@ -38,7 +38,7 @@ enum ChapterVisibility {
         let preference = preference ?? self.preference(for: entry)
         // Same order the chapter list is built in, so a tie between two
         // scanlators of equal rank resolves the same way everywhere.
-        let chapters = entry.chapters.sorted { $0.sourceOrder < $1.sourceOrder }
+        let chapters = ChapterOrder.oldestFirst(entry.chapters)
         var visible = Set(chapters.indices)
         if preference.hasActiveRules {
             let items = chapters.map {
