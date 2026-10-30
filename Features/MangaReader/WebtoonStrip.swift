@@ -163,20 +163,53 @@ final class WebtoonViewController: UIViewController,
 
     // MARK: Data
 
+    /// Segments the reader asked for whose leading chapters are still on the
+    /// strip, waiting for it to stop moving (`applyDeferredTrim`).
+    private var deferredSegments: [WebtoonSegment]?
+
     func update(segments newSegments: [WebtoonSegment]) {
-        let same = newSegments.count == segments.count && zip(newSegments, segments).allSatisfy { new, old in
-            new.id == old.id && new.nextTitle == old.nextTitle && new.pages.count == old.pages.count
-                && zip(new.pages, old.pages).allSatisfy { $0.url == $1.url }
+        let dropped = StripWindow.leadingDrop(oldCount: segments.count, newCount: newSegments.count) {
+            Self.same(segments[$0], newSegments[$1])
         }
-        guard !same else { return }
-        // A chapter added at the end leaves every existing row where it was, so
-        // only the new rows are inserted; reloading all of them mid-scroll hitches.
-        let appended = newSegments.count > segments.count && !segments.isEmpty
-            && zip(newSegments, segments).allSatisfy { new, old in
-                new.id == old.id && new.nextTitle == old.nextTitle && new.pages.count == old.pages.count
-                    && zip(new.pages, old.pages).allSatisfy { $0.url == $1.url }
-            }
-        let oldCount = items.count
+        // Removing rows above the screen shifts the offset under the finger and
+        // would cut a fling short; it waits until the strip is at rest. Anything
+        // appended meanwhile goes in now, behind the rows still waiting to go.
+        if let dropped, dropped > 0, isViewLoaded, isMoving {
+            deferredSegments = newSegments
+            apply(Array(segments.prefix(dropped)) + newSegments, dropped: 0)
+            return
+        }
+        deferredSegments = nil
+        apply(newSegments, dropped: dropped)
+    }
+
+    private static func same(_ a: WebtoonSegment, _ b: WebtoonSegment) -> Bool {
+        a.id == b.id && a.nextTitle == b.nextTitle && a.pages.count == b.pages.count
+            && zip(a.pages, b.pages).allSatisfy { $0.url == $1.url }
+    }
+
+    private var isMoving: Bool {
+        collectionView.isTracking || collectionView.isDragging || collectionView.isDecelerating
+    }
+
+    private func applyDeferredTrim() {
+        guard let pending = deferredSegments, !isMoving else { return }
+        update(segments: pending)
+    }
+
+    /// - Parameter dropped: segments removed from the front, the rest kept or
+    ///   appended; `nil` when the change is something else.
+    private func apply(_ newSegments: [WebtoonSegment], dropped: Int?) {
+        let unchanged = dropped == 0 && newSegments.count == segments.count
+        guard !unchanged else { return }
+        let oldItems = items
+        let removedRows = dropped.map { count in
+            oldItems.prefix { item in
+                switch item {
+                case let .page(segment, _, _), let .divider(segment, _, _): segment < count
+                }
+            }.count
+        } ?? 0
         segments = newSegments
         var built: [WebtoonItem] = []
         var lookup: [String: [Int]] = [:]
@@ -191,18 +224,42 @@ final class WebtoonViewController: UIViewController,
         }
         items = built
         indexByURL = lookup
+        // Row numbers waiting on a height, and the last reported row, follow
+        // the rows they meant.
+        pendingRatios = Set(pendingRatios.map { $0 - removedRows }.filter { $0 >= 0 && $0 < built.count })
+        lastReported = max(lastReported - removedRows, 0)
         guard isViewLoaded else { return }
-        guard appended, built.count > oldCount else { return collectionView.reloadData() }
-        // The divider that was last stops showing its spinner.
-        let refreshed = items[..<oldCount].indices.last.flatMap { index -> IndexPath? in
-            if case .divider = items[index] { return IndexPath(item: index, section: 0) }
-            return nil
+        let kept = oldItems.count - removedRows
+        guard dropped != nil, !segments.isEmpty, kept > 0, built.count >= kept else {
+            return collectionView.reloadData()
         }
+
+        // Whatever is above the first kept row goes, and the offset moves up by
+        // the same height, so the page on screen stays where it is.
+        let removedHeight = removedRows > 0
+            ? layout.layoutAttributesForItem(at: IndexPath(item: removedRows, section: 0))?.frame.minY ?? 0
+            : 0
+        let target = collectionView.contentOffset.y - removedHeight
+        // The divider that was last stops showing its spinner.
+        let refreshed = built.count > kept ? oldItems.indices.last.flatMap { index -> IndexPath? in
+            if case .divider = oldItems[index] { return IndexPath(item: index, section: 0) }
+            return nil
+        } : nil
         UIView.performWithoutAnimation {
+            // Indices in one batch: deletes and reloads against the old rows,
+            // inserts against the new.
             collectionView.performBatchUpdates {
-                collectionView.insertItems(at: (oldCount..<built.count).map { IndexPath(item: $0, section: 0) })
+                if removedRows > 0 {
+                    collectionView.deleteItems(at: (0..<removedRows).map { IndexPath(item: $0, section: 0) })
+                }
+                if built.count > kept {
+                    collectionView.insertItems(at: (kept..<built.count).map { IndexPath(item: $0, section: 0) })
+                }
                 if let refreshed { collectionView.reloadItems(at: [refreshed]) }
             }
+        }
+        if removedRows > 0 {
+            collectionView.contentOffset.y = max(target, 0)
         }
     }
 
@@ -420,6 +477,15 @@ final class WebtoonViewController: UIViewController,
             onEndCard?(endSegment)
         }
     }
+
+    // A trim held back while the strip moved goes in once it stops.
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { applyDeferredTrim() }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { applyDeferredTrim() }
+
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { applyDeferredTrim() }
 
     // MARK: Haptics
 

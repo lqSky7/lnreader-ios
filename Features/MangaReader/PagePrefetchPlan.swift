@@ -56,3 +56,37 @@ enum PagePrefetchPlan {
         return current >= pageCount - threshold
     }
 }
+
+/// How many stitched chapters the webtoon strip keeps.
+///
+/// The strip appends each chapter it scrolls into and, without a window, never
+/// lets one go. Every page whose height becomes known re-measures every row of
+/// the flow layout, so a long session got slower with each chapter read. The
+/// strip keeps the open chapter, a few behind it for scrolling back, and
+/// whatever has been fetched ahead.
+enum StripWindow {
+
+    /// Chapters kept above the open one.
+    static let behind = 1
+
+    /// Index of the first segment to keep when segment `current` is the open one.
+    static func firstKept(current: Int, behind: Int = StripWindow.behind) -> Int {
+        max(0, current - max(behind, 0))
+    }
+
+    /// How many segments were dropped from the front of `old` to give `new`,
+    /// when that is all that happened apart from segments appended at the end.
+    /// `nil` when the change is anything else (a reorder, an edit, a new strip),
+    /// which the strip answers with a full reload.
+    ///
+    /// - Parameter same: whether `old[i]` and `new[j]` are the same segment.
+    static func leadingDrop(oldCount: Int, newCount: Int, same: (_ old: Int, _ new: Int) -> Bool) -> Int? {
+        guard oldCount > 0, newCount > 0 else { return nil }
+        for dropped in 0..<oldCount {
+            let kept = oldCount - dropped
+            guard kept <= newCount else { continue }
+            if (0..<kept).allSatisfy({ same(dropped + $0, $0) }) { return dropped }
+        }
+        return nil
+    }
+}

@@ -16,12 +16,13 @@ struct V2PagePipelineChecks {
         checkPrefetchOrder()
         checkPrefetchEdges()
         checkNextChapterTrigger()
+        checkStripWindow()
         try await checkLoaderDeduplicates()
         try await checkLoaderServesFromCache()
         try await checkLoaderReadsFileURLs()
         checkMangaProgress()
         print("PASS: chapter cache (round-trip, LRU eviction, hit refresh, removal), "
-            + "page prefetch (order, clamping, next-chapter trigger), "
+            + "page prefetch (order, clamping, next-chapter trigger), webtoon chapter window, "
             + "loader (de-duplication, cache hits, file URLs) and manga progress")
     }
 
@@ -162,6 +163,26 @@ struct V2PagePipelineChecks {
         precondition(PagePrefetchPlan.shouldPreloadNextChapter(current: 15, pageCount: 20))
         precondition(PagePrefetchPlan.shouldPreloadNextChapter(current: 19, pageCount: 20))
         precondition(!PagePrefetchPlan.shouldPreloadNextChapter(current: 0, pageCount: 0))
+    }
+
+    /// The webtoon strip's chapter window: what it keeps, and how it tells a
+    /// trim of old chapters from a change that needs a full reload.
+    private static func checkStripWindow() {
+        precondition(StripWindow.firstKept(current: 0) == 0)
+        precondition(StripWindow.firstKept(current: 1) == 0, "one chapter behind stays")
+        precondition(StripWindow.firstKept(current: 4) == 3)
+
+        func drop(_ old: [String], _ new: [String]) -> Int? {
+            StripWindow.leadingDrop(oldCount: old.count, newCount: new.count) { old[$0] == new[$1] }
+        }
+        precondition(drop(["a", "b"], ["a", "b"]) == 0, "unchanged")
+        precondition(drop(["a", "b"], ["a", "b", "c"]) == 0, "appended")
+        precondition(drop(["a", "b", "c"], ["b", "c"]) == 1, "trimmed")
+        precondition(drop(["a", "b", "c"], ["c", "d"]) == 2, "trimmed and appended")
+        precondition(drop(["a", "b"], ["x"]) == nil, "a new strip reloads")
+        precondition(drop(["a", "b", "c"], ["a", "x", "c"]) == nil, "a changed chapter reloads")
+        precondition(drop(["a", "b"], ["a"]) == nil, "a dropped tail reloads")
+        precondition(drop([], ["a"]) == nil, "the first fill reloads")
     }
 
     // MARK: - Loader

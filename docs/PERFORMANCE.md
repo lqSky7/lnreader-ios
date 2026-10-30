@@ -1,6 +1,6 @@
 # Performance
 
-**Updated** 2026-10-25 · **Branch** `main`
+**Updated** 2026-10-31 · **Branch** `main`
 
 The app was slow in a specific, measurable way: the library and the reader both
 did per-row work that resolved SwiftData relationships, and the reader wrote to
@@ -136,6 +136,14 @@ Found by reading the code, not by a trace — verify on a Release device build.
   so the GPU minified it every frame. It is now tagged with the display scale.
 - **A drag gesture covered the whole strip** for the right-edge dismiss swipe. It is now a
   `UIScreenEdgePanGestureRecognizer` that only exists at the edge.
+- **The webtoon strip grew for the whole session.** Each chapter scrolled into was stitched
+  on and never removed, and every page whose height became known invalidated the flow
+  layout's delegate metrics, which re-measures *every* row. Ten chapters in, each new page
+  re-measured 600+ rows on the main thread, so the strip got choppier the longer a session
+  ran. The strip now keeps the open chapter and one behind it (`StripWindow`, checked by
+  `check.sh page-pipeline`); older rows are deleted once the strip is at rest, with the
+  offset moved by their height so the page on screen does not move. Not yet verified on a
+  device.
 - **Not done:** `ChapterCache.data` still rewrites the file's modification date on every read.
   Throttling it breaks the cache's LRU contract (checked by `check.sh page-pipeline`), so it
   stays unless a trace shows it matters.
@@ -152,10 +160,28 @@ Ordered by expected payoff on device, not yet measured:
 2. **`ChapterRow.audioCount`** filters the whole TTS record list per row, and
    every row observes `TTSOfflineLibrary`.
 3. **`updateLibrary` holds the main actor** while merging results, one entry at a
-   time. The network part is already off-main; the merge is not.
-4. **`SourceManager` / plugin restore at launch** runs on the main actor in
+   time. The network part is already off-main; the merge is not. This matters most for
+   the background refresh: `LibraryMaintenance.register()` hands its BG tasks the main
+   queue and `handle()` is `@MainActor`, so a refresh that iOS starts around unlock keeps
+   merging (and saving every 10 entries, re-running every `@Query`, including the
+   library grid under the reader's `fullScreenCover`) while the user reads. It ends by
+   fetching **every** `Chapter` in the store and faulting `entry` on each one to build
+   the notification. Suspected cause of a reader that is choppy only sometimes after
+   unlock; unconfirmed. The fix is a background `ModelContext` for the merge and a
+   `fetchCount` (or a predicate on `dateFetch`) for the notification. The download
+   worker that `ContentView` resumes on `.active` has the same shape on a smaller
+   scale: a full `DownloadItem` fetch and a save per chapter on the main actor.
+4. **The scroll haptics can block the main thread after a resume.** The `CHHapticEngine`
+   stops when the app is suspended (and possibly on idle, with `isAutoShutdownEnabled`).
+   The next scroll tick calls `readyEngine()`, which calls the synchronous
+   `engine.start()` on the main thread. If that throws, `engineNeedsStart` stays set and
+   every later tick, up to dozens a second, blocks on it again. The fix is
+   `start(completionHandler:)`, with ticks skipped (not retried) until it reports
+   running, and a back-off after a failure. Test on device: if the reader is choppy,
+   turning scroll haptics off should smooth it at once.
+5. **`SourceManager` / plugin restore at launch** runs on the main actor in
    `ContentView.task`, ahead of the first frame's work.
-5. **MangaFire `vrf`** is recomputed per request; check whether the extension
+6. **MangaFire `vrf`** is recomputed per request; check whether the extension
    caches it.
 
 ## Rules that came out of this
