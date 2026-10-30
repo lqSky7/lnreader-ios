@@ -194,7 +194,7 @@ final class ChapterDownloadManager {
         var files: [String] = []
         if entry.kind == .novel {
             guard let source = sources.novelSource(forKey: entry.sourceKey) else { throw CocoaError(.fileNoSuchFile) }
-            try checkSpace(at: root)
+            try await Self.checkSpace(at: root)
             let html = try await source.chapterHTML(sourceChapter)
             try Task.checkCancellation()
             guard !html.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
@@ -205,9 +205,12 @@ final class ChapterDownloadManager {
             guard let source = sources.mangaSource(forKey: entry.sourceKey) else { throw CocoaError(.fileNoSuchFile) }
             let pages = try await source.pages(sourceChapter)
             guard !pages.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+            // Once per chapter: the 200 MB margin covers a chapter, and a full
+            // disk still fails the write below.
+            try await Self.checkSpace(at: root)
             let loader = PageLoader()
             for (index, page) in pages.enumerated() {
-                try Task.checkCancellation(); try checkSpace(at: root)
+                try Task.checkCancellation()
                 // Resolve lazy image URLs and preserve source-specific request headers.
                 let request = try await source.imageRequest(page)
                 guard let url = request.url else { throw CocoaError(.fileReadCorruptFile) }
@@ -230,9 +233,15 @@ final class ChapterDownloadManager {
         let manifest = OfflineChapters.Manifest(sourceKey: entry.sourceKey, entryURL: entry.url, chapterURL: chapter.url, kind: entry.kind, files: files)
         try JSONEncoder().encode(manifest).write(to: folder.appendingPathComponent("manifest.json"), options: .atomic)
     }
-    private func checkSpace(at url: URL) throws {
-        let free = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage ?? 0
-        guard free > 200 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
+    /// Off the main actor: the "important usage" capacity is a synchronous call
+    /// to the system's storage service, about 45 ms. Made once per page on the
+    /// main actor, it stalled the reader four times a second while a chapter
+    /// downloaded behind it.
+    private nonisolated static func checkSpace(at url: URL) async throws {
+        try await Task.detached(priority: .utility) {
+            let free = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage ?? 0
+            guard free > 200 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
+        }.value
     }
 
     // MARK: Reading-driven automation

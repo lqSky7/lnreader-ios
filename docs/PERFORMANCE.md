@@ -136,14 +136,25 @@ Found by reading the code, not by a trace — verify on a Release device build.
   so the GPU minified it every frame. It is now tagged with the display scale.
 - **A drag gesture covered the whole strip** for the right-edge dismiss swipe. It is now a
   `UIScreenEdgePanGestureRecognizer` that only exists at the edge.
+- **A chapter download stalled the reader four times a second.** Found in a device trace
+  (Animation Hitches, iPhone 17, 2026-10-31): smooth for 20 s, then once a download
+  started, 50–65 % of main-thread samples were in `ChapterDownloadManager.checkSpace`.
+  It read `volumeAvailableCapacityForImportantUsage`, a synchronous call to the system's
+  storage service of about 45 ms, once per page, on the main actor (the worker is
+  `@MainActor`). That was a 45 ms stall every ~250 ms while reading. It explains why the
+  reader was smooth on first open and choppy only *sometimes*: the queue resumes on
+  `.active` (unlock, return from the app switcher) and download-ahead queues the next
+  chapters when one is opened. The check now runs off the main actor, once per chapter.
+  Rule: no storage-capacity query on the main actor, ever.
 - **The webtoon strip grew for the whole session.** Each chapter scrolled into was stitched
   on and never removed, and every page whose height became known invalidated the flow
   layout's delegate metrics, which re-measures *every* row. Ten chapters in, each new page
   re-measured 600+ rows on the main thread, so the strip got choppier the longer a session
   ran. The strip now keeps the open chapter and one behind it (`StripWindow`, checked by
   `check.sh page-pipeline`); older rows are deleted once the strip is at rest, with the
-  offset moved by their height so the page on screen does not move. Not yet verified on a
-  device.
+  offset moved by their height so the page on screen does not move. This was a suspect
+  for the choppiness above before the trace showed the download; it is a real cost in a
+  long session but was not that cause. Not yet verified on a device.
 - **Not done:** `ChapterCache.data` still rewrites the file's modification date on every read.
   Throttling it breaks the cache's LRU contract (checked by `check.sh page-pipeline`), so it
   stays unless a trace shows it matters.
