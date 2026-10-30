@@ -68,6 +68,17 @@ per source that has moved, so a port cannot rot unnoticed.
 gh api "repos/<owner>/<repo>/commits?path=<path>&sha=<branch>&per_page=1" --jq '.[0] | .sha, .commit.committer.date'
 ```
 
+The sha must be a commit that touched `path`, which is what that query returns — not the
+repository HEAD from `git rev-parse HEAD`. A repo-wide sha never equals the path's last commit,
+so the check would report drift immediately and then call the baseline vanished.
+
+`--bump <id>` does the same lookup and writes both fields, so adding an entry by hand is only
+needed the first time:
+
+```sh
+python3 .github/scripts/check_source_drift.py --bump weebcentral
+```
+
 Add to `sources`:
 
 ```json
@@ -93,8 +104,13 @@ When you have ported a change, record the new commit — the open issue closes i
 next run:
 
 ```sh
-python3 .github/scripts/check_source_drift.py --bump weebcentral <sha>
+python3 .github/scripts/check_source_drift.py --bump weebcentral
+python3 .github/scripts/check_source_drift.py --bump weebcentral <sha>   # pin to a commit
 ```
 
+Either form stores the newest commit touching the source's `path` at or before that point, so a
+short sha from `git log` or the repo HEAD is resolved rather than written down as given.
+
 `--dry-run` reports what would happen without touching issues; `--only <id>` checks one entry.
-Locally it needs `GH_TOKEN` (any token with `issues: write`) and `GITHUB_REPOSITORY`.
+Locally a check needs `GH_TOKEN` (any token with `issues: write`) and `GITHUB_REPOSITORY`;
+`--bump` needs neither and runs unauthenticated.

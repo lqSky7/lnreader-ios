@@ -1,5 +1,5 @@
 {
-  "$comment": "Upstream commits the native sources were ported from. `ported_sha` is the upstream commit the Swift file currently matches; the source-drift workflow files an issue when upstream moves past it. Bump it only when the port is actually up to date (python3 .github/scripts/check_source_drift.py --bump <id> <sha>).",
+  "$comment": "Upstream commits the native sources were ported from. `ported_sha` is the last upstream commit that touched the source's `path` and that the Swift file matches; the source-drift workflow files an issue when upstream moves past it. Bump it only when the port is actually up to date (python3 .github/scripts/check_source_drift.py --bump <id> [<sha>], which resolves the path commit for you).",
   "sources": [
     {
       "id": "allmanga",

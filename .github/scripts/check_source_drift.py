@@ -10,10 +10,11 @@ it closes itself once the baseline is bumped to match upstream. Runs from
     python3 .github/scripts/check_source_drift.py             # check, open/refresh/close issues
     python3 .github/scripts/check_source_drift.py --dry-run    # print, touch nothing
     python3 .github/scripts/check_source_drift.py --only weebcentral
+    python3 .github/scripts/check_source_drift.py --bump weebcentral         # branch head
     python3 .github/scripts/check_source_drift.py --bump weebcentral <sha>
 
-Needs GH_TOKEN with issues:write on this repo. In Actions it is the app token, or GITHUB_TOKEN
-when the app is not configured yet.
+Needs GH_TOKEN with issues:write on this repo to touch issues. In Actions it is the app token,
+or GITHUB_TOKEN when the app is not configured yet. `--bump` also works unauthenticated.
 """
 
 from __future__ import annotations
@@ -27,7 +28,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date
 from pathlib import Path
 
 API = os.environ.get("GITHUB_API_URL", "https://api.github.com")
@@ -49,13 +49,19 @@ class ApiError(RuntimeError):
 
 
 def api(method: str, path: str, body: dict | None = None):
-    """Call the REST API, retrying rate limits and 5xx. `path` may be absolute."""
+    """Call the REST API, retrying rate limits and 5xx. `path` may be absolute.
+
+    The Authorization header is only sent when there is a token: `Bearer ` with nothing after
+    it is a 401, while no header at all is a valid guest request (60/hour) — which is what
+    `--bump` on a laptop without GH_TOKEN relies on.
+    """
     url = path if path.startswith("http") else f"{API}{path}"
     payload = json.dumps(body).encode() if body is not None else None
     for attempt in range(4):
         request = urllib.request.Request(url, data=payload, method=method)
         request.add_header("Accept", "application/vnd.github+json")
-        request.add_header("Authorization", f"Bearer {TOKEN}")
+        if TOKEN:
+            request.add_header("Authorization", f"Bearer {TOKEN}")
         request.add_header("User-Agent", "lnreader-source-drift")
         request.add_header("X-GitHub-Api-Version", "2022-11-28")
         if payload is not None:
@@ -66,9 +72,13 @@ def api(method: str, path: str, body: dict | None = None):
                 return json.loads(raw) if raw else None
         except urllib.error.HTTPError as error:
             detail = error.read().decode(errors="replace")[:400]
-            exhausted = error.headers.get("x-ratelimit-remaining") == "0"
-            if attempt < 3 and (error.code >= 500 or error.code == 429 or exhausted):
-                wait = error.headers.get("Retry-After")
+            wait = error.headers.get("Retry-After")
+            # A secondary limit is a 403 with Retry-After and the primary budget untouched, so
+            # `remaining == 0` alone misses it. A 403 without either is a real permission error.
+            limited = error.headers.get("x-ratelimit-remaining") == "0" or bool(wait)
+            if attempt < 3 and (
+                error.code >= 500 or error.code == 429 or (error.code == 403 and limited)
+            ):
                 time.sleep(min(int(wait), 30) if wait and wait.isdigit() else 2**attempt)
                 continue
             raise ApiError(f"{method} {url} -> {error.code} {detail}") from None
@@ -83,15 +93,18 @@ def api(method: str, path: str, body: dict | None = None):
 # --------------------------------------------------------------------------- upstream
 
 
-def last_commit(source: dict) -> dict:
-    """The newest commit touching the upstream path. Raises if the path is gone."""
-    query = urllib.parse.urlencode(
-        {"path": source["path"], "sha": source["branch"], "per_page": 1}
-    )
+def path_head(source: dict, ref: str) -> dict:
+    """The newest commit touching the upstream path at `ref`. Raises if the path is gone."""
+    query = urllib.parse.urlencode({"path": source["path"], "sha": ref, "per_page": 1})
     commits = api("GET", f"/repos/{source['repo']}/commits?{query}")
     if not commits:
-        raise ApiError(f"{source['repo']} has no commits for {source['path']}")
+        raise ApiError(f"{source['repo']} has no commits for {source['path']} at {ref}")
     return commits[0]
+
+
+def last_commit(source: dict) -> dict:
+    """The newest commit touching the upstream path on the source's branch."""
+    return path_head(source, source["branch"])
 
 
 def path_commits(source: dict, head: str, pages: int = 3) -> tuple[int | None, list[dict]]:
@@ -168,9 +181,17 @@ def issue_body(source: dict, head: dict, behind: int | None, commits: list[dict]
     count = (
         f"{behind} commit{'s' if behind != 1 else ''}"
         if behind is not None
-        else "unknown — the baseline is no longer in upstream history (force-push?)"
+        else "unknown — baseline not in the path history"
     )
     files = "\n".join(f"- `{name}`" for name in source["files"])
+
+    hint = ""
+    if behind is None:
+        hint = (
+            f"\n`{short(base)}` is not in the commits that touched this path: either upstream "
+            "rewrote history, or `ported_sha` records a repo-wide commit rather than the last "
+            f"one to touch `{path}`. `--bump {source['id']}` re-records it either way.\n"
+        )
 
     if commits:
         listed = commits[:15]
@@ -195,7 +216,7 @@ def issue_body(source: dict, head: dict, behind: int | None, commits: list[dict]
 | Ported from | [`{short(base)}`](https://github.com/{repo}/commit/{base}) — {source['ported_at']} |
 | Upstream now | [`{short(sha)}`]({head['html_url']}) — {day(commit['committer']['date'])} |
 | Behind | {count} |
-
+{hint}
 Ports affected:
 {files}
 
@@ -295,18 +316,38 @@ def check(sources: list[dict], dry_run: bool) -> int:
     return 1 if errors else 0
 
 
-def bump(source_id: str, sha: str) -> int:
+def bump(source_id: str, sha: str | None) -> int:
+    """Record the newest commit touching the source's path as the new baseline.
+
+    The sha is a starting point, not the value stored. `check` compares `ported_sha` against
+    the last commit that touched the path, so storing anything else — a repo-wide HEAD, or the
+    7-character sha someone copied out of `git log` — reads as drift on the next run, and then
+    as a vanished baseline, because that sha is not in the path's history. Resolving through
+    the path lookup keeps both failure modes out. With no sha the branch head is resolved the
+    same way, so `--bump <id>` is enough.
+    """
     document = json.loads(MANIFEST.read_text(encoding="utf-8"))
     for source in document["sources"]:
         if source["id"] != source_id:
             continue
+        ref = sha or source["branch"]
         try:
-            commit = api("GET", f"/repos/{source['repo']}/commits/{sha}")
-            stamp = day(commit["commit"]["committer"]["date"])
-        except ApiError:
-            stamp = date.today().isoformat()
-        print(f"{source_id}: {short(source['ported_sha'])} → {short(sha)} ({stamp})")
-        source["ported_sha"] = sha
+            commit = path_head(source, ref)
+        except ApiError as error:
+            print(f"{source_id}: {error}", file=sys.stderr)
+            return 1
+        resolved = commit["sha"]
+        stamp = day(commit["commit"]["committer"]["date"])
+        if resolved == source["ported_sha"]:
+            print(f"{source_id}: already at {short(resolved)} ({stamp})")
+            return 0
+        print(f"{source_id}: {short(source['ported_sha'])} → {short(resolved)} ({stamp})")
+        if sha and resolved != sha:
+            if resolved.startswith(sha):
+                print(f"  {sha} is short for {resolved}")
+            else:
+                print(f"  {sha} does not touch {source['path']}, recorded {short(resolved)}")
+        source["ported_sha"] = resolved
         source["ported_at"] = stamp
         MANIFEST.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
         return 0
@@ -319,14 +360,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true", help="print, do not touch issues")
     parser.add_argument("--only", metavar="ID", action="append", help="limit to these source ids")
-    parser.add_argument("--bump", nargs=2, metavar=("ID", "SHA"), help="record a new baseline")
+    parser.add_argument(
+        "--bump",
+        nargs="+",
+        metavar="ID",
+        help="record a new baseline: --bump ID [SHA], SHA defaults to the branch head",
+    )
     parser.add_argument("--manifest", type=Path, help=f"default {MANIFEST}")
     args = parser.parse_args()
 
     if args.manifest:
         MANIFEST = args.manifest
     if args.bump:
-        return bump(*args.bump)
+        if len(args.bump) > 2:
+            parser.error("--bump takes an id and an optional sha")
+        return bump(args.bump[0], args.bump[1] if len(args.bump) > 1 else None)
 
     if not REPO:
         print("GITHUB_REPOSITORY is not set", file=sys.stderr)
