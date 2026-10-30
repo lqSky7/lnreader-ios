@@ -156,7 +156,7 @@ struct ReaderView: View {
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
-            .statusBarHidden(true)
+            .statusBarHidden(!chrome.isControl)
             .background(EdgeSwipeDismiss(edges: [.left]) {
                 guard !showSettings, !showChapterList, !showLoginSheet, !showCommentsSheet, !showAudioDownloads else { return }
                 dismiss()
