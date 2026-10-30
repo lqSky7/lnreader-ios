@@ -3,6 +3,9 @@
 
 import SwiftUI
 import WebKit
+import os
+
+private let readerLog = Logger(subsystem: "com.lnreader", category: "reader")
 
 #if os(iOS)
     struct ReaderContent: UIViewRepresentable, Equatable {
@@ -102,8 +105,66 @@ import WebKit
             }
 
             func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-                print("🔊 [ReaderContent] didFinish navigation.")
+                readerLog.debug("didFinish navigation")
+                failedLoads = 0
                 bridge?.contentDidFinishLoad()
+            }
+
+            // iOS kills the page's WebContent process while the app sits in the
+            // background. The web view then draws nothing and `didFinish` never
+            // arrives, and the reader stays hidden until it does: a blank screen.
+            // Reload the chapter from what was last loaded; the reader view
+            // scrolls back to the saved paragraph once it is ready again.
+
+            private var failedLoads = 0
+            private var activeObserver: NSObjectProtocol?
+
+            deinit {
+                if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
+            }
+
+            func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+                readerLog.error("Web content process terminated; reloading")
+                reload(webView)
+            }
+
+            func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+                retry(webView, after: error)
+            }
+
+            func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+                retry(webView, after: error)
+            }
+
+            /// A dead process is not always reported while the app is suspended,
+            /// so ask the page for a value on coming back; a failure means it is gone.
+            func watchLifecycle(_ webView: WKWebView) {
+                activeObserver = NotificationCenter.default.addObserver(
+                    forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+                ) { [weak self, weak webView] _ in
+                    MainActor.assumeIsolated {
+                        guard let webView, self?.bridge?.isReady == true else { return }
+                        webView.evaluateJavaScript("1") { _, error in
+                            guard error != nil else { return }
+                            MainActor.assumeIsolated { self?.reload(webView) }
+                        }
+                    }
+                }
+            }
+
+            @MainActor private func retry(_ webView: WKWebView, after error: Error) {
+                if (error as NSError).code == NSURLErrorCancelled { return }
+                failedLoads += 1
+                readerLog.error("Load failed (\(self.failedLoads)): \(error.localizedDescription, privacy: .public)")
+                guard failedLoads <= 2 else { return }
+                reload(webView)
+            }
+
+            @MainActor private func reload(_ webView: WKWebView) {
+                guard let parent, let content = loadedHtmlContent else { return }
+                bridge?.contentDidChange()
+                let html = parent.readerHTML(content: content, comments: loadedCommentsHtml ?? "")
+                webView.loadHTMLString(html, baseURL: parent.baseURL)
             }
 
             func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -121,7 +182,7 @@ import WebKit
                     }
                 } else if message.name == "jsError",
                           let errorBody = message.body as? String {
-                    print("❌ [JavaScript Error] \(errorBody)")
+                    readerLog.error("JavaScript error: \(errorBody, privacy: .public)")
                 } else if message.name == "toggleControls" {
                     DispatchQueue.main.async { [weak self] in
                         self?.onTap?()
@@ -173,6 +234,7 @@ import WebKit
             webView.scrollView.contentInsetAdjustmentBehavior = .never
             webView.navigationDelegate = context.coordinator
             context.coordinator.watchScroll(webView.scrollView)
+            context.coordinator.watchLifecycle(webView)
             Haptics.shared.prepare()
             bridge.setWebView(webView)
 
@@ -214,62 +276,62 @@ import WebKit
                                context.coordinator.loadedJustifyText != justifyText
             
             #if DEBUG
-            print("🔊 [ReaderContent] updateUIView. loadedHtmlContentIsNil: \(context.coordinator.loadedHtmlContent == nil), contentChanged: \(contentChanged), styleChanged: \(styleChanged)")
+            readerLog.debug("updateUIView: loadedHtmlContentIsNil: \(context.coordinator.loadedHtmlContent == nil), contentChanged: \(contentChanged), styleChanged: \(styleChanged)")
             #endif
             if contentChanged {
                 if context.coordinator.loadedHtmlContent != htmlContent {
                     #if DEBUG
-                    print("🔊   -> htmlContent changed! (\(context.coordinator.loadedHtmlContent?.count ?? 0) chars -> \(htmlContent.count) chars)")
+                    readerLog.debug("htmlContent changed! (\(context.coordinator.loadedHtmlContent?.count ?? 0) chars -> \(htmlContent.count) chars)")
                     #endif
                 }
                 if context.coordinator.loadedBionicReading != bionicReading {
                     #if DEBUG
-                    print("🔊   -> bionicReading changed! (\(String(describing: context.coordinator.loadedBionicReading)) -> \(bionicReading))")
+                    readerLog.debug("bionicReading changed! (\(String(describing: context.coordinator.loadedBionicReading)) -> \(bionicReading))")
                     #endif
                 }
             }
             if styleChanged {
                 #if DEBUG
                 if context.coordinator.loadedFontSize != fontSize {
-                    print("🔊   -> fontSize changed! (\(String(describing: context.coordinator.loadedFontSize)) -> \(fontSize))")
+                    readerLog.debug("fontSize changed! (\(String(describing: context.coordinator.loadedFontSize)) -> \(fontSize))")
                 }
                 if context.coordinator.loadedLineHeight != lineHeight {
-                    print("🔊   -> lineHeight changed! (\(String(describing: context.coordinator.loadedLineHeight)) -> \(lineHeight))")
+                    readerLog.debug("lineHeight changed! (\(String(describing: context.coordinator.loadedLineHeight)) -> \(lineHeight))")
                 }
                 if context.coordinator.loadedFontFamily != fontFamily {
-                    print("🔊   -> fontFamily changed! (\(String(describing: context.coordinator.loadedFontFamily)) -> \(fontFamily))")
+                    readerLog.debug("fontFamily changed! (\(String(describing: context.coordinator.loadedFontFamily)) -> \(fontFamily))")
                 }
                 if context.coordinator.loadedHorizontalPadding != horizontalPadding {
-                    print("🔊   -> horizontalPadding changed! (\(String(describing: context.coordinator.loadedHorizontalPadding)) -> \(horizontalPadding))")
+                    readerLog.debug("horizontalPadding changed! (\(String(describing: context.coordinator.loadedHorizontalPadding)) -> \(horizontalPadding))")
                 }
                 if context.coordinator.loadedVerticalPadding != verticalPadding {
-                    print("🔊   -> verticalPadding changed! (\(String(describing: context.coordinator.loadedVerticalPadding)) -> \(verticalPadding))")
+                    readerLog.debug("verticalPadding changed! (\(String(describing: context.coordinator.loadedVerticalPadding)) -> \(verticalPadding))")
                 }
                 if context.coordinator.loadedBackgroundColorHex != backgroundColorHex {
-                    print("🔊   -> backgroundColorHex changed! (\(String(describing: context.coordinator.loadedBackgroundColorHex)) -> \(backgroundColorHex))")
+                    readerLog.debug("backgroundColorHex changed! (\(String(describing: context.coordinator.loadedBackgroundColorHex)) -> \(backgroundColorHex))")
                 }
                 if context.coordinator.loadedTextColorHex != textColorHex {
-                    print("🔊   -> textColorHex changed! (\(String(describing: context.coordinator.loadedTextColorHex)) -> \(textColorHex))")
+                    readerLog.debug("textColorHex changed! (\(String(describing: context.coordinator.loadedTextColorHex)) -> \(textColorHex))")
                 }
                 if context.coordinator.loadedLineFocusEnabled != lineFocusEnabled {
-                    print("🔊   -> lineFocusEnabled changed! (\(String(describing: context.coordinator.loadedLineFocusEnabled)) -> \(lineFocusEnabled))")
+                    readerLog.debug("lineFocusEnabled changed! (\(String(describing: context.coordinator.loadedLineFocusEnabled)) -> \(lineFocusEnabled))")
                 }
                 if context.coordinator.loadedLineFocusLines != lineFocusLines {
-                    print("🔊   -> lineFocusLines changed! (\(String(describing: context.coordinator.loadedLineFocusLines)) -> \(lineFocusLines))")
+                    readerLog.debug("lineFocusLines changed! (\(String(describing: context.coordinator.loadedLineFocusLines)) -> \(lineFocusLines))")
                 }
                 if context.coordinator.loadedLineFocusDulling != lineFocusDulling {
-                    print("🔊   -> lineFocusDulling changed! (\(String(describing: context.coordinator.loadedLineFocusDulling)) -> \(lineFocusDulling))")
+                    readerLog.debug("lineFocusDulling changed! (\(String(describing: context.coordinator.loadedLineFocusDulling)) -> \(lineFocusDulling))")
                 }
                 if context.coordinator.loadedCharacterSpacing != characterSpacing {
-                    print("🔊   -> characterSpacing changed! (\(String(describing: context.coordinator.loadedCharacterSpacing)) -> \(characterSpacing))")
+                    readerLog.debug("characterSpacing changed! (\(String(describing: context.coordinator.loadedCharacterSpacing)) -> \(characterSpacing))")
                 }
                 if context.coordinator.loadedWordSpacing != wordSpacing {
-                    print("🔊   -> wordSpacing changed! (\(String(describing: context.coordinator.loadedWordSpacing)) -> \(wordSpacing))")
+                    readerLog.debug("wordSpacing changed! (\(String(describing: context.coordinator.loadedWordSpacing)) -> \(wordSpacing))")
                 }
                 if context.coordinator.loadedGrainIntensity != grainIntensity ||
                                context.coordinator.loadedHighlightColorHex != highlightColorHex ||
                                context.coordinator.loadedHighlightOpacity != highlightOpacity {
-                    print("🔊   -> grainIntensity changed! (\(String(describing: context.coordinator.loadedGrainIntensity)) -> \(grainIntensity))")
+                    readerLog.debug("grainIntensity changed! (\(String(describing: context.coordinator.loadedGrainIntensity)) -> \(grainIntensity))")
                 }
                 #endif
             }
