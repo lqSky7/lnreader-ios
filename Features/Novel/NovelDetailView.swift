@@ -47,6 +47,7 @@ struct NovelDetailView: View {
     @State private var chapterSearch = ""
     @State private var showTracker = false
     @State private var showMigrate = false
+    @State private var showWebView = false
     /// The entry a migration produced, waiting for the sheet to finish closing.
     @State private var migratedInto: Entry?
     /// Chapter order for the detail list and the full directory (`ChapterListView` owns the menu).
@@ -214,6 +215,9 @@ struct NovelDetailView: View {
                 if let localEntry, localEntry.inLibrary, !localEntry.isLocal {
                     migrateButton
                 }
+                if webURL != nil {
+                    webViewButton
+                }
                 // Refresh is a toolbar button, not pull to refresh: pulling down
                 // dismisses this screen.
                 if canRefetch {
@@ -236,6 +240,9 @@ struct NovelDetailView: View {
                     showMigrate = false
                 }
             }
+        }
+        .sheet(isPresented: $showWebView) {
+            if let webURL { EntryWebView(url: webURL, title: displayTitle) }
         }
         .sheet(isPresented: $showTracker) {
             if let localEntry { TrackerSheet(entry: localEntry) }
@@ -330,6 +337,22 @@ struct NovelDetailView: View {
             Label("Migrate to another source", systemImage: "arrow.triangle.swap")
         }
         .accessibilityLabel("Migrate to another source")
+    }
+
+    /// The entry's page on its site, when its source has one.
+    private var webURL: URL? {
+        guard !bookPath.isEmpty else { return nil }
+        return sourceManager.source(forKey: sourceKey)?.webURL(bookPath)
+    }
+
+    /// Open the entry's page on its site, in the app, sharing the scraper's
+    /// cookies. A visible button, like Migrate: it is the way to check what the
+    /// site shows, or to clear a Cloudflare check, when the source misbehaves.
+    private var webViewButton: some View {
+        Button { showWebView = true } label: {
+            Label("Open in web view", systemImage: "globe")
+        }
+        .accessibilityLabel("Open in web view")
     }
 
     // MARK: - Chapter Computation

@@ -118,6 +118,12 @@ final class AllMangaSource: MangaSource {
 
     // MARK: - Details and chapters
 
+    /// The page the chapter capture opens too; a stored url can be a bare id or carry a slug.
+    func webURL(_ entryURL: String) -> URL? {
+        guard let id = try? Self.mangaID(of: entryURL) else { return nil }
+        return URL(string: "\(Self.base)/manga/\(id)?fromSearch=1")
+    }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         let data = try await mangaDocument(id: try Self.mangaID(of: entry.url))
         guard let manga = data["manga"] as? [String: Any] else { throw SourceError.entryNotFound(entry.url) }

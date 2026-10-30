@@ -86,6 +86,7 @@ final class FreeWebNovelSource: NovelSource {
         try await engine.search(query: query, page: page)
     }
 
+    func webURL(_ entryURL: String) -> URL? { URL(string: engine.site.absolute(entryURL)) }
     func details(_ entry: SourceEntry) async throws -> SourceEntry { try await engine.details(entry) }
     func chapters(_ entry: SourceEntry) async throws -> [SourceChapter] { try await engine.chapters(entry) }
     func chapterHTML(_ chapter: SourceChapter) async throws -> String { try await engine.chapterHTML(chapter) }

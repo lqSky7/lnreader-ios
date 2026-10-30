@@ -87,6 +87,8 @@ final class MangaFireSource: MangaSource {
 
     // MARK: Details
 
+    func webURL(_ entryURL: String) -> URL? { URL(string: site.absolute(entryURL)) }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         let response: DetailsResponse = try await api("/titles/\(Self.hid(of: entry.url))")
         let data = response.data

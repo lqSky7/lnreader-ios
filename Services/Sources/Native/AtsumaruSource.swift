@@ -134,6 +134,8 @@ final class AtsumaruSource: MangaSource {
 
     // MARK: - Details
 
+    func webURL(_ entryURL: String) -> URL? { URL(string: site.absolute("/manga/\(entryURL)")) }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         let dto = try await site.json(
             MangaObjectDTO.self, "/api/manga/page?id=\(entry.url.queryEscaped)"

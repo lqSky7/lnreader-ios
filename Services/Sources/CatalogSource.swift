@@ -48,12 +48,17 @@ protocol CatalogSource: Identifiable, Sendable {
     /// that lists newest-first before the order is stored, so a source may hand
     /// back either direction; see `Services/ChapterOrder.swift`.
     func chapters(_ entry: SourceEntry) async throws -> [SourceChapter]
+    /// The entry's page on the site, for "Open in web view". `entryURL` is the
+    /// stored `url`, in whatever shape this source persists it. Nil when the
+    /// source has no page to show.
+    func webURL(_ entryURL: String) -> URL?
 }
 
 extension CatalogSource {
     var id: String { key }
 
     var iconURL: String? { nil }
+    func webURL(_ entryURL: String) -> URL? { nil }
     var iconAsset: String? { nil }
     var supportsLatest: Bool { false }
     var isAdult: Bool { false }

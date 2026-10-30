@@ -117,6 +117,11 @@ struct HeanCmsEngine: Sendable {
 
     // MARK: Details
 
+    /// The series page: the stored url without its `#<seriesId>` fragment.
+    func webURL(_ entryURL: String) -> URL? {
+        URL(string: site.absolute(String(entryURL.prefix { $0 != "#" })))
+    }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         let slug = Self.slug(of: entry.url)
         let series = try await api.json(Series.self, "/series/\(slug)", headers: ["Accept": Self.acceptJSON])

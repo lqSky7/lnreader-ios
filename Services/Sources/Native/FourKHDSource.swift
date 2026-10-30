@@ -51,6 +51,8 @@ final class FourKHDSource: MangaSource {
 
     // MARK: Details
 
+    func webURL(_ entryURL: String) -> URL? { URL(string: site.absolute(entryURL)) }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         guard let post = try await post(at: entry.url), let detailed = try self.entry(from: post) else {
             throw SourceError.entryNotFound(entry.url)

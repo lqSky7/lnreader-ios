@@ -122,6 +122,8 @@ final class Manhwa18Source: MangaSource {
 
     // MARK: Details
 
+    func webURL(_ entryURL: String) -> URL? { URL(string: site.absolute(entryURL)) }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         let document = try await site.html(entry.url)
         let title = document.firstText(".series-name a, .au-bento h1, .au-crumb a:last-child") ?? entry.title

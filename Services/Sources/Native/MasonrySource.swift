@@ -173,6 +173,8 @@ final class MasonrySource: MangaSource {
 
     // MARK: Details
 
+    func webURL(_ entryURL: String) -> URL? { URL(string: site.absolute(entryURL)) }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         let document = try await site.html(entry.url)
         var info: Element?

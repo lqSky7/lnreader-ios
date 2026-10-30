@@ -85,6 +85,8 @@ final class KaganeSource: MangaSource {
 
     // MARK: - Details
 
+    func webURL(_ entryURL: String) -> URL? { URL(string: site.absolute("/series/\(Self.seriesID(entryURL))")) }
+
     func details(_ entry: SourceEntry) async throws -> SourceEntry {
         let seriesID = Self.seriesID(entry.url)
         let dto = try await detailsDTO(seriesID)

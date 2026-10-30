@@ -77,6 +77,7 @@
 		5C023D334F10B32E66445716 /* CatalogSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4791B24D0A82CDF0AF58D62 /* CatalogSource.swift */; };
 		5E9EA7833D65125233825CD8 /* NovelInfoSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40544D40A826C93D44709D4 /* NovelInfoSection.swift */; };
 		A1D3E7C2B5F84E0A9C6D1F01 /* EntryActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D3E7C2B5F84E0A9C6D1F02 /* EntryActionBar.swift */; };
+		B7E2A9C4D1F3E5A6B8C9D0E1 /* EntryWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E2A9C4D1F3E5A6B8C9D0E2 /* EntryWebView.swift */; };
 		6098BA752774BDB4B89F0413 /* BadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F23349EABEA436D6793D9B6 /* BadgeView.swift */; };
 		62C08A004F957CA7BE8565D4 /* String+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F4A420FA71593B7FE636EF /* String+Extensions.swift */; };
 		636C7D7456E0409A4DE0315A /* HTTPTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEBA7B6D149D352914BE166 /* HTTPTypes.swift */; };
@@ -373,6 +374,7 @@
 		F1B42540A8553644A4BA6829 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		F40544D40A826C93D44709D4 /* NovelInfoSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelInfoSection.swift; sourceTree = "<group>"; };
 		A1D3E7C2B5F84E0A9C6D1F02 /* EntryActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryActionBar.swift; sourceTree = "<group>"; };
+		B7E2A9C4D1F3E5A6B8C9D0E2 /* EntryWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryWebView.swift; sourceTree = "<group>"; };
 		F8C839AAAF9EECC8AEFF7D32 /* NovelDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelDetailView.swift; sourceTree = "<group>"; };
 		F9C7B535B3A45B090C1B9917 /* ReaderRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderRouter.swift; sourceTree = "<group>"; };
 		FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovelFireCommentsService.swift; sourceTree = "<group>"; };
@@ -514,6 +516,7 @@
 				864A984E2C4C0237F815C05E /* NovelHeaderView.swift */,
 				F40544D40A826C93D44709D4 /* NovelInfoSection.swift */,
 				A1D3E7C2B5F84E0A9C6D1F02 /* EntryActionBar.swift */,
+				B7E2A9C4D1F3E5A6B8C9D0E2 /* EntryWebView.swift */,
 				C19BE8C9EDED69C07CE5F18A /* ScanlatorRules.swift */,
 				BB18EE68F95E7A622DA3FCCC /* ScanlatorSettings.swift */,
 				CFAA342A4ECE74C98B08EB38 /* ScanlatorSettingsView.swift */,
@@ -979,6 +982,7 @@
 				49B3E6FF38E49F830F28E3C1 /* NovelHeaderView.swift in Sources */,
 				5E9EA7833D65125233825CD8 /* NovelInfoSection.swift in Sources */,
 				A1D3E7C2B5F84E0A9C6D1F01 /* EntryActionBar.swift in Sources */,
+				B7E2A9C4D1F3E5A6B8C9D0E1 /* EntryWebView.swift in Sources */,
 				C7DCD24BA48D3707D689052D /* ReaderChapterListSheet.swift in Sources */,
 				DD1ED2CBFBA44AE1B6E75000 /* ReaderAppearance.swift in Sources */,
 				939B509FC87B4E6546B04724 /* ReaderContent.swift in Sources */,
