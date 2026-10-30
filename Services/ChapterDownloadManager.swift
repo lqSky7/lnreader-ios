@@ -182,32 +182,72 @@ final class ChapterDownloadManager {
     }
     func stop() async { worker?.cancel(); await worker?.value }
     private func persist() { do { try context?.save() } catch { message = error.localizedDescription } }
+    /// Everything a chapter's download touches besides the queue's own rows
+    /// runs in `fetch`, off the main actor. Only the queue bookkeeping (a few
+    /// model writes and one save per chapter) stays here, because the queue
+    /// screen edits the same rows.
     private func download(_ chapter: Chapter, entry: Entry, item: DownloadItem, sources: SourceManager) async throws {
+        let job = DownloadJob(sourceKey: entry.sourceKey, entryURL: entry.url, chapterURL: chapter.url,
+                              chapterName: chapter.name, kind: entry.kind)
+        let source: DownloadJob.Source
+        if entry.kind == .novel {
+            guard let novel = sources.novelSource(forKey: entry.sourceKey) else { throw CocoaError(.fileNoSuchFile) }
+            source = .novel(novel)
+        } else {
+            guard let manga = sources.mangaSource(forKey: entry.sourceKey) else { throw CocoaError(.fileNoSuchFile) }
+            source = .manga(manga)
+        }
+        let key = key(item)
+        try await Self.fetch(job, from: source) { @MainActor [weak self] fraction in
+            if let key { self?.liveProgress[key] = fraction }
+        }
+    }
+
+    /// One chapter to download, as plain values: no models cross into `fetch`.
+    private struct DownloadJob: Sendable {
+        enum Source: Sendable {
+            case novel(any NovelSource)
+            case manga(any MangaSource)
+        }
+        let sourceKey: String
+        let entryURL: String
+        let chapterURL: String
+        let chapterName: String
+        let kind: ContentKind
+    }
+
+    /// Fetch a chapter and write it to its offline folder: source calls, page
+    /// requests, disk writes and the manifest, all off the main actor. A
+    /// removed or paused item cancels the worker, which cancels this.
+    @concurrent
+    private nonisolated static func fetch(
+        _ job: DownloadJob,
+        from source: DownloadJob.Source,
+        progress: @escaping @Sendable @MainActor (Double) -> Void
+    ) async throws {
         var root = OfflineChapters.root
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         var values = URLResourceValues(); values.isExcludedFromBackup = true; try root.setResourceValues(values)
-        let folder = OfflineChapters.folder(sourceKey: entry.sourceKey, entryURL: entry.url, chapterURL: chapter.url)
+        let folder = OfflineChapters.folder(sourceKey: job.sourceKey, entryURL: job.entryURL, chapterURL: job.chapterURL)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // Removing the old manifest prevents partial replacements being advertised as complete.
         try? FileManager.default.removeItem(at: folder.appendingPathComponent("manifest.json"))
-        let sourceChapter = SourceChapter(url: chapter.url, name: chapter.name)
+        let sourceChapter = SourceChapter(url: job.chapterURL, name: job.chapterName)
         var files: [String] = []
-        if entry.kind == .novel {
-            guard let source = sources.novelSource(forKey: entry.sourceKey) else { throw CocoaError(.fileNoSuchFile) }
-            try await Self.checkSpace(at: root)
+        switch source {
+        case .novel(let source):
+            try checkSpace(at: root)
             let html = try await source.chapterHTML(sourceChapter)
             try Task.checkCancellation()
             guard !html.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
-            let target = folder.appendingPathComponent("chapter.html")
-            try await Task.detached(priority: .utility) { try Data(html.utf8).write(to: target, options: .atomic) }.value
+            try Data(html.utf8).write(to: folder.appendingPathComponent("chapter.html"), options: .atomic)
             files = ["chapter.html"]
-        } else {
-            guard let source = sources.mangaSource(forKey: entry.sourceKey) else { throw CocoaError(.fileNoSuchFile) }
+        case .manga(let source):
             let pages = try await source.pages(sourceChapter)
             guard !pages.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
             // Once per chapter: the 200 MB margin covers a chapter, and a full
             // disk still fails the write below.
-            try await Self.checkSpace(at: root)
+            try checkSpace(at: root)
             let loader = PageLoader()
             for (index, page) in pages.enumerated() {
                 try Task.checkCancellation()
@@ -215,33 +255,29 @@ final class ChapterDownloadManager {
                 let request = try await source.imageRequest(page)
                 guard let url = request.url else { throw CocoaError(.fileReadCorruptFile) }
                 let imagePage = SourcePage(index: index, url: url.absoluteString, headers: request.allHTTPHeaderFields ?? [:])
-                let data = try await loader.image(for: imagePage, sourceKey: entry.sourceKey)
-                guard item.modelContext != nil else { throw CancellationError() }
+                let data = try await loader.image(for: imagePage, sourceKey: job.sourceKey)
+                try Task.checkCancellation()
+                guard let probe = CGImageSourceCreateWithData(data as CFData, nil),
+                      CGImageSourceGetCount(probe) > 0 else { throw CocoaError(.fileReadCorruptFile) }
                 let name = String(format: "%06d.page", index)
-                let target = folder.appendingPathComponent(name)
-                // Header check and file write off the main actor; neither needs a decode.
-                try await Task.detached(priority: .utility) {
-                    guard let probe = CGImageSourceCreateWithData(data as CFData, nil),
-                          CGImageSourceGetCount(probe) > 0 else { throw CocoaError(.fileReadCorruptFile) }
-                    try data.write(to: target, options: .atomic)
-                }.value
+                try data.write(to: folder.appendingPathComponent(name), options: .atomic)
                 files.append(name)
-                if let key = key(item) { liveProgress[key] = Double(index + 1) / Double(pages.count) }
+                await progress(Double(index + 1) / Double(pages.count))
             }
         }
         try Task.checkCancellation()
-        let manifest = OfflineChapters.Manifest(sourceKey: entry.sourceKey, entryURL: entry.url, chapterURL: chapter.url, kind: entry.kind, files: files)
+        let manifest = OfflineChapters.Manifest(sourceKey: job.sourceKey, entryURL: job.entryURL,
+                                                chapterURL: job.chapterURL, kind: job.kind, files: files)
         try JSONEncoder().encode(manifest).write(to: folder.appendingPathComponent("manifest.json"), options: .atomic)
     }
-    /// Off the main actor: the "important usage" capacity is a synchronous call
-    /// to the system's storage service, about 45 ms. Made once per page on the
-    /// main actor, it stalled the reader four times a second while a chapter
-    /// downloaded behind it.
-    private nonisolated static func checkSpace(at url: URL) async throws {
-        try await Task.detached(priority: .utility) {
-            let free = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage ?? 0
-            guard free > 200 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
-        }.value
+
+    /// Never on the main actor: the "important usage" capacity is a synchronous
+    /// call to the system's storage service, about 45 ms. Made once per page on
+    /// the main actor, it stalled the reader four times a second while a
+    /// chapter downloaded behind it.
+    private nonisolated static func checkSpace(at url: URL) throws {
+        let free = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage ?? 0
+        guard free > 200 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
     }
 
     // MARK: Reading-driven automation

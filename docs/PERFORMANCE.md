@@ -14,6 +14,11 @@ how to measure the next regression.
 ./scripts/profile-device.sh 30         # builds Release, installs, records hitches + Time Profiler
 ```
 
+Debug builds also run `MainThreadWatchdog` (`Services/MainThreadWatchdog.swift`): when the
+main thread goes 40 ms without answering, it samples main's stack and logs it under subsystem
+`com.lnreader`, category `hang` (Xcode console, or Console.app). Read that first when something
+feels choppy; it names the stall without a trace. Release and profiling builds leave it out.
+
 `profile-hotpaths.sh` builds a 120-book × 250-chapter store on disk and times the
 data work behind the UI. `profile-device.sh` records a Time Profiler trace of a
 real device (Animation Hitches plus Time Profiler) so the parts the benchmark cannot see — body evaluation, layout,
@@ -145,7 +150,11 @@ Found by reading the code, not by a trace — verify on a Release device build.
   reader was smooth on first open and choppy only *sometimes*: the queue resumes on
   `.active` (unlock, return from the app switcher) and download-ahead queues the next
   chapters when one is opened. The check now runs off the main actor, once per chapter.
-  Rule: no storage-capacity query on the main actor, ever.
+  Rule: no storage-capacity query on the main actor, ever. The rest of a chapter's download
+  (source calls, page requests, disk writes, the manifest) then moved into
+  `ChapterDownloadManager.fetch`, a `@concurrent` job that takes plain values; the manager
+  keeps only the queue's rows, a few writes and one save per chapter. Not yet verified on a
+  device.
 - **The webtoon strip grew for the whole session.** Each chapter scrolled into was stitched
   on and never removed, and every page whose height became known invalidated the flow
   layout's delegate metrics, which re-measures *every* row. Ten chapters in, each new page

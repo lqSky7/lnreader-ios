@@ -7,6 +7,9 @@ import SwiftUI
 @main
 struct LNReaderApp: App {
     init() {
+        #if DEBUG
+        MainThreadWatchdog.shared.start()
+        #endif
         LibraryMaintenance.container = Self.modelContainer
         let tracking = TrackingManager()
         tracking.configure(container: Self.modelContainer)

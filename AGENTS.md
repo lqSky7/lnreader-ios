@@ -58,6 +58,10 @@ the doc named in brackets has the reasoning. Start with `docs/V2_PROGRESS.md` fo
   background `ModelContext` (pass `PersistentIdentifier`s and `container`, not models) or a
   detached task. Show progress (a spinner) while it runs and hop back only to publish results.
   Sync-now froze the app by building its whole upload on the main actor.
+- **Debug builds log main-thread stalls.** `MainThreadWatchdog` logs a stack for any stall
+  over 40 ms (subsystem `com.lnreader`, category `hang`). An `async` method on a `@MainActor`
+  type still runs its synchronous parts on main; heavy work goes in a `@concurrent` function
+  that takes plain values, as `ChapterDownloadManager.fetch` does.
 - **Never read a relationship count in a `body`.** Use `LibraryChapterCounts` or a background
   `fetchCount`. `Entry.unreadCount` is only fine in a background pass.
 - **Never `save()` from a scroll or progress callback.** Mutate the model and let

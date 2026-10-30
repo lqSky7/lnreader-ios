@@ -172,6 +172,7 @@
 		EB7155DE60ABC4A9AF8D661A /* View+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD79F29E8F9031396631E55 /* View+Extensions.swift */; };
 		EB83EEFDBC246CAE607A6791 /* TTSAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46BA28F00A8896A7E69C83B /* TTSAudio.swift */; };
 		EBE9076B7945ECE6BF481FFE /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB73A2B0DA83A8720F604A6 /* Haptics.swift */; };
+		218DA02F0D96994063EC4DBF /* MainThreadWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDC4639229F16ABA0A13719 /* MainThreadWatchdog.swift */; };
 		ED66F03304D686E37ED4776B /* NovelFireCommentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4CCC920C4381FB8A63F2AE /* NovelFireCommentsView.swift */; };
 		EDC300000000000000000001 /* ../ReadingNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC300000000000000000002 /* ../ReadingNavigation.swift */; };
 		EDF44ACAF399D5B540D6B1BF /* PagePrefetchPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1F6219C00A36C989425F4DD /* PagePrefetchPlan.swift */; };
@@ -239,6 +240,7 @@
 		179854008F9437120FBDEDDB /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		1B7EA7CD78D6EB26DF7E50ED /* LibraryToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryToolbar.swift; sourceTree = "<group>"; };
 		1EB73A2B0DA83A8720F604A6 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		CEDC4639229F16ABA0A13719 /* MainThreadWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadWatchdog.swift; sourceTree = "<group>"; };
 		1F23349EABEA436D6793D9B6 /* BadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeView.swift; sourceTree = "<group>"; };
 		2134FC9B8F314414383E3D90 /* TTSAudioAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSAudioAppDelegate.swift; sourceTree = "<group>"; };
 		22DDF1DFDE958E4744082B1B /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
@@ -599,6 +601,7 @@
 				2E6A6D07AE4B518B274A5072 /* FocusModeManager.swift */,
 				6A17CCDEE9E4207E1E77330A /* ScrollHaptics.swift */,
 				1EB73A2B0DA83A8720F604A6 /* Haptics.swift */,
+				CEDC4639229F16ABA0A13719 /* MainThreadWatchdog.swift */,
 				635EBF2C4EBF46F848E6E070 /* LibraryManager.swift */,
 				8F0A8E05349ED5A1033E1967 /* LocalBookManager.swift */,
 				FA185521D5A2A6659A82F448 /* NovelFireCommentsService.swift */,
@@ -938,6 +941,7 @@
 				8D5A446E5B0B3585C84B2490 /* FocusModeManager.swift in Sources */,
 				97808F4EE7491512BF9AFDD9 /* ScrollHaptics.swift in Sources */,
 				EBE9076B7945ECE6BF481FFE /* Haptics.swift in Sources */,
+				218DA02F0D96994063EC4DBF /* MainThreadWatchdog.swift in Sources */,
 				0D61A49ED5F1D91D3A515A14 /* GeneralSettingsView.swift in Sources */,
 				75995F2F5AE6494AC92E1C43 /* GlassCard.swift in Sources */,
 				A1B2C3D4E5F600112233AA01 /* GlassControls.swift in Sources */,
