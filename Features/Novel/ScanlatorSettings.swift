@@ -46,6 +46,20 @@ final class ScanlatorSettings {
         }
     }
 
+    /// Show or hide every one of `scanlators` in a single write, so the chapter
+    /// list is reconciled once rather than once per scanlator.
+    func setAllVisible(_ scanlators: [String], _ visible: Bool) {
+        mutate { value in
+            if visible {
+                value.disabled.removeAll { scanlators.contains($0) }
+            } else {
+                for name in scanlators where !value.disabled.contains(name) {
+                    value.disabled.append(name)
+                }
+            }
+        }
+    }
+
     /// Make `order` the priority list.
     func setPriority(_ order: [String]) {
         mutate { $0.priority = order }

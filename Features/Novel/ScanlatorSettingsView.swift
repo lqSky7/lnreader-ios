@@ -2,7 +2,7 @@
 //
 // Two independent features, deliberately not nested:
 //
-// - Hiding: switch a scanlator off and its chapters disappear from the list.
+// - Hiding: uncheck a scanlator and its chapters disappear from the list.
 //   This works on its own.
 // - Priority: merge chapters that share a number, keeping the scanlator highest
 //   in the list. Only then does the order matter, so only then can rows be
@@ -21,8 +21,16 @@ struct ScanlatorSettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    private var rows: [String] {
-        settings.orderedScanlators(from: scanlators)
+    /// The list's own copy of the order. A move updates it in the same
+    /// transaction as the drop; reading the order back from `settings` lagged a
+    /// frame behind, and the moved row kept the corners of the slot it left.
+    @State private var rows: [String] = []
+    /// Bumped after a move so the section's cells are rebuilt: UIKit does not
+    /// re-mask a row dragged to or from either end, which left it square.
+    @State private var layoutRevision = 0
+
+    private var allVisible: Bool {
+        !rows.contains { settings.value.disabled.contains($0) }
     }
 
     private var isPriorityOn: Bool { settings.isPriorityEnabled }
@@ -47,18 +55,19 @@ struct ScanlatorSettingsView: View {
                             row(name)
                         }
                         .onMove { source, destination in
-                            var order = rows
-                            order.move(fromOffsets: source, toOffset: destination)
-                            settings.setPriority(order)
+                            rows.move(fromOffsets: source, toOffset: destination)
+                            settings.setPriority(rows)
+                            remaskAfterDrop()
                         }
                     }
                 } header: {
-                    Text("Scanlators")
+                    sectionHeader
                 } footer: {
                     Text(isPriorityOn
-                        ? "Top of the list wins. Switch one off to hide it."
-                        : "Switch one off to hide its chapters.")
+                        ? "Top of the list wins. Uncheck one to hide it."
+                        : "Uncheck one to hide its chapters.")
                 }
+                .id(layoutRevision)
             }
             // Dragging only means something when priority merging is on, so edit
             // mode follows that toggle — visibility does not.
@@ -70,33 +79,67 @@ struct ScanlatorSettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .onAppear { rows = settings.orderedScanlators(from: scanlators) }
+            .onChange(of: scanlators) { _, new in
+                rows = settings.orderedScanlators(from: new)
+            }
         }
     }
 
-    private func row(_ name: String) -> some View {
-        HStack(spacing: 12) {
-            if isPriorityOn {
-                Image(systemName: "line.3.horizontal")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-            }
+    /// Rebuild the section once the drop has settled, with no animation, so
+    /// the cells get their corners back without a visible swap. Doing it in
+    /// the move itself fought the drop animation and stuttered.
+    private func remaskAfterDrop() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { layoutRevision += 1 }
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
+    /// "Scanlators" with one button that shows every scanlator, or hides them
+    /// all once they are all showing.
+    private var sectionHeader: some View {
+        HStack {
+            Text("Scanlators")
+            Spacer()
+            if rows.count > 1 {
+                Button(allVisible ? "Hide all" : "Show all") {
+                    Haptics.shared.selection()
+                    settings.setAllVisible(rows, !allVisible)
+                }
+                .font(Typography.caption)
+                .textCase(nil)
+            }
+        }
+    }
+
+    /// Checkbox and name on the leading edge. In priority mode edit mode draws
+    /// the drag handle on the trailing edge; the row draws none of its own.
+    private func row(_ name: String) -> some View {
+        let visible = !settings.value.disabled.contains(name)
+        return Button {
+            Haptics.shared.selection()
+            settings.setVisible(name, !visible)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: visible ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(visible ? AppTheme.controlFill : AppTheme.hairline)
+                    .contentTransition(.symbolEffect(.replace))
+
                 Text(displayName(name))
                     .lineLimit(1)
-                if settings.value.disabled.contains(name) {
-                    Text("Hidden")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+
+                Spacer(minLength: 0)
             }
-
-            Spacer(minLength: 8)
-
-            Toggle("Show \(displayName(name))", isOn: visibleBinding(name))
-                .labelsHidden()
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(displayName(name))
+        .accessibilityValue(visible ? "Shown" : "Hidden")
+        .accessibilityAddTraits(visible ? .isSelected : [])
     }
 
     /// Scanlator names arrive as the source spells them ("Official", "unofficial").
@@ -108,13 +151,6 @@ struct ScanlatorSettingsView: View {
         Binding(
             get: { settings.isPriorityEnabled },
             set: { settings.setPriorityEnabled($0) }
-        )
-    }
-
-    private func visibleBinding(_ name: String) -> Binding<Bool> {
-        Binding(
-            get: { !settings.value.disabled.contains(name) },
-            set: { settings.setVisible(name, $0) }
         )
     }
 }
